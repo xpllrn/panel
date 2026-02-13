@@ -1,0 +1,519 @@
+{% extends 'admin/base.html' %}
+{% load static %}
+
+{% block title %}Members - Admin Portal{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/pages/members.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2 class="page-title">Members</h2>
+    <div class="header-stats">
+        <span class="stat-item">Total: <strong>{{ total_members }}</strong></span>
+        <span class="stat-item">Active: <strong>{{ active_members }}</strong></span>
+    </div>
+    <form class="search-form" method="get" action="">
+        <input type="text" name="q" placeholder="Search members..." value="{{ search_query|default:'' }}"
+            class="search-input" aria-label="Search members">
+        <button type="submit" class="btn btn-primary btn-sm">Search</button>
+        {% if search_query %}
+        <a href="{% url 'members' %}" class="clear-search">Clear</a>
+        {% endif %}
+    </form>
+    <a href="{% url 'export_members' %}" class="btn btn-secondary btn-sm">Export Excel</a>
+    <button class="btn btn-primary btn-sm" onclick="showAddMemberModal()">+ Add Member</button>
+</div>
+
+{% if search_query %}
+<div class="search-info">
+    Showing results for "<strong>{{ search_query }}</strong>" ({{ page_obj.paginator.count }} found)
+</div>
+{% endif %}
+
+<div class="data-table">
+    <table>
+        <thead>
+            <tr>
+                <th>Member</th>
+                <th>Email</th>
+                <th>Member ID</th>
+                <th>Status</th>
+                <th style="width: 50px;"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for member in users %}
+            <tr data-member-id="{{ member.id }}" onclick="showMemberModal({{ member.id }})">
+                <td>
+                    <div class="user-info">
+                        <div class="avatar avatar-sm">{{ member.username|first|upper }}</div>
+                        <div class="user-details">
+                            <span class="user-name">{{ member.username }}</span>
+                            {% if member.display_name != member.username %}
+                            <span class="user-fullname">{{ member.display_name }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </td>
+                <td>{{ member.email }}</td>
+                <td>{{ member.member_id|default:"-" }}</td>
+                <td>
+                    <span class="status-badge status-{{ member.status }}">{{ member.get_status_display }}</span>
+                </td>
+                <td class="actions-cell" onclick="event.stopPropagation();">
+                    <button class="kebab-menu" onclick="toggleDropdown(event, {{ member.id }})" aria-label="Actions">&#8942;</button>
+                    <div class="dropdown-menu" id="dropdown-{{ member.id }}">
+                        <button class="dropdown-item" onclick="editMember(event, {{ member.id }})">Edit</button>
+                        <button class="dropdown-item" onclick="resetPassword(event, {{ member.id }})">Reset Password</button>
+                        <button class="dropdown-item dropdown-item-danger" onclick="confirmDelete(event, {{ member.id }}, '{{ member.username }}')">Delete</button>
+                    </div>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5" class="empty-state">No members found</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if page_obj.has_other_pages %}
+<div class="pagination" role="navigation" aria-label="Pagination">
+    <div class="pagination-info">
+        Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} members
+    </div>
+    <div class="pagination-nav">
+        {% if page_obj.has_previous %}
+        <a href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="First page">&laquo; First</a>
+        <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="Previous page">Previous</a>
+        {% endif %}
+
+        <span class="page-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="Next page">Next</a>
+        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="Last page">Last &raquo;</a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Member View Modal -->
+<div id="memberModal" class="modal">
+    <div class="modal-content modal-content-lg">
+        <div class="modal-header">
+            <h3>Member Information</h3>
+            <button class="modal-close" onclick="closeMemberModal()" aria-label="Close">&times;</button>
+        </div>
+
+        <div class="modal-tabs modal-tabs-scrollable">
+            <button class="modal-tab active" onclick="switchTab('core')">Core</button>
+            <button class="modal-tab" onclick="switchTab('personal')">Personal</button>
+            <button class="modal-tab" onclick="switchTab('contact')">Contact</button>
+            <button class="modal-tab" onclick="switchTab('kyc')">KYC</button>
+            <button class="modal-tab" onclick="switchTab('nominee')">Nominee</button>
+            <button class="modal-tab" onclick="switchTab('shares')">Shares</button>
+            <button class="modal-tab" onclick="switchTab('accounts')">Accounts</button>
+            <button class="modal-tab" onclick="switchTab('transactions')">Transactions</button>
+        </div>
+
+        <div class="modal-body">
+            <div class="modal-avatar-section">
+                <div class="modal-avatar" id="modal-avatar"></div>
+                <div class="modal-username" id="modal-username"></div>
+                <div class="modal-email" id="modal-email"></div>
+                <span class="status-badge" id="modal-status-badge"></span>
+            </div>
+
+            <!-- Core Identity Tab -->
+            <div class="modal-tab-content active" id="tab-core">
+                <div class="info-grid">
+                    <div class="info-row">
+                        <div class="info-label">Member ID</div>
+                        <div class="info-value" id="modal-member-id">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Full Name</div>
+                        <div class="info-value" id="modal-full-name">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Member Type</div>
+                        <div class="info-value" id="modal-member-type">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Status</div>
+                        <div class="info-value" id="modal-status">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Date of Joining</div>
+                        <div class="info-value" id="modal-date-joining">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Role</div>
+                        <div class="info-value" id="modal-role">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Date Registered</div>
+                        <div class="info-value" id="modal-date-joined">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Last Login</div>
+                        <div class="info-value" id="modal-last-login">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Personal Tab -->
+            <div class="modal-tab-content" id="tab-personal">
+                <div class="info-grid">
+                    <div class="info-row">
+                        <div class="info-label">Date of Birth</div>
+                        <div class="info-value" id="modal-dob">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Age</div>
+                        <div class="info-value" id="modal-age">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Gender</div>
+                        <div class="info-value" id="modal-gender">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Marital Status</div>
+                        <div class="info-value" id="modal-marital">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Occupation</div>
+                        <div class="info-value" id="modal-occupation">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Annual Income</div>
+                        <div class="info-value" id="modal-income">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Education</div>
+                        <div class="info-value" id="modal-education">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contact Tab -->
+            <div class="modal-tab-content" id="tab-contact">
+                <div class="info-grid">
+                    <div class="info-row">
+                        <div class="info-label">Primary Mobile</div>
+                        <div class="info-value" id="modal-mobile-primary">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Alternate Mobile</div>
+                        <div class="info-value" id="modal-mobile-alt">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Email</div>
+                        <div class="info-value" id="modal-contact-email">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Preferred Communication</div>
+                        <div class="info-value" id="modal-comm-mode">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">DND Enabled</div>
+                        <div class="info-value" id="modal-dnd">-</div>
+                    </div>
+                </div>
+                <h4 class="info-section-title">Current Address</h4>
+                <div class="info-row info-row-full">
+                    <div class="info-value" id="modal-current-address">-</div>
+                </div>
+                <h4 class="info-section-title">Permanent Address</h4>
+                <div class="info-row info-row-full">
+                    <div class="info-value" id="modal-permanent-address">-</div>
+                </div>
+            </div>
+
+            <!-- KYC Tab -->
+            <div class="modal-tab-content" id="tab-kyc">
+                <div class="info-grid">
+                    <div class="info-row">
+                        <div class="info-label">KYC Status</div>
+                        <div class="info-value" id="modal-kyc-status">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Verified Date</div>
+                        <div class="info-value" id="modal-kyc-date">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Aadhaar Number</div>
+                        <div class="info-value" id="modal-aadhar">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">PAN Number</div>
+                        <div class="info-value" id="modal-pan">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Voter ID</div>
+                        <div class="info-value" id="modal-voter-id">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Passport</div>
+                        <div class="info-value" id="modal-passport">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Driving License</div>
+                        <div class="info-value" id="modal-dl">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">AML Status</div>
+                        <div class="info-value" id="modal-aml">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Nominee Tab -->
+            <div class="modal-tab-content" id="tab-nominee">
+                <h4 class="info-section-title">Primary Nominee</h4>
+                <div class="info-grid">
+                    <div class="info-row">
+                        <div class="info-label">Name</div>
+                        <div class="info-value" id="modal-nominee-name">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Relationship</div>
+                        <div class="info-value" id="modal-nominee-rel">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Date of Birth</div>
+                        <div class="info-value" id="modal-nominee-dob">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Contact</div>
+                        <div class="info-value" id="modal-nominee-contact">-</div>
+                    </div>
+                </div>
+                <div class="info-row info-row-full">
+                    <div class="info-label">Address</div>
+                    <div class="info-value" id="modal-nominee-address">-</div>
+                </div>
+                <h4 class="info-section-title">Alternate Nominee</h4>
+                <div class="info-grid">
+                    <div class="info-row">
+                        <div class="info-label">Name</div>
+                        <div class="info-value" id="modal-alt-nominee-name">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Relationship</div>
+                        <div class="info-value" id="modal-alt-nominee-rel">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Shares Tab -->
+            <div class="modal-tab-content" id="tab-shares">
+                <div class="info-grid">
+                    <div class="info-row">
+                        <div class="info-label">Share Capital</div>
+                        <div class="info-value" id="modal-share-capital">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Number of Shares</div>
+                        <div class="info-value" id="modal-num-shares">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Face Value/Share</div>
+                        <div class="info-value" id="modal-face-value">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Certificate No.</div>
+                        <div class="info-value" id="modal-cert-number">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Issue Date</div>
+                        <div class="info-value" id="modal-share-date">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Dividend Payable</div>
+                        <div class="info-value" id="modal-dividend">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Last Dividend Paid</div>
+                        <div class="info-value" id="modal-last-dividend">-</div>
+                    </div>
+                </div>
+                <h4 class="info-section-title">Eligibility</h4>
+                <div class="info-grid">
+                    <div class="info-row">
+                        <div class="info-label">Accounts</div>
+                        <div class="info-value" id="modal-elig-accounts">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Loans</div>
+                        <div class="info-value" id="modal-elig-loans">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Dividend</div>
+                        <div class="info-value" id="modal-elig-dividend">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Voting</div>
+                        <div class="info-value" id="modal-elig-voting">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Risk Category</div>
+                        <div class="info-value" id="modal-risk">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Accounts Tab -->
+            <div class="modal-tab-content" id="tab-accounts">
+                <div id="modal-accounts-list" class="modal-table-container">
+                    <p class="empty-state-text">Loading accounts...</p>
+                </div>
+            </div>
+
+            <!-- Transactions Tab -->
+            <div class="modal-tab-content" id="tab-transactions">
+                <div id="modal-transactions-list" class="modal-table-container">
+                    <p class="empty-state-text">Loading transactions...</p>
+                </div>
+                <div id="modal-transactions-footer" class="modal-load-more" style="display:none;">
+                    <button class="btn btn-secondary btn-sm" onclick="loadMoreTransactions()">Load More</button>
+                    <span id="modal-txn-info" class="modal-txn-info"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeMemberModal()">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Add Member Modal -->
+<div id="addMemberModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Add New Member</h3>
+            <button class="modal-close" onclick="closeAddMemberModal()" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="addMemberForm">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label class="form-label">Username *</label>
+                    <input type="text" name="username" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Email *</label>
+                    <input type="email" name="email" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Full Name (As per KYC) *</label>
+                    <input type="text" name="full_name" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Date of Birth *</label>
+                    <input type="date" name="date_of_birth" class="form-input" required>
+                    <span class="form-hint">Password will be auto-generated as: DDMMFIRSTFOUR (e.g., 0211TANM)</span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Primary Mobile</label>
+                    <input type="tel" name="mobile_primary" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Role</label>
+                    <select name="role" class="form-input">
+                        <option value="admin">Admin</option>
+                        <option value="member" selected>Member</option>
+                        <option value="viewer">Viewer</option>
+                    </select>
+                </div>
+                <div id="add-member-error" class="error-message"></div>
+                <div id="add-member-success" class="success-message"></div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeAddMemberModal()">Cancel</button>
+            <button class="btn btn-primary" id="addMemberBtn" onclick="addMember()">Add Member</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Member Modal -->
+<div id="editMemberModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Edit Member</h3>
+            <button class="modal-close" onclick="closeEditMemberModal()" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="editMemberForm">
+                {% csrf_token %}
+                <input type="hidden" id="edit-member-id" name="member_id">
+                <div class="form-group">
+                    <label class="form-label">Username</label>
+                    <input type="text" id="edit-username" name="username" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Email</label>
+                    <input type="email" id="edit-email" name="email" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Full Name</label>
+                    <input type="text" id="edit-full-name" name="full_name" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Primary Mobile</label>
+                    <input type="tel" id="edit-mobile" name="mobile_primary" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Role</label>
+                    <select id="edit-role" name="role" class="form-input" required>
+                        <option value="admin">Admin</option>
+                        <option value="member">Member</option>
+                        <option value="viewer">Viewer</option>
+                    </select>
+                </div>
+                <div id="edit-member-error" class="error-message"></div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeEditMemberModal()">Cancel</button>
+            <button class="btn btn-primary" id="updateMemberBtn" onclick="updateMember()">Update Member</button>
+        </div>
+    </div>
+</div>
+
+<!-- Confirmation Dialog -->
+<div id="confirmDialog" class="confirm-dialog">
+    <h4>Confirm Delete</h4>
+    <p>Are you sure you want to delete user <strong id="delete-username"></strong>?</p>
+    <div class="confirm-buttons">
+        <button class="btn btn-secondary" onclick="closeConfirmDialog()">Cancel</button>
+        <button class="btn btn-danger" onclick="deleteMember()">Delete</button>
+    </div>
+</div>
+
+<!-- Password Reset Dialog -->
+<div id="passwordDialog" class="confirm-dialog">
+    <h4>Password Reset</h4>
+    <p id="password-message">Resetting password...</p>
+    <div id="password-result" style="display:none; margin: 10px 0; padding: 10px; background: var(--color-success); border-radius: 5px;">
+        <strong>New Password:</strong> <span id="new-password" style="font-family: monospace; font-size: 16px;"></span>
+    </div>
+    <div class="confirm-buttons">
+        <button class="btn btn-secondary" onclick="closePasswordDialog()">Close</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    window.CSRF_TOKEN = '{{ csrf_token }}';
+</script>
+<script src="{% static 'js/members.js' %}"></script>
+{% endblock %}

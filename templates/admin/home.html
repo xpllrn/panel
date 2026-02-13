@@ -1,0 +1,299 @@
+{% extends 'admin/base.html' %}
+{% load static %}
+
+{% block title %}Dashboard - Admin Portal{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/pages/dashboard.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2 class="page-title">Dashboard</h2>
+    <div class="header-stats">
+        <span class="stat-item">Welcome, <strong>{{ user.username }}</strong></span>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon stat-icon-members">M</div>
+        <div class="stat-info">
+            <div class="stat-value">{{ total_members }}</div>
+            <div class="stat-label">Total Members</div>
+            <div class="stat-sub">{{ active_members }} active</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon stat-icon-accounts">A</div>
+        <div class="stat-info">
+            <div class="stat-value">{{ total_accounts }}</div>
+            <div class="stat-label">Total Accounts</div>
+            <div class="stat-sub">{{ active_accounts }} active</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon stat-icon-deposits">D</div>
+        <div class="stat-info">
+            <div class="stat-value stat-value-amount">{{ total_deposits|floatformat:0 }}</div>
+            <div class="stat-label">Total Deposits</div>
+            <div class="stat-sub">across all accounts</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon stat-icon-today">T</div>
+        <div class="stat-info">
+            <div class="stat-value">{{ today_receipts }}</div>
+            <div class="stat-label">Today's Transactions</div>
+            <div class="stat-sub stat-sub-split">
+                <span class="stat-credit">+{{ today_credit|floatformat:0 }}</span>
+                <span class="stat-debit">-{{ today_debit|floatformat:0 }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="dashboard-row">
+    <!-- Transaction Trend Chart -->
+    <div class="dashboard-card dashboard-card-wide">
+        <div class="dashboard-card-header">
+            <h3>Transaction Trend (Last 7 Days)</h3>
+        </div>
+        <div class="dashboard-card-body">
+            <div class="chart-container" id="trendChart"></div>
+        </div>
+    </div>
+
+    <!-- Account Distribution Chart -->
+    <div class="dashboard-card dashboard-card-narrow">
+        <div class="dashboard-card-header">
+            <h3>Account Types</h3>
+        </div>
+        <div class="dashboard-card-body">
+            <div class="chart-container" id="accountTypeChart"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Stats Row -->
+<div class="dashboard-row">
+    <!-- Overdue Payments -->
+    <div class="dashboard-card dashboard-card-wide">
+        <div class="dashboard-card-header">
+            <h3>Overdue Payments{% if total_overdue_count > 0 %} <span class="overdue-badge">{{ total_overdue_count }}</span>{% endif %}</h3>
+            <a href="{% url 'loans' %}?status=active" class="view-all-link">View All Loans</a>
+        </div>
+        <div class="dashboard-card-body dashboard-card-body-table">
+            <div id="overduePaymentsList"></div>
+        </div>
+    </div>
+
+    <!-- Recent Transactions -->
+    <div class="dashboard-card dashboard-card-wide">
+        <div class="dashboard-card-header">
+            <h3>Recent Transactions</h3>
+            <a href="{% url 'receipts' %}" class="view-all-link">View All</a>
+        </div>
+        <div class="dashboard-card-body dashboard-card-body-table">
+            <table class="dashboard-table">
+                <thead>
+                    <tr>
+                        <th>Receipt #</th>
+                        <th>Member</th>
+                        <th>Type</th>
+                        <th>Amount</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for txn in recent_transactions %}
+                    <tr>
+                        <td class="txn-receipt-number">{{ txn.receipt_number }}</td>
+                        <td>
+                            <div class="txn-member">{{ txn.user.display_name }}</div>
+                            <div class="txn-account">{{ txn.member_account.account_number }}</div>
+                        </td>
+                        <td>
+                            <span class="txn-type txn-type-{{ txn.transaction_type }}">{{ txn.get_transaction_type_display }}</span>
+                        </td>
+                        <td class="txn-amount {% if txn.transaction_type == 'credit' or txn.transaction_type == 'interest' or txn.transaction_type == 'dividend' or txn.transaction_type == 'share_capital' %}txn-amount-credit{% else %}txn-amount-debit{% endif %}">
+                            {{ txn.amount|floatformat:2 }}
+                        </td>
+                        <td class="txn-date">{{ txn.created_at|date:"M d, Y" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="empty-state">No transactions yet</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    'use strict';
+
+    var trendData = {{ trend_data_json|safe }};
+    var accountTypeData = {{ account_type_data_json|safe }};
+    var overdueData = {{ overdue_data_json|safe }};
+
+    // Account type display names and colors
+    var accountTypeMap = {
+        'fd': { label: 'Fixed Deposit', color: '#b45309' },
+        'cd': { label: 'Certificate of Deposit', color: '#be185d' },
+        'rd': { label: 'Recurring Deposit', color: '#7c3aed' },
+        'od': { label: 'Overdraft', color: '#047857' },
+        'share': { label: 'Share Account', color: '#0369a1' },
+        'sukanya': { label: 'Sukanya Yojana', color: '#a16207' },
+        'suputra': { label: 'Suputra Yojana', color: '#4338ca' }
+    };
+
+    // ========================================
+    // Trend Chart (CSS bar chart)
+    // ========================================
+    function renderTrendChart() {
+        var container = document.getElementById('trendChart');
+        if (!container) return;
+
+        // Find max value for scaling
+        var maxVal = 0;
+        for (var i = 0; i < trendData.length; i++) {
+            if (trendData[i].credits > maxVal) maxVal = trendData[i].credits;
+            if (trendData[i].debits > maxVal) maxVal = trendData[i].debits;
+        }
+        if (maxVal === 0) maxVal = 1;
+
+        var html = '<div class="bar-chart">';
+        html += '<div class="bar-chart-legend">';
+        html += '<span class="legend-item"><span class="legend-dot legend-credit"></span> Credits</span>';
+        html += '<span class="legend-item"><span class="legend-dot legend-debit"></span> Debits</span>';
+        html += '</div>';
+        html += '<div class="bar-chart-bars">';
+
+        for (var i = 0; i < trendData.length; i++) {
+            var d = trendData[i];
+            var creditHeight = Math.max((d.credits / maxVal) * 100, 2);
+            var debitHeight = Math.max((d.debits / maxVal) * 100, 2);
+            if (d.credits === 0) creditHeight = 0;
+            if (d.debits === 0) debitHeight = 0;
+
+            html += '<div class="bar-group">';
+            html += '<div class="bar-pair">';
+            html += '<div class="bar bar-credit" style="height: ' + creditHeight + '%;" title="Credits: ' + formatAmount(d.credits) + '"></div>';
+            html += '<div class="bar bar-debit" style="height: ' + debitHeight + '%;" title="Debits: ' + formatAmount(d.debits) + '"></div>';
+            html += '</div>';
+            html += '<div class="bar-label">' + d.day + '</div>';
+            html += '</div>';
+        }
+
+        html += '</div></div>';
+        container.innerHTML = html;
+    }
+
+    // ========================================
+    // Account Type Chart (horizontal bars)
+    // ========================================
+    function renderAccountTypeChart() {
+        var container = document.getElementById('accountTypeChart');
+        if (!container) return;
+
+        if (accountTypeData.length === 0) {
+            container.innerHTML = '<div class="chart-empty">No accounts yet</div>';
+            return;
+        }
+
+        var total = 0;
+        for (var i = 0; i < accountTypeData.length; i++) {
+            total += accountTypeData[i].count;
+        }
+
+        var html = '<div class="horizontal-bars">';
+        for (var i = 0; i < accountTypeData.length; i++) {
+            var d = accountTypeData[i];
+            var info = accountTypeMap[d.account_type] || { label: d.account_type, color: '#888' };
+            var pct = total > 0 ? ((d.count / total) * 100).toFixed(1) : 0;
+
+            html += '<div class="h-bar-item">';
+            html += '<div class="h-bar-header">';
+            html += '<span class="h-bar-label">' + info.label + '</span>';
+            html += '<span class="h-bar-value">' + d.count + ' (' + pct + '%)</span>';
+            html += '</div>';
+            html += '<div class="h-bar-track">';
+            html += '<div class="h-bar-fill" style="width: ' + pct + '%; background: ' + info.color + ';"></div>';
+            html += '</div>';
+            html += '</div>';
+        }
+        html += '</div>';
+        container.innerHTML = html;
+    }
+
+    // ========================================
+    // Overdue Payments List
+    // ========================================
+    function renderOverduePayments() {
+        var container = document.getElementById('overduePaymentsList');
+        if (!container) return;
+
+        if (overdueData.length === 0) {
+            container.innerHTML = '<div class="chart-empty overdue-empty">No overdue payments</div>';
+            return;
+        }
+
+        var html = '<table class="dashboard-table overdue-table">';
+        html += '<thead><tr>';
+        html += '<th>Member</th>';
+        html += '<th>Loan</th>';
+        html += '<th>Overdue EMIs</th>';
+        html += '<th>Total Due</th>';
+        html += '<th>Days Late</th>';
+        html += '</tr></thead><tbody>';
+
+        for (var i = 0; i < overdueData.length; i++) {
+            var d = overdueData[i];
+            var urgency = d.days_overdue > 60 ? 'critical' : d.days_overdue > 30 ? 'warning' : 'mild';
+
+            html += '<tr class="overdue-row overdue-' + urgency + '">';
+            html += '<td>';
+            html += '<div class="txn-member">' + d.member_name + '</div>';
+            html += '<div class="txn-account">' + d.member_id + '</div>';
+            html += '</td>';
+            html += '<td>';
+            html += '<div class="txn-member">' + d.loan_number + '</div>';
+            html += '<div class="txn-account">' + d.loan_type + '</div>';
+            html += '</td>';
+            html += '<td class="overdue-count">' + d.overdue_count + ' EMI' + (d.overdue_count > 1 ? 's' : '') + '</td>';
+            html += '<td class="overdue-amount">' + formatAmount(d.total_overdue) + '</td>';
+            html += '<td><span class="overdue-days overdue-days-' + urgency + '">' + d.days_overdue + 'd</span></td>';
+            html += '</tr>';
+        }
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    }
+
+    function formatAmount(num) {
+        return num.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+    }
+
+    // Render all on load
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            renderTrendChart();
+            renderAccountTypeChart();
+            renderOverduePayments();
+        });
+    } else {
+        renderTrendChart();
+        renderAccountTypeChart();
+        renderOverduePayments();
+    }
+})();
+</script>
+{% endblock %}

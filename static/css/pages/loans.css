@@ -1,0 +1,256 @@
+/**
+ * Loans Page Styles
+ * Loan type badges, loan status, progress bars, repayment schedule
+ */
+
+/* Loan number styling */
+.loan-number {
+    font-family: monospace;
+    font-weight: 500;
+    color: var(--color-gray-800);
+}
+
+/* Amount column */
+.loan-amount {
+    font-family: monospace;
+    font-weight: 500;
+    text-align: right;
+}
+
+/* ========================================
+   Loan Type Badges
+   ======================================== */
+.loan-type-badge {
+    display: inline-block;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+}
+
+.loan-type-badge.type-personal {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.loan-type-badge.type-home {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.loan-type-badge.type-vehicle {
+    background: #ddd6fe;
+    color: #7c3aed;
+}
+
+.loan-type-badge.type-gold {
+    background: #fef9c3;
+    color: #a16207;
+}
+
+.loan-type-badge.type-education {
+    background: #d1fae5;
+    color: #047857;
+}
+
+.loan-type-badge.type-business {
+    background: #fce7f3;
+    color: #be185d;
+}
+
+.loan-type-badge.type-emergency {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.loan-type-badge.type-agriculture {
+    background: #ecfccb;
+    color: #4d7c0f;
+}
+
+/* ========================================
+   Loan Status Badges (extend status-badge)
+   ======================================== */
+.status-badge.status-pending {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.status-badge.status-approved {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.status-badge.status-active {
+    background: #d1fae5;
+    color: #047857;
+}
+
+.status-badge.status-closed {
+    background: var(--color-gray-200);
+    color: var(--color-gray-600);
+}
+
+.status-badge.status-defaulted {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.status-badge.status-written_off {
+    background: #f3e8ff;
+    color: #6b21a8;
+}
+
+.status-badge.status-rejected {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+/* ========================================
+   Loan Modal - Progress Bar
+   ======================================== */
+.loan-progress-section {
+    margin: var(--spacing-lg) 0;
+}
+
+.loan-progress-label {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: var(--spacing-sm);
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-600);
+}
+
+.loan-progress-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--color-gray-200);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.loan-progress-fill {
+    height: 100%;
+    background: var(--color-primary);
+    border-radius: var(--radius-full);
+    transition: width var(--transition-normal);
+}
+
+/* ========================================
+   Repayment Schedule Row Statuses
+   ======================================== */
+.modal-table tr.repayment-paid {
+    background: #f0fdf4;
+}
+
+.modal-table tr.repayment-overdue {
+    background: #fef2f2;
+}
+
+.modal-table tr.repayment-partial {
+    background: #fffbeb;
+}
+
+.modal-table tr.repayment-upcoming {
+    background: transparent;
+}
+
+/* Payment status mini-badges in repayment table */
+.payment-status {
+    display: inline-block;
+    padding: 2px var(--spacing-sm);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+}
+
+.payment-status.ps-paid {
+    background: #d1fae5;
+    color: #047857;
+}
+
+.payment-status.ps-overdue {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.payment-status.ps-partial {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.payment-status.ps-upcoming {
+    background: var(--color-gray-100);
+    color: var(--color-gray-600);
+}
+
+/* ========================================
+   Loan Modal - Financial Summary
+   ======================================== */
+.loan-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-xl);
+}
+
+.loan-summary-item {
+    padding: var(--spacing-lg);
+    background: var(--color-gray-50);
+    border-radius: var(--radius-md);
+    text-align: center;
+}
+
+.loan-summary-label {
+    font-size: var(--font-size-xs);
+    color: var(--color-gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--spacing-xs);
+}
+
+.loan-summary-value {
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+    color: var(--color-gray-800);
+    font-family: monospace;
+}
+
+.loan-summary-value.text-success {
+    color: var(--color-success-text);
+}
+
+.loan-summary-value.text-danger {
+    color: var(--color-error-text);
+}
+
+/* ========================================
+   Action buttons in modal
+   ======================================== */
+.loan-action-btn {
+    margin-right: auto;
+}
+
+/* Record EMI button inside repayment table */
+.emi-pay-btn {
+    padding: 2px var(--spacing-sm);
+    font-size: var(--font-size-xs);
+    background: var(--color-primary);
+    color: var(--color-white);
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+.emi-pay-btn:hover {
+    background: var(--color-primary-hover);
+}
+
+/* ========================================
+   Responsive
+   ======================================== */
+@media (max-width: 768px) {
+    .loan-summary-grid {
+        grid-template-columns: 1fr;
+    }
+}

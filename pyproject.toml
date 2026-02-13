@@ -1,0 +1,51 @@
+[tool.ruff]
+# Target Python 3.9+
+target-version = "py39"
+
+# Line length to match common Django conventions
+line-length = 120
+
+# Exclude common directories
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "migrations",
+    "staticfiles",
+    "media",
+]
+
+[tool.ruff.lint]
+# Enable these rule sets
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes (unused imports, undefined names)
+    "I",      # isort (import sorting)
+    "B",      # flake8-bugbear (common bugs)
+    "UP",     # pyupgrade (modern Python syntax)
+    "DJ",     # flake8-django (Django-specific rules)
+]
+
+# Ignore these specific rules
+ignore = [
+    "E501",   # Line too long (handled by formatter, not linter)
+    "DJ001",  # Avoid nullable CharField (sometimes needed)
+]
+
+[tool.ruff.lint.isort]
+# Django import conventions
+known-first-party = ["accounts", "admin_portal", "config"]
+known-third-party = ["rest_framework", "corsheaders"]
+section-order = ["future", "standard-library", "django", "third-party", "first-party", "local-folder"]
+
+[tool.ruff.lint.isort.sections]
+django = ["django"]
+
+[tool.ruff.format]
+# Use double quotes (Python convention)
+quote-style = "double"
+
+# Indent with spaces
+indent-style = "space"

@@ -1,0 +1,537 @@
+{% extends 'admin/base.html' %}
+{% load static %}
+
+{% block title %}Loans - Admin Portal{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/pages/loans.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2 class="page-title">Loans</h2>
+    <div class="header-stats">
+        <span class="stat-item">Total: <strong>{{ total_loans }}</strong></span>
+        <span class="stat-item">Active: <strong>{{ active_loans }}</strong></span>
+        <span class="stat-item">Disbursed: <strong>{{ total_disbursed|floatformat:0 }}</strong></span>
+        <span class="stat-item">Outstanding: <strong>{{ total_outstanding|floatformat:0 }}</strong></span>
+    </div>
+    <form class="search-form" method="get" action="">
+        <input type="text" name="q" placeholder="Search by loan no, member name..."
+            value="{{ search_query|default:'' }}" class="search-input" aria-label="Search loans">
+        <select name="type" class="filter-select" aria-label="Filter by loan type">
+            <option value="">All Types</option>
+            {% for value, label in loan_type_choices %}
+            <option value="{{ value }}" {% if selected_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+        <select name="status" class="filter-select" aria-label="Filter by status">
+            <option value="">All Status</option>
+            {% for value, label in status_choices %}
+            <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+        {% if search_query or selected_type or selected_status %}
+        <a href="{% url 'loans' %}" class="clear-search">Clear</a>
+        {% endif %}
+    </form>
+    <a href="{% url 'export_loans' %}" class="btn btn-secondary btn-sm">Export Excel</a>
+    <button class="btn btn-primary btn-sm" onclick="showAddLoanModal()">+ Add Loan</button>
+</div>
+
+{% if search_query or selected_type or selected_status %}
+<div class="search-info">
+    Showing {{ page_obj.paginator.count }} loan(s)
+    {% if search_query %} matching "<strong>{{ search_query }}</strong>"{% endif %}
+    {% if selected_type %} of type <strong>{{ selected_type|title }}</strong>{% endif %}
+    {% if selected_status %} with status <strong>{{ selected_status|title }}</strong>{% endif %}
+</div>
+{% endif %}
+
+<div class="data-table">
+    <table>
+        <thead>
+            <tr>
+                <th>Loan #</th>
+                <th>Member</th>
+                <th>Type</th>
+                <th>Amount</th>
+                <th>EMI</th>
+                <th>Outstanding</th>
+                <th>Status</th>
+                <th style="width: 50px;"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for loan in loans %}
+            <tr onclick="showLoanModal({{ loan.id }})">
+                <td>
+                    <span class="loan-number">{{ loan.loan_number }}</span>
+                </td>
+                <td>
+                    <div class="user-info">
+                        <div class="avatar avatar-sm">{{ loan.user.display_name|first|upper }}</div>
+                        <div class="user-details">
+                            <span class="user-name">{{ loan.user.display_name }}</span>
+                            {% if loan.user.member_id %}
+                            <span class="user-member-id">{{ loan.user.member_id }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </td>
+                <td>
+                    <span class="loan-type-badge type-{{ loan.loan_type }}">{{ loan.get_loan_type_display }}</span>
+                </td>
+                <td class="loan-amount">{{ loan.principal_amount|floatformat:0 }}</td>
+                <td class="loan-amount">{{ loan.emi_amount|floatformat:0 }}</td>
+                <td class="loan-amount">{{ loan.outstanding_balance|floatformat:0 }}</td>
+                <td>
+                    <span class="status-badge status-{{ loan.status }}">{{ loan.get_status_display }}</span>
+                </td>
+                <td class="actions-cell" onclick="event.stopPropagation();">
+                    <button class="kebab-menu" onclick="toggleDropdown(event, {{ loan.id }})" aria-label="Actions">&#8942;</button>
+                    <div class="dropdown-menu" id="dropdown-{{ loan.id }}">
+                        <button class="dropdown-item" onclick="showLoanModal({{ loan.id }})">View Details</button>
+                        {% if loan.status == 'pending' %}
+                        <button class="dropdown-item" onclick="showApproveDialog(event, {{ loan.id }})">Approve</button>
+                        {% endif %}
+                        {% if loan.status == 'active' %}
+                        <button class="dropdown-item" onclick="showRecordEmiFromMenu(event, {{ loan.id }})">Record EMI</button>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="8" class="empty-state">No loans found</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if page_obj.has_other_pages %}
+<div class="pagination" role="navigation" aria-label="Pagination">
+    <div class="pagination-info">
+        Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} loans
+    </div>
+    <div class="pagination-nav">
+        {% if page_obj.has_previous %}
+        <a href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="First page">&laquo; First</a>
+        <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="Previous page">Previous</a>
+        {% endif %}
+
+        <span class="page-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="Next page">Next</a>
+        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="Last page">Last &raquo;</a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Loan View Modal (Large, 4 tabs) -->
+<div id="loanModal" class="modal">
+    <div class="modal-content modal-content-lg">
+        <div class="modal-header">
+            <h3>Loan Details - <span id="modal-loan-number"></span></h3>
+            <button class="modal-close" onclick="closeLoanModal()" aria-label="Close">&times;</button>
+        </div>
+
+        <div class="modal-tabs modal-tabs-scrollable">
+            <button class="modal-tab active" onclick="switchLoanTab('details')">Details</button>
+            <button class="modal-tab" onclick="switchLoanTab('financials')">Financials</button>
+            <button class="modal-tab" onclick="switchLoanTab('guarantor')">Guarantor / Collateral</button>
+            <button class="modal-tab" onclick="switchLoanTab('schedule')">Repayment Schedule</button>
+        </div>
+
+        <div class="modal-body">
+            <!-- Details Tab -->
+            <div class="modal-tab-content active" id="tab-details">
+                <div class="info-grid">
+                    <div class="info-row">
+                        <div class="info-label">Loan Number</div>
+                        <div class="info-value" id="detail-loan-number">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Status</div>
+                        <div class="info-value" id="detail-status">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Member</div>
+                        <div class="info-value" id="detail-member">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Member ID</div>
+                        <div class="info-value" id="detail-member-id">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Loan Type</div>
+                        <div class="info-value" id="detail-loan-type">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Interest Type</div>
+                        <div class="info-value" id="detail-interest-type">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Application Date</div>
+                        <div class="info-value" id="detail-application-date">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Approval Date</div>
+                        <div class="info-value" id="detail-approval-date">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Disbursement Date</div>
+                        <div class="info-value" id="detail-disbursement-date">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Disbursement Account</div>
+                        <div class="info-value" id="detail-disbursement-account">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Approved By</div>
+                        <div class="info-value" id="detail-approved-by">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Created By</div>
+                        <div class="info-value" id="detail-created-by">-</div>
+                    </div>
+                </div>
+                <div id="detail-purpose-section" style="display: none;">
+                    <div class="info-section-title">Purpose</div>
+                    <p id="detail-purpose" style="font-size: var(--font-size-sm); color: var(--color-gray-700);"></p>
+                </div>
+                <div id="detail-remarks-section" style="display: none;">
+                    <div class="info-section-title">Remarks</div>
+                    <p id="detail-remarks" style="font-size: var(--font-size-sm); color: var(--color-gray-700);"></p>
+                </div>
+            </div>
+
+            <!-- Financials Tab -->
+            <div class="modal-tab-content" id="tab-financials">
+                <div class="loan-summary-grid">
+                    <div class="loan-summary-item">
+                        <div class="loan-summary-label">Principal Amount</div>
+                        <div class="loan-summary-value" id="fin-principal">-</div>
+                    </div>
+                    <div class="loan-summary-item">
+                        <div class="loan-summary-label">Total Payable</div>
+                        <div class="loan-summary-value" id="fin-total-payable">-</div>
+                    </div>
+                    <div class="loan-summary-item">
+                        <div class="loan-summary-label">Total Paid</div>
+                        <div class="loan-summary-value text-success" id="fin-total-paid">-</div>
+                    </div>
+                    <div class="loan-summary-item">
+                        <div class="loan-summary-label">Outstanding</div>
+                        <div class="loan-summary-value text-danger" id="fin-outstanding">-</div>
+                    </div>
+                </div>
+
+                <div class="loan-progress-section">
+                    <div class="loan-progress-label">
+                        <span>Repayment Progress</span>
+                        <span id="fin-progress-text">0%</span>
+                    </div>
+                    <div class="loan-progress-bar">
+                        <div class="loan-progress-fill" id="fin-progress-fill" style="width: 0%;"></div>
+                    </div>
+                </div>
+
+                <div class="info-grid" style="margin-top: var(--spacing-xl);">
+                    <div class="info-row">
+                        <div class="info-label">Interest Rate</div>
+                        <div class="info-value" id="fin-interest-rate">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Interest Type</div>
+                        <div class="info-value" id="fin-interest-type">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Tenure</div>
+                        <div class="info-value" id="fin-tenure">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">EMI Amount</div>
+                        <div class="info-value" id="fin-emi">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">EMIs Paid</div>
+                        <div class="info-value" id="fin-emis-paid">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">EMIs Overdue</div>
+                        <div class="info-value" id="fin-emis-overdue">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">First EMI Date</div>
+                        <div class="info-value" id="fin-first-emi">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Last EMI Date</div>
+                        <div class="info-value" id="fin-last-emi">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Overdue Amount</div>
+                        <div class="info-value" id="fin-overdue-amount">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Closure Date</div>
+                        <div class="info-value" id="fin-closure-date">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Guarantor / Collateral Tab -->
+            <div class="modal-tab-content" id="tab-guarantor">
+                <div class="info-section-title">Guarantor Details</div>
+                <div class="info-grid">
+                    <div class="info-row">
+                        <div class="info-label">Name</div>
+                        <div class="info-value" id="guar-name">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Member ID</div>
+                        <div class="info-value" id="guar-member-id">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Relationship</div>
+                        <div class="info-value" id="guar-relationship">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Contact</div>
+                        <div class="info-value" id="guar-contact">-</div>
+                    </div>
+                </div>
+
+                <div class="info-section-title" style="margin-top: var(--spacing-xl);">Collateral Details</div>
+                <div class="info-grid">
+                    <div class="info-row">
+                        <div class="info-label">Type</div>
+                        <div class="info-value" id="coll-type">-</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Value</div>
+                        <div class="info-value" id="coll-value">-</div>
+                    </div>
+                </div>
+                <div id="coll-desc-section" style="display: none;">
+                    <div class="info-section-title">Description</div>
+                    <p id="coll-description" style="font-size: var(--font-size-sm); color: var(--color-gray-700);"></p>
+                </div>
+            </div>
+
+            <!-- Repayment Schedule Tab -->
+            <div class="modal-tab-content" id="tab-schedule">
+                <div class="modal-table-container">
+                    <table class="modal-table" id="repayment-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Due Date</th>
+                                <th>Amount Due</th>
+                                <th>Principal</th>
+                                <th>Interest</th>
+                                <th>Paid Date</th>
+                                <th>Amount Paid</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="repayment-tbody">
+                        </tbody>
+                    </table>
+                </div>
+                <p class="empty-state-text" id="no-repayments" style="display: none;">
+                    No repayment schedule available. Approve the loan to generate the schedule.
+                </p>
+            </div>
+        </div>
+
+        <div class="modal-footer">
+            <button class="btn btn-primary btn-sm loan-action-btn" id="modal-approve-btn" style="display: none;" onclick="showApproveDialogFromModal()">Approve Loan</button>
+            <button class="btn btn-secondary" onclick="closeLoanModal()">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Add Loan Modal -->
+<div id="addLoanModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Add New Loan</h3>
+            <button class="modal-close" onclick="closeAddLoanModal()" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="addLoanForm">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label class="form-label">Member *</label>
+                    <div class="member-selector">
+                        <input type="text" id="loan-member-search" class="form-input" placeholder="Type to search members..." autocomplete="off">
+                        <input type="hidden" id="loan-member-id" name="user_id">
+                        <div class="member-selector-results" id="loan-member-results"></div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Loan Type *</label>
+                    <select name="loan_type" class="form-input" required>
+                        <option value="">Select type...</option>
+                        {% for value, label in loan_type_choices %}
+                        <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Loan Amount *</label>
+                    <input type="number" name="principal_amount" class="form-input" step="0.01" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Interest Rate (% p.a.) *</label>
+                    <input type="number" name="interest_rate" class="form-input" step="0.01" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Interest Type</label>
+                    <select name="interest_type" class="form-input">
+                        <option value="reducing">Reducing Balance</option>
+                        <option value="flat">Flat Rate</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Tenure (Months) *</label>
+                    <input type="number" name="tenure_months" class="form-input" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Purpose</label>
+                    <textarea name="purpose" class="form-input" rows="2"></textarea>
+                </div>
+
+                <div class="info-section-title">Guarantor (Optional)</div>
+                <div class="form-group">
+                    <label class="form-label">Guarantor Name</label>
+                    <input type="text" name="guarantor_name" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Guarantor Member ID</label>
+                    <input type="text" name="guarantor_member_id" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Guarantor Relationship</label>
+                    <input type="text" name="guarantor_relationship" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Guarantor Contact</label>
+                    <input type="text" name="guarantor_contact" class="form-input">
+                </div>
+
+                <div class="info-section-title">Collateral (Optional)</div>
+                <div class="form-group">
+                    <label class="form-label">Collateral Type</label>
+                    <input type="text" name="collateral_type" class="form-input" placeholder="e.g. Gold, Property, Vehicle">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Collateral Value</label>
+                    <input type="number" name="collateral_value" class="form-input" step="0.01" min="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Collateral Description</label>
+                    <textarea name="collateral_description" class="form-input" rows="2"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Remarks</label>
+                    <textarea name="remarks" class="form-input" rows="2"></textarea>
+                </div>
+
+                <div id="add-loan-error" class="error-message"></div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeAddLoanModal()">Cancel</button>
+            <button class="btn btn-primary" id="addLoanBtn" onclick="addLoan()">Add Loan</button>
+        </div>
+    </div>
+</div>
+
+<!-- Approve Loan Dialog -->
+<div id="approveDialog" class="modal">
+    <div class="modal-content" style="max-width: 420px;">
+        <div class="modal-header">
+            <h3>Approve Loan</h3>
+            <button class="modal-close" onclick="closeApproveDialog()" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p style="margin-bottom: var(--spacing-lg); color: var(--color-gray-700);">
+                Approve loan <strong id="approve-loan-number"></strong>? This will generate the full repayment schedule.
+            </p>
+            <form id="approveForm">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label class="form-label">Disbursement Date *</label>
+                    <input type="date" id="approve-disbursement-date" name="disbursement_date" class="form-input" required>
+                </div>
+                <div id="approve-error" class="error-message"></div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeApproveDialog()">Cancel</button>
+            <button class="btn btn-primary" id="approveBtn" onclick="approveLoan()">Approve</button>
+        </div>
+    </div>
+</div>
+
+<!-- Record EMI Payment Dialog -->
+<div id="emiDialog" class="modal">
+    <div class="modal-content" style="max-width: 420px;">
+        <div class="modal-header">
+            <h3>Record EMI Payment</h3>
+            <button class="modal-close" onclick="closeEmiDialog()" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="emiForm">
+                {% csrf_token %}
+                <input type="hidden" id="emi-loan-id" name="loan_id">
+                <div class="form-group">
+                    <label class="form-label">Installment #</label>
+                    <input type="number" id="emi-installment" name="installment_number" class="form-input" readonly>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Amount Due</label>
+                    <input type="text" id="emi-amount-due" class="form-input" disabled>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Amount Paid *</label>
+                    <input type="number" id="emi-amount-paid" name="amount_paid" class="form-input" step="0.01" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Payment Mode</label>
+                    <select name="payment_mode" class="form-input">
+                        <option value="cash">Cash</option>
+                        <option value="cheque">Cheque</option>
+                        <option value="neft">NEFT</option>
+                        <option value="rtgs">RTGS</option>
+                        <option value="upi">UPI</option>
+                        <option value="auto_debit">Auto Debit</option>
+                    </select>
+                </div>
+                <div id="emi-error" class="error-message"></div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeEmiDialog()">Cancel</button>
+            <button class="btn btn-primary" id="emiBtn" onclick="recordEmiPayment()">Record Payment</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    window.CSRF_TOKEN = '{{ csrf_token }}';
+</script>
+<script src="{% static 'js/loans.js' %}"></script>
+{% endblock %}

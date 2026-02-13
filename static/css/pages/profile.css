@@ -1,0 +1,124 @@
+/**
+ * Profile Page Styles
+ */
+
+.profile-container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.profile-card {
+    background: var(--color-white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: var(--spacing-3xl);
+}
+
+/* Header with Avatar and Edit Button */
+.profile-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--spacing-2xl);
+    padding-bottom: var(--spacing-2xl);
+    border-bottom: 1px solid var(--color-gray-200);
+}
+
+.profile-user {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xl);
+}
+
+.profile-user .avatar {
+    width: 80px;
+    height: 80px;
+    font-size: var(--font-size-2xl);
+}
+
+.profile-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.profile-name {
+    font-size: var(--font-size-xl);
+    font-weight: 600;
+    color: var(--color-gray-800);
+}
+
+.profile-role {
+    display: inline-block;
+    padding: var(--spacing-xs) var(--spacing-md);
+    background: var(--color-primary-light);
+    color: var(--color-primary-text);
+    border-radius: 12px;
+    font-size: var(--font-size-sm);
+    width: fit-content;
+}
+
+/* Form Fields */
+.profile-form .field-row {
+    padding: var(--spacing-lg) 0;
+    border-bottom: 1px solid var(--color-gray-100);
+}
+
+.profile-form .field-row:last-of-type {
+    border-bottom: none;
+}
+
+.field-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-500);
+    margin-bottom: var(--spacing-sm);
+}
+
+.field-value {
+    font-size: var(--font-size-md);
+    font-weight: 500;
+    color: var(--color-gray-800);
+}
+
+.field-input {
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: var(--font-size-md);
+    font-weight: 500;
+    color: var(--color-gray-800);
+    border: 1px solid var(--color-gray-300);
+    border-radius: var(--radius-md);
+    background: var(--color-white);
+}
+
+.field-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.field-input:disabled {
+    background: transparent;
+    border: none;
+    padding-left: 0;
+    padding-right: 0;
+    cursor: default;
+}
+
+.field-input::placeholder {
+    color: var(--color-gray-400);
+    font-weight: 400;
+}
+
+/* Edit Actions */
+.edit-actions {
+    display: none;
+    margin-top: var(--spacing-2xl);
+    padding-top: var(--spacing-xl);
+    border-top: 1px solid var(--color-gray-200);
+    gap: var(--spacing-md);
+    justify-content: flex-end;
+}
+
+.edit-actions.show {
+    display: flex;
+}

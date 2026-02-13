@@ -1,0 +1,242 @@
+/**
+ * Accounts Page Styles
+ * Page-shared styles (header, search, table, pagination, actions, confirm dialog)
+ * are now in page-layout.css
+ */
+
+/* Account number styling */
+.account-number {
+    font-family: monospace;
+    font-weight: 500;
+    color: var(--color-gray-800);
+}
+
+/* Amount column */
+.amount {
+    font-family: monospace;
+    font-weight: 500;
+    text-align: right;
+}
+
+/* Member ID subtitle */
+.user-member-id {
+    font-size: var(--font-size-xs);
+    color: var(--color-gray-500);
+}
+
+/* Account type badges */
+.account-type-badge {
+    display: inline-block;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+}
+
+.account-type-badge.type-fd {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.account-type-badge.type-cd {
+    background: #fce7f3;
+    color: #be185d;
+}
+
+.account-type-badge.type-rd {
+    background: #ddd6fe;
+    color: #7c3aed;
+}
+
+.account-type-badge.type-od {
+    background: #d1fae5;
+    color: #047857;
+}
+
+.account-type-badge.type-share {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.account-type-badge.type-sukanya {
+    background: #fef9c3;
+    color: #a16207;
+}
+
+.account-type-badge.type-suputra {
+    background: #e0e7ff;
+    color: #4338ca;
+}
+
+/* ========================================
+   Modal - Account Detail Styles
+   ======================================== */
+.account-header-section {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-lg);
+    padding-bottom: var(--spacing-xl);
+    border-bottom: 1px solid var(--color-gray-200);
+    margin-bottom: var(--spacing-xl);
+}
+
+.account-type-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    background: var(--color-gray-100);
+    color: var(--color-gray-600);
+}
+
+.account-type-icon.type-fd {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.account-type-icon.type-cd {
+    background: #fce7f3;
+    color: #be185d;
+}
+
+.account-type-icon.type-rd {
+    background: #ddd6fe;
+    color: #7c3aed;
+}
+
+.account-type-icon.type-od {
+    background: #d1fae5;
+    color: #047857;
+}
+
+.account-type-icon.type-share {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.account-type-icon.type-sukanya {
+    background: #fef9c3;
+    color: #a16207;
+}
+
+.account-type-icon.type-suputra {
+    background: #e0e7ff;
+    color: #4338ca;
+}
+
+.account-header-info {
+    flex: 1;
+}
+
+.account-number-large {
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    font-family: monospace;
+    color: var(--color-gray-800);
+}
+
+.account-type-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-500);
+}
+
+.account-status {
+    padding: var(--spacing-xs) var(--spacing-md);
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+}
+
+/* Balance section */
+.account-balance-section {
+    text-align: center;
+    padding: var(--spacing-xl);
+    background: var(--color-gray-50);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--spacing-xl);
+}
+
+.balance-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-500);
+    margin-bottom: var(--spacing-sm);
+}
+
+.balance-amount {
+    font-size: var(--font-size-2xl);
+    font-weight: 700;
+    color: var(--color-gray-800);
+}
+
+/* Details grid */
+.account-details-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-lg);
+}
+
+.detail-item {
+    padding: var(--spacing-md) 0;
+    border-bottom: 1px solid var(--color-gray-100);
+}
+
+.detail-label {
+    font-size: var(--font-size-xs);
+    color: var(--color-gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--spacing-xs);
+}
+
+.detail-value {
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-800);
+    font-weight: 500;
+}
+
+/* Remarks section */
+.remarks-section {
+    margin-top: var(--spacing-xl);
+    padding-top: var(--spacing-lg);
+    border-top: 1px solid var(--color-gray-200);
+}
+
+.remarks-section .detail-value {
+    font-weight: 400;
+    line-height: 1.5;
+}
+
+/* ========================================
+   Statement Tab - Transaction Type Badges
+   ======================================== */
+.txn-type-badge {
+    display: inline-block;
+    padding: 2px var(--spacing-sm);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.txn-type-badge.txn-credit {
+    background: #d1fae5;
+    color: #047857;
+}
+
+.txn-type-badge.txn-debit {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+/* ========================================
+   Responsive
+   ======================================== */
+@media (max-width: 768px) {
+    .account-details-grid {
+        grid-template-columns: 1fr;
+    }
+}

@@ -1,0 +1,369 @@
+/**
+ * Page Layout CSS - Shared patterns for all list/data pages
+ * Used by: members, accounts, and any future list pages
+ */
+
+/* ========================================
+   Page Header
+   ======================================== */
+.page-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: var(--spacing-xl);
+    flex-wrap: wrap;
+    gap: var(--spacing-md);
+}
+
+.page-title {
+    margin: 0;
+    font-size: var(--font-size-xl);
+    font-weight: 600;
+    color: var(--color-gray-800);
+    white-space: nowrap;
+}
+
+.page-actions {
+    display: flex;
+    gap: var(--spacing-lg);
+    align-items: center;
+}
+
+/* Header Stats */
+.header-stats {
+    display: flex;
+    gap: var(--spacing-lg);
+    margin-right: auto;
+}
+
+.stat-item {
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-600);
+    white-space: nowrap;
+}
+
+.stat-item strong {
+    color: var(--color-gray-800);
+}
+
+/* ========================================
+   Search Form
+   ======================================== */
+.search-form {
+    display: flex;
+    gap: var(--spacing-sm);
+    align-items: center;
+    flex-wrap: wrap;
+    margin-left: auto;
+}
+
+.search-input {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--color-gray-300);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-base);
+    min-width: 220px;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.filter-select {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--color-gray-300);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    background: var(--color-white);
+    min-width: 140px;
+}
+
+.filter-select:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.clear-search {
+    color: var(--color-gray-600);
+    text-decoration: none;
+    font-size: var(--font-size-base);
+}
+
+.clear-search:hover {
+    color: var(--color-gray-800);
+    text-decoration: underline;
+}
+
+/* Search Info Banner */
+.search-info {
+    padding: var(--spacing-md) var(--spacing-lg);
+    background: var(--color-primary-light);
+    border-left: 3px solid var(--color-primary);
+    margin-bottom: var(--spacing-lg);
+    color: var(--color-gray-700);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    font-size: var(--font-size-base);
+}
+
+/* ========================================
+   Data Table
+   ======================================== */
+.data-table {
+    background: var(--color-white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: visible;
+}
+
+.data-table table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+    padding: var(--spacing-md) var(--spacing-lg);
+    text-align: left;
+    border-bottom: 1px solid var(--color-gray-200);
+}
+
+.data-table th {
+    background: var(--color-gray-50);
+    font-weight: 600;
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-600);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.data-table td {
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-700);
+}
+
+.data-table tbody tr {
+    cursor: pointer;
+    position: relative;
+    transition: background-color var(--transition-fast);
+}
+
+.data-table tbody tr:hover {
+    background: var(--color-gray-50);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* ========================================
+   Actions Cell (Kebab Menu)
+   ======================================== */
+.actions-cell {
+    position: relative;
+    width: 50px;
+}
+
+.kebab-menu {
+    background: none;
+    border: none;
+    padding: var(--spacing-sm);
+    font-size: 20px;
+    font-weight: bold;
+    color: var(--color-gray-500);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+}
+
+.kebab-menu:hover {
+    background: var(--color-gray-100);
+    color: var(--color-gray-800);
+}
+
+/* Dropdown positioned correctly */
+.actions-cell .dropdown-menu {
+    right: var(--spacing-sm);
+    min-width: 150px;
+}
+
+/* For rows near bottom, show dropdown above */
+tr:nth-last-child(-n+3) .dropdown-menu {
+    bottom: 100%;
+    top: auto;
+    margin-bottom: var(--spacing-xs);
+}
+
+tr:not(:nth-last-child(-n+3)) .dropdown-menu {
+    top: 100%;
+    bottom: auto;
+    margin-top: var(--spacing-xs);
+}
+
+/* ========================================
+   Pagination
+   ======================================== */
+.pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-lg) 0;
+    margin-top: var(--spacing-lg);
+    border-top: 1px solid var(--color-gray-200);
+}
+
+.pagination-info {
+    color: var(--color-gray-600);
+    font-size: var(--font-size-base);
+}
+
+.pagination-nav {
+    display: flex;
+    gap: var(--spacing-sm);
+    align-items: center;
+}
+
+.page-link {
+    padding: var(--spacing-xs) var(--spacing-md);
+    border: 1px solid var(--color-gray-300);
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    color: var(--color-primary);
+    font-size: var(--font-size-base);
+}
+
+.page-link:hover {
+    background: var(--color-gray-50);
+    border-color: var(--color-primary);
+    text-decoration: none;
+}
+
+.page-current {
+    padding: var(--spacing-xs) var(--spacing-md);
+    color: var(--color-gray-600);
+    font-size: var(--font-size-base);
+}
+
+/* ========================================
+   Confirm Dialog
+   ======================================== */
+.confirm-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--color-white);
+    padding: var(--spacing-xl);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    z-index: 1001;
+    display: none;
+    min-width: 320px;
+}
+
+.confirm-dialog.show {
+    display: block;
+}
+
+.confirm-dialog h4 {
+    margin: 0 0 var(--spacing-md) 0;
+    color: var(--color-gray-800);
+}
+
+.confirm-dialog p {
+    margin: 0 0 var(--spacing-xl) 0;
+    color: var(--color-gray-600);
+}
+
+.confirm-buttons {
+    display: flex;
+    gap: var(--spacing-md);
+    justify-content: flex-end;
+}
+
+/* ========================================
+   Member Selector (autocomplete)
+   ======================================== */
+.member-selector {
+    position: relative;
+}
+
+.member-selector-results {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--color-white);
+    border: 1px solid var(--color-gray-300);
+    border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    box-shadow: var(--shadow-md);
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 100;
+    display: none;
+}
+
+.member-selector-results.show {
+    display: block;
+}
+
+.member-selector-item {
+    padding: var(--spacing-sm) var(--spacing-md);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    border-bottom: 1px solid var(--color-gray-100);
+}
+
+.member-selector-item:hover {
+    background: var(--color-gray-50);
+}
+
+.member-selector-item:last-child {
+    border-bottom: none;
+}
+
+.member-selector-name {
+    font-weight: 500;
+    color: var(--color-gray-800);
+}
+
+.member-selector-meta {
+    font-size: var(--font-size-xs);
+    color: var(--color-gray-500);
+}
+
+/* ========================================
+   Responsive
+   ======================================== */
+@media (max-width: 768px) {
+    .page-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .page-title {
+        margin-bottom: var(--spacing-xs);
+    }
+
+    .header-stats {
+        margin-right: 0;
+    }
+
+    .search-form {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .search-input {
+        min-width: 0;
+        flex: 1;
+    }
+
+    .filter-select {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .data-table {
+        overflow-x: auto;
+    }
+}

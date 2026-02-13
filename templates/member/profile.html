@@ -1,0 +1,174 @@
+{% extends "member/base.html" %}
+
+{% block title %}My Profile - Member Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>My Profile</h2>
+</div>
+
+{% if password_changed %}
+<div class="message message-success">Password changed successfully!</div>
+{% endif %}
+{% if password_error %}
+<div class="message message-error">{{ password_error }}</div>
+{% endif %}
+
+<!-- Personal Details -->
+<div class="card">
+    <div class="card-header">
+        <h3>Personal Details</h3>
+    </div>
+    <div class="card-body">
+        <div class="detail-grid">
+            <div class="detail-item">
+                <span class="detail-label">Member ID</span>
+                <span class="detail-value">{{ member.member_id|default:"N/A" }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Name</span>
+                <span class="detail-value">{{ member.display_name }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Username</span>
+                <span class="detail-value">{{ member.username }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Email</span>
+                <span class="detail-value">{{ member.email|default:"Not set" }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Date of Birth</span>
+                <span class="detail-value">{{ member.date_of_birth|date:"d M Y"|default:"Not set" }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Gender</span>
+                <span class="detail-value">{{ member.get_gender_display|default:"Not set" }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Mobile</span>
+                <span class="detail-value">{{ member.mobile_primary|default:"Not set" }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Member Type</span>
+                <span class="detail-value">{{ member.get_member_type_display }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Date of Joining</span>
+                <span class="detail-value">{{ member.date_of_joining|date:"d M Y"|default:"Not set" }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Status</span>
+                <span class="detail-value">
+                    <span class="badge badge-{{ member.status }}">{{ member.get_status_display }}</span>
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Address Details -->
+<div class="card" style="margin-top: 1.5rem;">
+    <div class="card-header">
+        <h3>Address</h3>
+    </div>
+    <div class="card-body">
+        <div class="detail-grid">
+            <div class="detail-item detail-item-full">
+                <span class="detail-label">Current Address</span>
+                <span class="detail-value">
+                    {% if member.current_address_line1 %}
+                    {{ member.current_address_line1 }}{% if member.current_address_line2 %}, {{
+                    member.current_address_line2 }}{% endif %}<br>
+                    {{ member.current_city|default:"" }}{% if member.current_district %}, {{ member.current_district
+                    }}{% endif %}<br>
+                    {{ member.current_state|default:"" }} - {{ member.current_pincode|default:"" }}
+                    {% else %}
+                    Not set
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- KYC Status -->
+<div class="card" style="margin-top: 1.5rem;">
+    <div class="card-header">
+        <h3>KYC Status</h3>
+    </div>
+    <div class="card-body">
+        <div class="detail-grid">
+            <div class="detail-item">
+                <span class="detail-label">KYC Status</span>
+                <span class="detail-value">
+                    <span class="badge badge-{{ member.kyc_status }}">{{ member.get_kyc_status_display }}</span>
+                </span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">PAN Number</span>
+                <span class="detail-value">{{ member.pan_number|default:"Not provided" }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Aadhaar Number</span>
+                <span class="detail-value">
+                    {% if member.aadhar_number %}
+                    XXXX XXXX {{ member.aadhar_number|slice:"-4:" }}
+                    {% else %}
+                    Not provided
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Nominee Details -->
+<div class="card" style="margin-top: 1.5rem;">
+    <div class="card-header">
+        <h3>Nominee Details</h3>
+    </div>
+    <div class="card-body">
+        <div class="detail-grid">
+            <div class="detail-item">
+                <span class="detail-label">Nominee Name</span>
+                <span class="detail-value">{{ member.nominee_name|default:"Not set" }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Relationship</span>
+                <span class="detail-value">{{ member.nominee_relationship|default:"Not set" }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Nominee Contact</span>
+                <span class="detail-value">{{ member.nominee_contact|default:"Not set" }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Change Password -->
+<div class="card" style="margin-top: 1.5rem;">
+    <div class="card-header">
+        <h3>Change Password</h3>
+    </div>
+    <div class="card-body">
+        <form method="post" class="password-form">
+            {% csrf_token %}
+            <input type="hidden" name="change_password" value="1">
+            <div class="form-group">
+                <label class="form-label">Current Password</label>
+                <input type="password" name="current_password" class="form-input" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">New Password</label>
+                <input type="password" name="new_password" class="form-input" required minlength="8">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Confirm New Password</label>
+                <input type="password" name="confirm_password" class="form-input" required minlength="8">
+            </div>
+            <button type="submit" class="btn btn-primary">Change Password</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

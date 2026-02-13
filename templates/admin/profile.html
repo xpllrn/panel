@@ -1,0 +1,66 @@
+{% extends 'admin/base.html' %}
+{% load static %}
+
+{% block title %}Profile - Admin Portal{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/pages/profile.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Profile</h2>
+</div>
+
+<div class="profile-container">
+    <div class="profile-card">
+        <div class="profile-header">
+            <div class="profile-user">
+                <div class="avatar avatar-xl">{{ user.username|first|upper }}</div>
+                <div class="profile-info">
+                    <div class="profile-name">{{ user.username }}</div>
+                    <div class="profile-role">{{ user.get_role_display_name }}</div>
+                </div>
+            </div>
+            <button class="btn btn-primary" id="editBtn" onclick="enableEdit()">Edit Profile</button>
+        </div>
+
+        <form method="post" id="profileForm" class="profile-form">
+            {% csrf_token %}
+
+            <div class="field-row">
+                <div class="field-label">Name</div>
+                <input type="text" name="name" class="field-input"
+                    value="{% if user.first_name or user.last_name %}{{ user.first_name }} {{ user.last_name }}{% endif %}"
+                    placeholder="Not set"
+                    disabled>
+            </div>
+
+            <div class="field-row">
+                <div class="field-label">Username</div>
+                <input type="text" class="field-input" value="{{ user.username }}" disabled>
+            </div>
+
+            <div class="field-row">
+                <div class="field-label">Email</div>
+                <input type="email" name="email" class="field-input" value="{{ user.email }}" disabled required>
+            </div>
+
+            <div class="field-row">
+                <div class="field-label">Phone Number</div>
+                <input type="text" name="phone" class="field-input" value="{{ user.phone|default:'' }}"
+                    placeholder="Not set" disabled>
+            </div>
+
+            <div class="edit-actions" id="editActions">
+                <button type="button" class="btn btn-secondary" onclick="cancelEdit()">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="saveBtn">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/profile.js' %}"></script>
+{% endblock %}

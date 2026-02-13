@@ -1,0 +1,23 @@
+{% extends 'admin/base.html' %}
+{% load static %}
+
+{% block title %}Calculator - Admin Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2 class="page-title">Banking Calculator</h2>
+    <p>The calculator is available as a popup from any page. Click the Calculator link in the sidebar or the button below.</p>
+    <button class="btn btn-primary" onclick="openCalculatorModal()">Open Calculator</button>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    'use strict';
+    if (typeof openCalculatorModal === 'function') {
+        openCalculatorModal();
+    }
+})();
+</script>
+{% endblock %}

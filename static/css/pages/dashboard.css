@@ -1,0 +1,581 @@
+/**
+ * Dashboard Page Styles
+ * Stats cards, charts, recent transactions
+ */
+
+/* ========================================
+   Stats Grid
+   ======================================== */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--spacing-xl);
+    margin-bottom: var(--spacing-2xl);
+}
+
+.stat-card {
+    background: var(--color-white);
+    padding: var(--spacing-xl);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-lg);
+}
+
+.stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.stat-icon-members {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.stat-icon-accounts {
+    background: #d1fae5;
+    color: #047857;
+}
+
+.stat-icon-deposits {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.stat-icon-today {
+    background: #ddd6fe;
+    color: #7c3aed;
+}
+
+.stat-info {
+    min-width: 0;
+}
+
+.stat-value {
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    color: var(--color-gray-800);
+    line-height: 1.2;
+}
+
+.stat-value-amount::before {
+    content: '\20B9';
+    font-size: var(--font-size-lg);
+}
+
+.stat-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-500);
+    margin-top: var(--spacing-xs);
+}
+
+.stat-sub {
+    font-size: var(--font-size-xs);
+    color: var(--color-gray-400);
+    margin-top: 2px;
+}
+
+.stat-sub-split {
+    display: flex;
+    gap: var(--spacing-sm);
+}
+
+.stat-credit {
+    color: var(--color-success-text);
+}
+
+.stat-debit {
+    color: var(--color-error-text);
+}
+
+/* ========================================
+   Dashboard Layout
+   ======================================== */
+.dashboard-row {
+    display: flex;
+    gap: var(--spacing-xl);
+    margin-bottom: var(--spacing-xl);
+    flex-wrap: wrap;
+}
+
+.dashboard-card {
+    background: var(--color-white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.dashboard-card-wide {
+    flex: 2;
+    min-width: 300px;
+}
+
+.dashboard-card-narrow {
+    flex: 1;
+    min-width: 250px;
+}
+
+.dashboard-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-lg) var(--spacing-xl);
+    border-bottom: 1px solid var(--color-gray-200);
+}
+
+.dashboard-card-header h3 {
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    color: var(--color-gray-800);
+    margin: 0;
+}
+
+.view-all-link {
+    font-size: var(--font-size-sm);
+    color: var(--color-primary);
+    text-decoration: none;
+}
+
+.view-all-link:hover {
+    text-decoration: underline;
+}
+
+.dashboard-card-body {
+    padding: var(--spacing-xl);
+    flex: 1;
+}
+
+.dashboard-card-body-table {
+    padding: 0;
+}
+
+/* ========================================
+   Bar Chart (CSS-only)
+   ======================================== */
+.bar-chart {
+    display: flex;
+    flex-direction: column;
+    height: 220px;
+}
+
+.bar-chart-legend {
+    display: flex;
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
+    font-size: var(--font-size-xs);
+    color: var(--color-gray-500);
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+}
+
+.legend-credit {
+    background: var(--color-primary);
+}
+
+.legend-debit {
+    background: var(--color-error-text);
+}
+
+.bar-chart-bars {
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    gap: var(--spacing-md);
+    padding-bottom: var(--spacing-sm);
+}
+
+.bar-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+}
+
+.bar-pair {
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    width: 100%;
+    max-width: 50px;
+}
+
+.bar {
+    flex: 1;
+    border-radius: 3px 3px 0 0;
+    min-height: 0;
+    transition: opacity var(--transition-fast);
+    position: relative;
+}
+
+.bar:hover {
+    opacity: 0.8;
+}
+
+.bar-credit {
+    background: var(--color-primary);
+}
+
+.bar-debit {
+    background: var(--color-error-text);
+}
+
+.bar-label {
+    font-size: var(--font-size-xs);
+    color: var(--color-gray-500);
+    margin-top: var(--spacing-xs);
+    text-align: center;
+}
+
+/* ========================================
+   Horizontal Bars
+   ======================================== */
+.horizontal-bars {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+}
+
+.h-bar-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.h-bar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.h-bar-label {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--color-gray-700);
+}
+
+.h-bar-value {
+    font-size: var(--font-size-xs);
+    color: var(--color-gray-500);
+}
+
+.h-bar-track {
+    height: 8px;
+    background: var(--color-gray-100);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.h-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease;
+}
+
+/* ========================================
+   Status List
+   ======================================== */
+.status-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.status-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) 0;
+    border-bottom: 1px solid var(--color-gray-100);
+}
+
+.status-row:last-child {
+    border-bottom: none;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: var(--radius-full);
+    flex-shrink: 0;
+}
+
+.status-name {
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-700);
+    flex: 1;
+}
+
+.status-count {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-gray-800);
+    min-width: 28px;
+    text-align: right;
+}
+
+.status-pct {
+    font-size: var(--font-size-xs);
+    color: var(--color-gray-400);
+    min-width: 36px;
+    text-align: right;
+}
+
+/* ========================================
+   Quick Info
+   ======================================== */
+.quick-info-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.quick-info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-md) 0;
+    border-bottom: 1px solid var(--color-gray-100);
+}
+
+.quick-info-item:last-child {
+    border-bottom: none;
+}
+
+.quick-info-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-600);
+}
+
+.quick-info-value {
+    font-size: var(--font-size-md);
+    font-weight: 600;
+    color: var(--color-gray-800);
+}
+
+/* ========================================
+   Dashboard Table (Recent Transactions)
+   ======================================== */
+.dashboard-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.dashboard-table th,
+.dashboard-table td {
+    padding: var(--spacing-sm) var(--spacing-lg);
+    text-align: left;
+    border-bottom: 1px solid var(--color-gray-100);
+    font-size: var(--font-size-sm);
+}
+
+.dashboard-table th {
+    background: var(--color-gray-50);
+    font-weight: 600;
+    color: var(--color-gray-600);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font-size: var(--font-size-xs);
+}
+
+.dashboard-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.txn-receipt-number {
+    font-family: monospace;
+    font-weight: 500;
+    color: var(--color-gray-700);
+    white-space: nowrap;
+}
+
+.txn-member {
+    font-weight: 500;
+    color: var(--color-gray-800);
+    font-size: var(--font-size-sm);
+}
+
+.txn-account {
+    font-size: var(--font-size-xs);
+    color: var(--color-gray-500);
+    font-family: monospace;
+}
+
+.txn-type {
+    display: inline-block;
+    padding: 2px var(--spacing-sm);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+}
+
+.txn-type-credit {
+    background: var(--color-success);
+    color: var(--color-success-text);
+}
+
+.txn-type-debit {
+    background: var(--color-error);
+    color: var(--color-error-text);
+}
+
+.txn-type-transfer {
+    background: var(--color-info);
+    color: var(--color-info-text);
+}
+
+.txn-type-interest {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.txn-type-dividend {
+    background: #ddd6fe;
+    color: #7c3aed;
+}
+
+.txn-type-share_capital {
+    background: #d1fae5;
+    color: #047857;
+}
+
+.txn-amount {
+    font-family: monospace;
+    font-weight: 600;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.txn-amount-credit {
+    color: var(--color-success-text);
+}
+
+.txn-amount-debit {
+    color: var(--color-error-text);
+}
+
+.txn-date {
+    color: var(--color-gray-500);
+    white-space: nowrap;
+}
+
+.chart-empty {
+    text-align: center;
+    color: var(--color-gray-400);
+    padding: var(--spacing-xl);
+    font-size: var(--font-size-sm);
+}
+
+/* ========================================
+   Overdue Payments
+   ======================================== */
+.overdue-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-error);
+    color: var(--color-error-text);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 var(--spacing-xs);
+    border-radius: var(--radius-full);
+    margin-left: var(--spacing-xs);
+}
+
+.overdue-table td {
+    vertical-align: middle;
+}
+
+.overdue-count {
+    font-weight: 600;
+    color: var(--color-gray-700);
+    white-space: nowrap;
+}
+
+.overdue-amount {
+    font-family: monospace;
+    font-weight: 600;
+    color: var(--color-error-text);
+    white-space: nowrap;
+}
+
+.overdue-amount::before {
+    content: '\20B9';
+}
+
+.overdue-days {
+    display: inline-block;
+    padding: 2px var(--spacing-sm);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.overdue-days-mild {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.overdue-days-warning {
+    background: #fed7aa;
+    color: #c2410c;
+}
+
+.overdue-days-critical {
+    background: var(--color-error);
+    color: var(--color-error-text);
+}
+
+.overdue-empty {
+    padding: var(--spacing-2xl);
+    color: var(--color-success-text);
+    font-weight: 500;
+}
+
+/* ========================================
+   Responsive
+   ======================================== */
+@media (max-width: 1024px) {
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .dashboard-row {
+        flex-direction: column;
+    }
+
+    .dashboard-card-wide,
+    .dashboard-card-narrow {
+        min-width: 0;
+    }
+}

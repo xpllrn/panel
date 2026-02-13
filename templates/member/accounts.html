@@ -1,0 +1,85 @@
+{% extends "member/base.html" %}
+
+{% block title %}My Accounts - Member Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>My Accounts</h2>
+</div>
+
+<!-- Filters -->
+<div class="filters-bar">
+    <form method="get" class="filters-form">
+        <select name="type" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="">All Types</option>
+            {% for value, label in account_type_choices %}
+            <option value="{{ value }}" {% if current_type == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+        <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="">All Statuses</option>
+            {% for value, label in status_choices %}
+            <option value="{{ value }}" {% if current_status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+
+<!-- Accounts Table -->
+<div class="card">
+    <div class="card-body">
+        {% if accounts %}
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Account #</th>
+                        <th>Type</th>
+                        <th>Balance</th>
+                        <th>Interest Rate</th>
+                        <th>Opening Date</th>
+                        <th>Maturity Date</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for acc in accounts %}
+                    <tr>
+                        <td><strong>{{ acc.account_number }}</strong></td>
+                        <td>{{ acc.get_account_type_display }}</td>
+                        <td>₹{{ acc.balance|floatformat:2 }}</td>
+                        <td>{{ acc.interest_rate }}%</td>
+                        <td>{{ acc.opening_date|date:"d M Y" }}</td>
+                        <td>{{ acc.maturity_date|date:"d M Y"|default:"-" }}</td>
+                        <td><span class="badge badge-{{ acc.status }}">{{ acc.get_status_display }}</span></td>
+                        <td>
+                            <a href="{% url 'member_portal:account_detail' acc.id %}"
+                                class="btn btn-sm btn-outline">View</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if accounts.has_other_pages %}
+        <div class="pagination">
+            {% if accounts.has_previous %}
+            <a href="?page={{ accounts.previous_page_number }}&type={{ current_type }}&status={{ current_status }}"
+                class="btn btn-sm btn-outline">&laquo; Previous</a>
+            {% endif %}
+            <span class="pagination-info">Page {{ accounts.number }} of {{ accounts.paginator.num_pages }}</span>
+            {% if accounts.has_next %}
+            <a href="?page={{ accounts.next_page_number }}&type={{ current_type }}&status={{ current_status }}"
+                class="btn btn-sm btn-outline">Next &raquo;</a>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% else %}
+        <p class="empty-state">No accounts found.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

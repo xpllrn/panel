@@ -1,0 +1,154 @@
+{% extends "member/base.html" %}
+
+{% block title %}Dashboard - Member Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Welcome, {{ request.user.display_name }}</h2>
+    <p class="page-subtitle">Member ID: {{ request.user.member_id|default:"N/A" }}</p>
+</div>
+
+<!-- Summary Cards -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value">{{ total_accounts }}</div>
+        <div class="stat-label">Active Accounts</div>
+    </div>
+    <div class="stat-card stat-card-success">
+        <div class="stat-value">₹{{ total_balance|floatformat:2 }}</div>
+        <div class="stat-label">Total Balance</div>
+    </div>
+    <div class="stat-card stat-card-warning">
+        <div class="stat-value">{{ total_active_loans }}</div>
+        <div class="stat-label">Active Loans</div>
+    </div>
+    <div class="stat-card stat-card-danger">
+        <div class="stat-value">₹{{ total_outstanding|floatformat:2 }}</div>
+        <div class="stat-label">Outstanding Loan</div>
+    </div>
+</div>
+
+<!-- Two Column Layout -->
+<div class="dashboard-grid">
+    <!-- Recent Transactions -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Recent Transactions</h3>
+            <a href="{% url 'member_portal:transactions' %}" class="btn btn-sm btn-outline">View All</a>
+        </div>
+        <div class="card-body">
+            {% if recent_transactions %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Account</th>
+                        <th>Type</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for txn in recent_transactions %}
+                    <tr>
+                        <td>{{ txn.created_at|date:"d M Y" }}</td>
+                        <td>{{ txn.member_account.account_number }}</td>
+                        <td>
+                            <span class="badge badge-{{ txn.transaction_type }}">
+                                {{ txn.get_transaction_type_display }}
+                            </span>
+                        </td>
+                        <td
+                            class="{% if txn.transaction_type == 'credit' %}text-success{% else %}text-danger{% endif %}">
+                            {% if txn.transaction_type == 'credit' %}+{% else %}-{% endif %}₹{{ txn.amount|floatformat:2
+                            }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="empty-state">No recent transactions.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Active Loans -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Active Loans</h3>
+            <a href="{% url 'member_portal:loans' %}" class="btn btn-sm btn-outline">View All</a>
+        </div>
+        <div class="card-body">
+            {% if active_loans %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Loan #</th>
+                        <th>Type</th>
+                        <th>EMI</th>
+                        <th>Progress</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for loan in active_loans %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'member_portal:loan_detail' loan.id %}">{{ loan.loan_number }}</a>
+                        </td>
+                        <td>{{ loan.get_loan_type_display }}</td>
+                        <td>₹{{ loan.emi_amount|floatformat:2 }}</td>
+                        <td>
+                            <div class="progress-bar-mini">
+                                <div class="progress-fill" style="width: {{ loan.completion_percentage }}%"></div>
+                            </div>
+                            <span class="progress-text">{{ loan.completion_percentage }}%</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="empty-state">No active loans.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- My Accounts -->
+<div class="card" style="margin-top: 1.5rem;">
+    <div class="card-header">
+        <h3>My Accounts</h3>
+        <a href="{% url 'member_portal:accounts' %}" class="btn btn-sm btn-outline">View All</a>
+    </div>
+    <div class="card-body">
+        {% if accounts %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Account #</th>
+                    <th>Type</th>
+                    <th>Balance</th>
+                    <th>Status</th>
+                    <th>Interest Rate</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for acc in accounts %}
+                <tr>
+                    <td>
+                        <a href="{% url 'member_portal:account_detail' acc.id %}">{{ acc.account_number }}</a>
+                    </td>
+                    <td>{{ acc.get_account_type_display }}</td>
+                    <td>₹{{ acc.balance|floatformat:2 }}</td>
+                    <td><span class="badge badge-{{ acc.status }}">{{ acc.get_status_display }}</span></td>
+                    <td>{{ acc.interest_rate }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty-state">No accounts found.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

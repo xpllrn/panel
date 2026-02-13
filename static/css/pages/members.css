@@ -1,0 +1,11 @@
+/**
+ * Members Page Styles
+ * Page-shared styles (header, search, table, pagination, actions, confirm dialog)
+ * are now in page-layout.css
+ */
+
+/* User fullname subtitle in member table rows */
+.user-fullname {
+    font-size: var(--font-size-xs);
+    color: var(--color-gray-500);
+}

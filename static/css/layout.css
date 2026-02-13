@@ -1,0 +1,135 @@
+/**
+ * Layout CSS - Sidebar and Main Content Structure
+ * Clean flexbox-based layout
+ */
+
+/* ========================================
+   App Layout Container
+   ======================================== */
+.app-layout {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* ========================================
+   Sidebar
+   ======================================== */
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: var(--sidebar-width);
+    background: var(--sidebar-bg);
+    display: flex;
+    flex-direction: column;
+    z-index: 100;
+}
+
+/* Brand / Logo */
+.sidebar-brand {
+    padding: var(--spacing-xl);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-brand h1 {
+    font-size: var(--font-size-md);
+    font-weight: 600;
+    color: var(--sidebar-text);
+    margin: 0;
+}
+
+/* Navigation Menu */
+.sidebar-menu {
+    flex: 1;
+    padding: var(--spacing-md) 0;
+    overflow-y: auto;
+}
+
+.sidebar-link {
+    display: flex;
+    align-items: center;
+    padding: var(--spacing-md) var(--spacing-xl);
+    color: var(--sidebar-text-muted);
+    text-decoration: none;
+    font-size: var(--font-size-base);
+    transition: all var(--transition-fast);
+    border-left: 3px solid transparent;
+}
+
+.sidebar-link:hover {
+    background: var(--sidebar-hover);
+    color: var(--sidebar-text);
+    text-decoration: none;
+}
+
+.sidebar-link.active {
+    background: rgba(76, 175, 80, 0.15);
+    color: var(--sidebar-text);
+    border-left-color: var(--color-primary);
+}
+
+/* Footer Section (Profile + Logout) */
+.sidebar-footer {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding: var(--spacing-md) 0;
+}
+
+.sidebar-footer .sidebar-link {
+    color: var(--sidebar-text-muted);
+}
+
+.sidebar-footer .sidebar-link:hover {
+    background: var(--sidebar-hover);
+    color: var(--sidebar-text);
+}
+
+.sidebar-footer .sidebar-link.active {
+    background: rgba(76, 175, 80, 0.15);
+    color: var(--sidebar-text);
+    border-left-color: var(--color-primary);
+}
+
+/* Logout Form and Button */
+.logout-form {
+    margin: 0;
+    padding: 0;
+}
+
+.logout-button {
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font: inherit;
+}
+
+/* ========================================
+   Main Content Area
+   ======================================== */
+.main-content {
+    flex: 1;
+    margin-left: var(--sidebar-width);
+    padding: var(--spacing-3xl);
+    min-height: 100vh;
+    background: var(--color-gray-100);
+}
+
+/* Page Header */
+.page-header {
+    margin-bottom: var(--spacing-2xl);
+}
+
+.page-header h2 {
+    font-size: var(--font-size-xl);
+    font-weight: 600;
+    color: var(--color-gray-800);
+    margin: 0;
+}
+
+.page-header p {
+    color: var(--color-gray-600);
+    margin-top: var(--spacing-xs);
+    margin-bottom: 0;
+}
