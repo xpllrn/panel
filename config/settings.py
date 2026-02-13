@@ -70,16 +70,26 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
+# Database - Supabase PostgreSQL
+# Connection details are read from .env file
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": config("DB_NAME", default="adminpanel"),
-        "USER": config("DB_USER", default="admin"),
-        "PASSWORD": config("DB_PASSWORD", default="admin123"),
-        "HOST": config("DB_HOST", default="db"),
+        "NAME": config("DB_NAME", default="postgres"),
+        "USER": config("DB_USER", default="postgres"),
+        "PASSWORD": config("DB_PASSWORD"),
+        "HOST": config("DB_HOST"),
         "PORT": config("DB_PORT", default="5432"),
+        "OPTIONS": {
+            "sslmode": "require",
+        },
     }
 }
+
+# Supabase API Configuration
+SUPABASE_URL = config("SUPABASE_URL", default="")
+SUPABASE_KEY = config("SUPABASE_KEY", default="")
+SUPABASE_SERVICE_KEY = config("SUPABASE_SERVICE_KEY", default="")
 
 AUTH_PASSWORD_VALIDATORS = [
     {

@@ -5,18 +5,18 @@ This document provides instructions for AI coding agents working in this Django 
 ## Project Overview
 
 - **Framework**: Django 4.2 with Django REST Framework 3.14.0
-- **Language**: Python 3.9+ (Python 3.11 in Docker)
-- **Database**: PostgreSQL 15
+- **Language**: Python 3.9+
+- **Database**: Supabase (PostgreSQL) — hosted, not local
 - **Frontend**: Vanilla JavaScript with custom CSS
-- **Containerization**: Docker with docker-compose
+- **Backend-as-a-Service**: Supabase (database, storage, auth APIs)
 
 ## Build & Run Commands
 
 ### Development Server
 
 ```bash
-# Run with Docker (recommended)
-docker-compose up --build
+# Install dependencies
+pip install -r requirements.txt
 
 # Run locally
 python manage.py runserver
@@ -26,10 +26,26 @@ python manage.py runserver
 
 ```bash
 python manage.py makemigrations    # Create new migrations
-python manage.py migrate           # Apply migrations
+python manage.py migrate           # Apply migrations to Supabase
+```
 
-# Docker
-docker-compose exec web python manage.py migrate
+### Supabase Configuration
+
+1. Create a Supabase project at [supabase.com](https://supabase.com)
+2. Copy database credentials from **Settings → Database**
+3. Copy API keys from **Settings → API**
+4. Update `.env` with all Supabase credentials
+
+```bash
+# Required .env variables for Supabase:
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_KEY=your-publishable-key
+SUPABASE_SERVICE_KEY=your-secret-key
+DB_NAME=postgres
+DB_USER=postgres
+DB_PASSWORD=your-db-password
+DB_HOST=db.your-project-ref.supabase.co
+DB_PORT=5432
 ```
 
 ## Linting & Formatting
@@ -58,7 +74,6 @@ Always run `ruff check . --fix && ruff format .` before committing.
 
 ```bash
 python manage.py test
-docker-compose exec web python manage.py test
 ```
 
 ### Run Single Test (Important)
@@ -219,8 +234,12 @@ class SplitFullNameTests(TestCase):
 ├── admin_portal/       # Admin portal app
 │   ├── views.py        # Admin views
 │   └── tests.py        # Integration tests
+├── member_portal/      # Member portal app
+│   ├── views.py        # Member views
+│   └── tests.py        # Member portal tests
 ├── config/             # Django settings
-│   ├── settings.py     # Main settings
+│   ├── settings.py     # Main settings (Supabase DB config)
+│   ├── supabase_client.py  # Supabase client singleton
 │   └── urls.py         # Root URL configuration
 ├── templates/          # HTML templates
 ├── static/             # Static files (CSS, JS)
@@ -233,6 +252,22 @@ class SplitFullNameTests(TestCase):
 - CSRF protection is enabled - include tokens in AJAX requests
 - Use Django's password validators (min 8 chars, not common)
 - Security headers are configured for production (HSTS, XSS filter, etc.)
+- Supabase connection uses SSL (`sslmode=require`)
+
+## Supabase Integration
+
+### Database Access
+All database access is through Django ORM → `psycopg2-binary` → Supabase PostgreSQL.
+No direct Supabase client usage for database queries.
+
+### Supabase Client
+For Supabase-specific features (storage, auth, realtime), use:
+
+```python
+from config.supabase_client import get_supabase_client
+
+client = get_supabase_client()
+```
 
 ## Common Patterns
 
@@ -266,3 +301,4 @@ status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active
 - Do not commit `.env` files or secrets
 - Do not use `DEBUG=True` in production
 - Do not skip CSRF tokens in forms/AJAX
+- Do not use Docker for development (database is on Supabase)

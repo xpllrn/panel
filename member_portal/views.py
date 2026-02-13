@@ -8,7 +8,6 @@ from django.shortcuts import get_object_or_404, redirect, render
 
 from accounts.models import Loan, LoanRepayment, MemberAccount, Receipt
 
-
 # ========================================
 # Decorator
 # ========================================
@@ -49,7 +48,7 @@ def member_dashboard_view(request):
 
     # Active loans
     active_loans = Loan.objects.filter(user=user, status__in=["active", "approved"])
-    total_outstanding = sum(l.outstanding_balance for l in active_loans)
+    total_outstanding = sum(loan.outstanding_balance for loan in active_loans)
 
     context = {
         "total_accounts": active_accounts.count(),
