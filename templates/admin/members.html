@@ -18,7 +18,7 @@
         <input type="text" name="q" placeholder="Search members..." value="{{ search_query|default:'' }}"
             class="search-input" aria-label="Search members">
         <button type="submit" class="btn btn-primary btn-sm">Search</button>
-        {% if search_query %}
+        {% if search_query  %}
         <a href="{% url 'members' %}" class="clear-search">Clear</a>
         {% endif %}
     </form>
@@ -26,7 +26,7 @@
     <button class="btn btn-primary btn-sm" onclick="showAddMemberModal()">+ Add Member</button>
 </div>
 
-{% if search_query %}
+{% if search_query  %}
 <div class="search-info">
     Showing results for "<strong>{{ search_query }}</strong>" ({{ page_obj.paginator.count }} found)
 </div>
@@ -51,7 +51,7 @@
                         <div class="avatar avatar-sm">{{ member.username|first|upper }}</div>
                         <div class="user-details">
                             <span class="user-name">{{ member.username }}</span>
-                            {% if member.display_name != member.username %}
+                            {% if member.display_name != member.username  %}
                             <span class="user-fullname">{{ member.display_name }}</span>
                             {% endif %}
                         </div>
@@ -81,22 +81,22 @@
 </div>
 
 <!-- Pagination -->
-{% if page_obj.has_other_pages %}
+{% if page_obj.has_other_pages  %}
 <div class="pagination" role="navigation" aria-label="Pagination">
     <div class="pagination-info">
         Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} members
     </div>
     <div class="pagination-nav">
-        {% if page_obj.has_previous %}
-        <a href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="First page">&laquo; First</a>
-        <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="Previous page">Previous</a>
+        {% if page_obj.has_previous  %}
+        <a href="?page=1{% if search_query  %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="First page">&laquo; First</a>
+        <a href="?page={{ page_obj.previous_page_number }}{% if search_query  %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="Previous page">Previous</a>
         {% endif %}
 
         <span class="page-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
 
-        {% if page_obj.has_next %}
-        <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="Next page">Next</a>
-        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="Last page">Last &raquo;</a>
+        {% if page_obj.has_next  %}
+        <a href="?page={{ page_obj.next_page_number }}{% if search_query  %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="Next page">Next</a>
+        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query  %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="Last page">Last &raquo;</a>
         {% endif %}
     </div>
 </div>

@@ -15,16 +15,16 @@
         <select name="status" class="filter-select" onchange="this.form.submit()">
             <option value="">All Statuses</option>
             {% for value, label in status_choices %}
-            <option value="{{ value }}" {% if current_status==value %}selected{% endif %}>{{ label }}</option>
+            <option value="{{ value }}" {% if current_status == value  %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
         </select>
         <select name="priority" class="filter-select" onchange="this.form.submit()">
             <option value="">All Priorities</option>
             {% for value, label in priority_choices %}
-            <option value="{{ value }}" {% if current_priority==value %}selected{% endif %}>{{ label }}</option>
+            <option value="{{ value }}" {% if current_priority == value  %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
         </select>
-        {% if search_query or current_status or current_priority %}
+        {% if search_query or current_status or current_priority  %}
         <a href="{% url 'admin_tickets' %}" class="clear-search">Clear</a>
         {% endif %}
     </form>
@@ -61,18 +61,18 @@
     </table>
 </div>
 
-{% if tickets.has_other_pages %}
+{% if tickets.has_other_pages  %}
 <div class="pagination">
     <span class="pagination-info">
         Showing {{ tickets.start_index }}-{{ tickets.end_index }} of {{ tickets.paginator.count }}
     </span>
     <div class="pagination-nav">
-        {% if tickets.has_previous %}
+        {% if tickets.has_previous  %}
         <a href="?page={{ tickets.previous_page_number }}&q={{ search_query }}&status={{ current_status }}&priority={{ current_priority }}"
             class="page-link">&laquo; Prev</a>
         {% endif %}
         <span class="page-current">Page {{ tickets.number }} of {{ tickets.paginator.num_pages }}</span>
-        {% if tickets.has_next %}
+        {% if tickets.has_next  %}
         <a href="?page={{ tickets.next_page_number }}&q={{ search_query }}&status={{ current_status }}&priority={{ current_priority }}"
             class="page-link">Next &raquo;</a>
         {% endif %}

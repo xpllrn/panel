@@ -20,17 +20,17 @@
         <select name="type" class="filter-select" aria-label="Filter by transaction type">
             <option value="">All Types</option>
             {% for value, label in transaction_type_choices %}
-            <option value="{{ value }}" {% if selected_type == value %}selected{% endif %}>{{ label }}</option>
+            <option value="{{ value }}" {% if selected_type == value  %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
         </select>
         <select name="mode" class="filter-select" aria-label="Filter by payment mode">
             <option value="">All Modes</option>
             {% for value, label in payment_mode_choices %}
-            <option value="{{ value }}" {% if selected_mode == value %}selected{% endif %}>{{ label }}</option>
+            <option value="{{ value }}" {% if selected_mode == value  %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
         </select>
         <button type="submit" class="btn btn-primary btn-sm">Filter</button>
-        {% if search_query or selected_type or selected_mode %}
+        {% if search_query or selected_type or selected_mode  %}
         <a href="{% url 'receipts' %}" class="clear-search">Clear</a>
         {% endif %}
     </form>
@@ -38,12 +38,12 @@
     <button class="btn btn-primary btn-sm" onclick="showAddReceiptModal()">+ New Receipt</button>
 </div>
 
-{% if search_query or selected_type or selected_mode %}
+{% if search_query or selected_type or selected_mode  %}
 <div class="search-info">
     Showing {{ page_obj.paginator.count }} receipt(s)
-    {% if search_query %} matching "<strong>{{ search_query }}</strong>"{% endif %}
-    {% if selected_type %} of type <strong>{{ selected_type|title }}</strong>{% endif %}
-    {% if selected_mode %} via <strong>{{ selected_mode|upper }}</strong>{% endif %}
+    {% if search_query  %} matching "<strong>{{ search_query }}</strong>"{% endif %}
+    {% if selected_type  %} of type <strong>{{ selected_type|title }}</strong>{% endif %}
+    {% if selected_mode  %} via <strong>{{ selected_mode|upper }}</strong>{% endif %}
 </div>
 {% endif %}
 
@@ -72,7 +72,7 @@
                         <div class="avatar avatar-sm">{{ receipt.user.display_name|first|upper }}</div>
                         <div class="user-details">
                             <span class="user-name">{{ receipt.user.display_name }}</span>
-                            {% if receipt.user.member_id %}
+                            {% if receipt.user.member_id  %}
                             <span class="user-member-id">{{ receipt.user.member_id }}</span>
                             {% endif %}
                         </div>
@@ -105,22 +105,22 @@
 </div>
 
 <!-- Pagination -->
-{% if page_obj.has_other_pages %}
+{% if page_obj.has_other_pages  %}
 <div class="pagination" role="navigation" aria-label="Pagination">
     <div class="pagination-info">
         Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} receipts
     </div>
     <div class="pagination-nav">
-        {% if page_obj.has_previous %}
-        <a href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_mode %}&mode={{ selected_mode }}{% endif %}" class="page-link" aria-label="First page">&laquo; First</a>
-        <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_mode %}&mode={{ selected_mode }}{% endif %}" class="page-link" aria-label="Previous page">Previous</a>
+        {% if page_obj.has_previous  %}
+        <a href="?page=1{% if search_query  %}&q={{ search_query }}{% endif %}{% if selected_type  %}&type={{ selected_type }}{% endif %}{% if selected_mode  %}&mode={{ selected_mode }}{% endif %}" class="page-link" aria-label="First page">&laquo; First</a>
+        <a href="?page={{ page_obj.previous_page_number }}{% if search_query  %}&q={{ search_query }}{% endif %}{% if selected_type  %}&type={{ selected_type }}{% endif %}{% if selected_mode  %}&mode={{ selected_mode }}{% endif %}" class="page-link" aria-label="Previous page">Previous</a>
         {% endif %}
 
         <span class="page-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
 
-        {% if page_obj.has_next %}
-        <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_mode %}&mode={{ selected_mode }}{% endif %}" class="page-link" aria-label="Next page">Next</a>
-        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_mode %}&mode={{ selected_mode }}{% endif %}" class="page-link" aria-label="Last page">Last &raquo;</a>
+        {% if page_obj.has_next  %}
+        <a href="?page={{ page_obj.next_page_number }}{% if search_query  %}&q={{ search_query }}{% endif %}{% if selected_type  %}&type={{ selected_type }}{% endif %}{% if selected_mode  %}&mode={{ selected_mode }}{% endif %}" class="page-link" aria-label="Next page">Next</a>
+        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query  %}&q={{ search_query }}{% endif %}{% if selected_type  %}&type={{ selected_type }}{% endif %}{% if selected_mode  %}&mode={{ selected_mode }}{% endif %}" class="page-link" aria-label="Last page">Last &raquo;</a>
         {% endif %}
     </div>
 </div>

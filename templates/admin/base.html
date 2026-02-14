@@ -28,43 +28,51 @@
 
             <div class="sidebar-menu">
                 <a href="{% url 'home' %}"
-                    class="sidebar-link {% if request.resolver_match.url_name == 'home' %}active{% endif %}" {% if request.resolver_match.url_name == 'home' %}aria-current="page" {% endif %}>
+                    class="sidebar-link {% if request.resolver_match.url_name == 'home'  %}active{% endif %}" {% if
+                    request.resolver_match.url_name == 'home'  %}aria-current="page" {% endif %}>
                     Dashboard
                 </a>
                 <a href="{% url 'members' %}"
-                    class="sidebar-link {% if request.resolver_match.url_name == 'members' %}active{% endif %}" {% if request.resolver_match.url_name == 'members' %}aria-current="page" {% endif %}>
+                    class="sidebar-link {% if request.resolver_match.url_name == 'members'  %}active{% endif %}" {% if
+                    request.resolver_match.url_name == 'members'  %}aria-current="page" {% endif %}>
                     Members
                 </a>
                 <a href="{% url 'accounts' %}"
-                    class="sidebar-link {% if request.resolver_match.url_name == 'accounts' %}active{% endif %}" {% if request.resolver_match.url_name == 'accounts' %}aria-current="page" {% endif %}>
+                    class="sidebar-link {% if request.resolver_match.url_name == 'accounts'  %}active{% endif %}" {% if
+                    request.resolver_match.url_name == 'accounts'  %}aria-current="page" {% endif %}>
                     Accounts
                 </a>
                 <a href="{% url 'loans' %}"
-                    class="sidebar-link {% if request.resolver_match.url_name == 'loans' %}active{% endif %}" {% if request.resolver_match.url_name == 'loans' %}aria-current="page" {% endif %}>
+                    class="sidebar-link {% if request.resolver_match.url_name == 'loans'  %}active{% endif %}" {% if
+                    request.resolver_match.url_name == 'loans'  %}aria-current="page" {% endif %}>
                     Loans
                 </a>
                 <a href="{% url 'receipts' %}"
-                    class="sidebar-link {% if request.resolver_match.url_name == 'receipts' %}active{% endif %}" {% if request.resolver_match.url_name == 'receipts' %}aria-current="page" {% endif %}>
+                    class="sidebar-link {% if request.resolver_match.url_name == 'receipts'  %}active{% endif %}" {% if
+                    request.resolver_match.url_name == 'receipts'  %}aria-current="page" {% endif %}>
                     Receipts
                 </a>
                 <a href="{% url 'audit_logs' %}"
-                    class="sidebar-link {% if request.resolver_match.url_name == 'audit_logs' %}active{% endif %}" {% if request.resolver_match.url_name == 'audit_logs' %}aria-current="page" {% endif %}>
+                    class="sidebar-link {% if request.resolver_match.url_name == 'audit_logs'  %}active{% endif %}" {% if
+                    request.resolver_match.url_name == 'audit_logs'  %}aria-current="page" {% endif %}>
                     Audit Logs
                 </a>
                 <a href="{% url 'admin_tickets' %}"
-                    class="sidebar-link {% if request.resolver_match.url_name == 'admin_tickets' or request.resolver_match.url_name == 'admin_ticket_detail' %}active{% endif %}"
-                    {% if request.resolver_match.url_name == 'admin_tickets' %}aria-current="page" {% endif %}>
+                    class="sidebar-link {% if request.resolver_match.url_name == 'admin_tickets' or request.resolver_match.url_name == 'admin_ticket_detail'  %}active{% endif %}"
+                    {% if request.resolver_match.url_name == 'admin_tickets'  %}aria-current="page" {% endif %}>
                     Tickets
                 </a>
-                <a href="#" onclick="openCalculatorModal(); return false;" class="sidebar-link"
-                    id="calculator-sidebar-link">
+                <a href="{% url 'calculator' %}"
+                    onclick="window.open(this.href, 'calculator', 'width=600,height=700,scrollbars=yes,resizable=yes'); return false;"
+                    class="sidebar-link" id="calculator-sidebar-link">
                     Calculator
                 </a>
             </div>
 
             <div class="sidebar-footer">
                 <a href="{% url 'profile' %}"
-                    class="sidebar-link {% if request.resolver_match.url_name == 'profile' %}active{% endif %}" {% if request.resolver_match.url_name == 'profile' %}aria-current="page" {% endif %}>
+                    class="sidebar-link {% if request.resolver_match.url_name == 'profile'  %}active{% endif %}" {% if
+                    request.resolver_match.url_name == 'profile'  %}aria-current="page" {% endif %}>
                     Profile
                 </a>
                 <form method="post" action="{% url 'logout' %}" class="logout-form">
@@ -78,7 +86,7 @@
 
         <!-- Main Content -->
         <main class="main-content" role="main">
-            {% if messages %}
+            {% if messages  %}
             <div class="messages">
                 {% for message in messages %}
                 <div class="message message-{{ message.tags }}">

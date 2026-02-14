@@ -82,7 +82,7 @@
     <!-- Overdue Payments -->
     <div class="dashboard-card dashboard-card-wide">
         <div class="dashboard-card-header">
-            <h3>Overdue Payments{% if total_overdue_count > 0 %} <span class="overdue-badge">{{ total_overdue_count }}</span>{% endif %}</h3>
+            <h3>Overdue Payments{% if total_overdue_count > 0  %} <span class="overdue-badge">{{ total_overdue_count }}</span>{% endif %}</h3>
             <a href="{% url 'loans' %}?status=active" class="view-all-link">View All Loans</a>
         </div>
         <div class="dashboard-card-body dashboard-card-body-table">
@@ -118,7 +118,7 @@
                         <td>
                             <span class="txn-type txn-type-{{ txn.transaction_type }}">{{ txn.get_transaction_type_display }}</span>
                         </td>
-                        <td class="txn-amount {% if txn.transaction_type == 'credit' or txn.transaction_type == 'interest' or txn.transaction_type == 'dividend' or txn.transaction_type == 'share_capital' %}txn-amount-credit{% else %}txn-amount-debit{% endif %}">
+                        <td class="txn-amount {% if txn.transaction_type == 'credit' or txn.transaction_type == 'interest' or txn.transaction_type == 'dividend' or txn.transaction_type == 'share_capital'  %}txn-amount-credit{% else %}txn-amount-debit{% endif %}">
                             {{ txn.amount|floatformat:2 }}
                         </td>
                         <td class="txn-date">{{ txn.created_at|date:"M d, Y" }}</td>

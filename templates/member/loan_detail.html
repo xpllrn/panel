@@ -58,7 +58,7 @@
                 <span class="detail-label">EMIs Paid</span>
                 <span class="detail-value">{{ loan.emis_paid }} / {{ loan.total_emis }}</span>
             </div>
-            {% if loan.overdue_amount > 0 %}
+            {% if loan.overdue_amount > 0  %}
             <div class="detail-item">
                 <span class="detail-label">Overdue Amount</span>
                 <span class="detail-value text-danger">₹{{ loan.overdue_amount|floatformat:2 }}</span>
@@ -68,19 +68,19 @@
                 <span class="detail-label">Application Date</span>
                 <span class="detail-value">{{ loan.application_date|date:"d M Y" }}</span>
             </div>
-            {% if loan.approval_date %}
+            {% if loan.approval_date  %}
             <div class="detail-item">
                 <span class="detail-label">Approval Date</span>
                 <span class="detail-value">{{ loan.approval_date|date:"d M Y" }}</span>
             </div>
             {% endif %}
-            {% if loan.disbursement_date %}
+            {% if loan.disbursement_date  %}
             <div class="detail-item">
                 <span class="detail-label">Disbursement Date</span>
                 <span class="detail-value">{{ loan.disbursement_date|date:"d M Y" }}</span>
             </div>
             {% endif %}
-            {% if loan.purpose %}
+            {% if loan.purpose  %}
             <div class="detail-item detail-item-full">
                 <span class="detail-label">Purpose</span>
                 <span class="detail-value">{{ loan.purpose }}</span>
@@ -104,7 +104,7 @@
         <h3>Repayment Schedule</h3>
     </div>
     <div class="card-body">
-        {% if repayments %}
+        {% if repayments  %}
         <div class="table-responsive">
             <table class="table">
                 <thead>
@@ -122,13 +122,13 @@
                 <tbody>
                     {% for emi in repayments %}
                     <tr
-                        class="{% if emi.payment_status == 'overdue' %}row-overdue{% elif emi.payment_status == 'paid' %}row-paid{% endif %}">
+                        class="{% if emi.payment_status == 'overdue'  %}row-overdue{% elif emi.payment_status == 'paid' %}row-paid{% endif %}">
                         <td>{{ emi.installment_number }}</td>
                         <td>{{ emi.due_date|date:"d M Y" }}</td>
                         <td>₹{{ emi.amount_due|floatformat:2 }}</td>
                         <td>₹{{ emi.principal_component|floatformat:2 }}</td>
                         <td>₹{{ emi.interest_component|floatformat:2 }}</td>
-                        <td>{% if emi.amount_paid > 0 %}₹{{ emi.amount_paid|floatformat:2 }}{% else %}—{% endif %}</td>
+                        <td>{% if emi.amount_paid > 0  %}₹{{ emi.amount_paid|floatformat:2 }}{% else %}—{% endif %}</td>
                         <td>{{ emi.paid_date|date:"d M Y"|default:"—" }}</td>
                         <td>
                             <span class="badge badge-{{ emi.payment_status }}">

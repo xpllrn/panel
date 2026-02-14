@@ -22,17 +22,17 @@
         <select name="type" class="filter-select" aria-label="Filter by loan type">
             <option value="">All Types</option>
             {% for value, label in loan_type_choices %}
-            <option value="{{ value }}" {% if selected_type == value %}selected{% endif %}>{{ label }}</option>
+            <option value="{{ value }}" {% if selected_type == value  %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
         </select>
         <select name="status" class="filter-select" aria-label="Filter by status">
             <option value="">All Status</option>
             {% for value, label in status_choices %}
-            <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>
+            <option value="{{ value }}" {% if selected_status == value  %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
         </select>
         <button type="submit" class="btn btn-primary btn-sm">Filter</button>
-        {% if search_query or selected_type or selected_status %}
+        {% if search_query or selected_type or selected_status  %}
         <a href="{% url 'loans' %}" class="clear-search">Clear</a>
         {% endif %}
     </form>
@@ -40,12 +40,12 @@
     <button class="btn btn-primary btn-sm" onclick="showAddLoanModal()">+ Add Loan</button>
 </div>
 
-{% if search_query or selected_type or selected_status %}
+{% if search_query or selected_type or selected_status  %}
 <div class="search-info">
     Showing {{ page_obj.paginator.count }} loan(s)
-    {% if search_query %} matching "<strong>{{ search_query }}</strong>"{% endif %}
-    {% if selected_type %} of type <strong>{{ selected_type|title }}</strong>{% endif %}
-    {% if selected_status %} with status <strong>{{ selected_status|title }}</strong>{% endif %}
+    {% if search_query  %} matching "<strong>{{ search_query }}</strong>"{% endif %}
+    {% if selected_type  %} of type <strong>{{ selected_type|title }}</strong>{% endif %}
+    {% if selected_status  %} with status <strong>{{ selected_status|title }}</strong>{% endif %}
 </div>
 {% endif %}
 
@@ -74,7 +74,7 @@
                         <div class="avatar avatar-sm">{{ loan.user.display_name|first|upper }}</div>
                         <div class="user-details">
                             <span class="user-name">{{ loan.user.display_name }}</span>
-                            {% if loan.user.member_id %}
+                            {% if loan.user.member_id  %}
                             <span class="user-member-id">{{ loan.user.member_id }}</span>
                             {% endif %}
                         </div>
@@ -93,10 +93,10 @@
                     <button class="kebab-menu" onclick="toggleDropdown(event, {{ loan.id }})" aria-label="Actions">&#8942;</button>
                     <div class="dropdown-menu" id="dropdown-{{ loan.id }}">
                         <button class="dropdown-item" onclick="showLoanModal({{ loan.id }})">View Details</button>
-                        {% if loan.status == 'pending' %}
+                        {% if loan.status == 'pending'  %}
                         <button class="dropdown-item" onclick="showApproveDialog(event, {{ loan.id }})">Approve</button>
                         {% endif %}
-                        {% if loan.status == 'active' %}
+                        {% if loan.status == 'active'  %}
                         <button class="dropdown-item" onclick="showRecordEmiFromMenu(event, {{ loan.id }})">Record EMI</button>
                         {% endif %}
                     </div>
@@ -112,22 +112,22 @@
 </div>
 
 <!-- Pagination -->
-{% if page_obj.has_other_pages %}
+{% if page_obj.has_other_pages  %}
 <div class="pagination" role="navigation" aria-label="Pagination">
     <div class="pagination-info">
         Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} loans
     </div>
     <div class="pagination-nav">
-        {% if page_obj.has_previous %}
-        <a href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="First page">&laquo; First</a>
-        <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="Previous page">Previous</a>
+        {% if page_obj.has_previous  %}
+        <a href="?page=1{% if search_query  %}&q={{ search_query }}{% endif %}{% if selected_type  %}&type={{ selected_type }}{% endif %}{% if selected_status  %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="First page">&laquo; First</a>
+        <a href="?page={{ page_obj.previous_page_number }}{% if search_query  %}&q={{ search_query }}{% endif %}{% if selected_type  %}&type={{ selected_type }}{% endif %}{% if selected_status  %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="Previous page">Previous</a>
         {% endif %}
 
         <span class="page-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
 
-        {% if page_obj.has_next %}
-        <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="Next page">Next</a>
-        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="Last page">Last &raquo;</a>
+        {% if page_obj.has_next  %}
+        <a href="?page={{ page_obj.next_page_number }}{% if search_query  %}&q={{ search_query }}{% endif %}{% if selected_type  %}&type={{ selected_type }}{% endif %}{% if selected_status  %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="Next page">Next</a>
+        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query  %}&q={{ search_query }}{% endif %}{% if selected_type  %}&type={{ selected_type }}{% endif %}{% if selected_status  %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="Last page">Last &raquo;</a>
         {% endif %}
     </div>
 </div>

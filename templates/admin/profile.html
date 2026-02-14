@@ -31,7 +31,7 @@
             <div class="field-row">
                 <div class="field-label">Name</div>
                 <input type="text" name="name" class="field-input"
-                    value="{% if user.first_name or user.last_name %}{{ user.first_name }} {{ user.last_name }}{% endif %}"
+                    value="{% if user.first_name or user.last_name  %}{{ user.first_name }} {{ user.last_name }}{% endif %}"
                     placeholder="Not set"
                     disabled>
             </div>

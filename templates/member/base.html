@@ -26,30 +26,30 @@
 
             <div class="sidebar-menu">
                 <a href="{% url 'member_portal:dashboard' %}"
-                    class="sidebar-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+                    class="sidebar-link {% if request.resolver_match.url_name == 'dashboard'  %}active{% endif %}">
                     Dashboard
                 </a>
                 <a href="{% url 'member_portal:accounts' %}"
-                    class="sidebar-link {% if request.resolver_match.url_name == 'accounts' or request.resolver_match.url_name == 'account_detail' %}active{% endif %}">
+                    class="sidebar-link {% if request.resolver_match.url_name == 'accounts' or request.resolver_match.url_name == 'account_detail'  %}active{% endif %}">
                     My Accounts
                 </a>
                 <a href="{% url 'member_portal:loans' %}"
-                    class="sidebar-link {% if request.resolver_match.url_name == 'loans' or request.resolver_match.url_name == 'loan_detail' %}active{% endif %}">
+                    class="sidebar-link {% if request.resolver_match.url_name == 'loans' or request.resolver_match.url_name == 'loan_detail'  %}active{% endif %}">
                     My Loans
                 </a>
                 <a href="{% url 'member_portal:transactions' %}"
-                    class="sidebar-link {% if request.resolver_match.url_name == 'transactions' %}active{% endif %}">
+                    class="sidebar-link {% if request.resolver_match.url_name == 'transactions'  %}active{% endif %}">
                     Transactions
                 </a>
                 <a href="{% url 'member_portal:tickets' %}"
-                    class="sidebar-link {% if request.resolver_match.url_name == 'tickets' or request.resolver_match.url_name == 'ticket_detail' or request.resolver_match.url_name == 'ticket_create' %}active{% endif %}">
+                    class="sidebar-link {% if request.resolver_match.url_name == 'tickets' or request.resolver_match.url_name == 'ticket_detail' or request.resolver_match.url_name == 'ticket_create'  %}active{% endif %}">
                     Support
                 </a>
             </div>
 
             <div class="sidebar-footer">
                 <a href="{% url 'member_portal:profile' %}"
-                    class="sidebar-link {% if request.resolver_match.url_name == 'profile' %}active{% endif %}">
+                    class="sidebar-link {% if request.resolver_match.url_name == 'profile'  %}active{% endif %}">
                     Profile
                 </a>
                 <form method="post" action="{% url 'logout' %}" class="logout-form">
@@ -63,7 +63,7 @@
 
         <!-- Main Content -->
         <main class="main-content" role="main">
-            {% if messages %}
+            {% if messages  %}
             <div class="messages">
                 {% for message in messages %}
                 <div class="message message-{{ message.tags }}">

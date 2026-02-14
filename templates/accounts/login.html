@@ -13,7 +13,7 @@
     <div class="auth-container">
         <h2>Admin Login</h2>
 
-        {% if messages %}
+        {% if messages  %}
         {% for message in messages %}
         <div class="message {{ message.tags }}">
             {{ message }}
@@ -24,14 +24,14 @@
         <form method="post">
             {% csrf_token %}
 
-            {% if form.non_field_errors %}
+            {% if form.non_field_errors  %}
             <div class="error">{{ form.non_field_errors }}</div>
             {% endif %}
 
             <div class="form-group">
                 <label for="id_username">Username</label>
                 {{ form.username }}
-                {% if form.username.errors %}
+                {% if form.username.errors  %}
                 <div class="error">{{ form.username.errors }}</div>
                 {% endif %}
             </div>
@@ -39,7 +39,7 @@
             <div class="form-group">
                 <label for="id_password">Password</label>
                 {{ form.password }}
-                {% if form.password.errors %}
+                {% if form.password.errors  %}
                 <div class="error">{{ form.password.errors }}</div>
                 {% endif %}
             </div>

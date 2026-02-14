@@ -23,7 +23,7 @@
                 <label class="form-label">Priority</label>
                 <select name="priority" class="form-select">
                     {% for value, label in priority_choices %}
-                    <option value="{{ value }}" {% if value=="medium" %}selected{% endif %}>{{ label }}</option>
+                    <option value="{{ value }}" {% if value == "medium"  %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>

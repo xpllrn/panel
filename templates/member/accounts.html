@@ -13,13 +13,13 @@
         <select name="type" class="form-select form-select-sm" onchange="this.form.submit()">
             <option value="">All Types</option>
             {% for value, label in account_type_choices %}
-            <option value="{{ value }}" {% if current_type == value %}selected{% endif %}>{{ label }}</option>
+            <option value="{{ value }}" {% if current_type == value  %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
         </select>
         <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
             <option value="">All Statuses</option>
             {% for value, label in status_choices %}
-            <option value="{{ value }}" {% if current_status == value %}selected{% endif %}>{{ label }}</option>
+            <option value="{{ value }}" {% if current_status == value  %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
         </select>
     </form>
@@ -28,7 +28,7 @@
 <!-- Accounts Table -->
 <div class="card">
     <div class="card-body">
-        {% if accounts %}
+        {% if accounts  %}
         <div class="table-responsive">
             <table class="table">
                 <thead>
@@ -63,14 +63,14 @@
             </table>
         </div>
 
-        {% if accounts.has_other_pages %}
+        {% if accounts.has_other_pages  %}
         <div class="pagination">
-            {% if accounts.has_previous %}
+            {% if accounts.has_previous  %}
             <a href="?page={{ accounts.previous_page_number }}&type={{ current_type }}&status={{ current_status }}"
                 class="btn btn-sm btn-outline">&laquo; Previous</a>
             {% endif %}
             <span class="pagination-info">Page {{ accounts.number }} of {{ accounts.paginator.num_pages }}</span>
-            {% if accounts.has_next %}
+            {% if accounts.has_next  %}
             <a href="?page={{ accounts.next_page_number }}&type={{ current_type }}&status={{ current_status }}"
                 class="btn btn-sm btn-outline">Next &raquo;</a>
             {% endif %}

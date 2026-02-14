@@ -7,10 +7,10 @@
     <h2>My Profile</h2>
 </div>
 
-{% if password_changed %}
+{% if password_changed  %}
 <div class="message message-success">Password changed successfully!</div>
 {% endif %}
-{% if password_error %}
+{% if password_error  %}
 <div class="message message-error">{{ password_error }}</div>
 {% endif %}
 
@@ -77,10 +77,10 @@
             <div class="detail-item detail-item-full">
                 <span class="detail-label">Current Address</span>
                 <span class="detail-value">
-                    {% if member.current_address_line1 %}
-                    {{ member.current_address_line1 }}{% if member.current_address_line2 %}, {{
+                    {% if member.current_address_line1  %}
+                    {{ member.current_address_line1 }}{% if member.current_address_line2  %}, {{
                     member.current_address_line2 }}{% endif %}<br>
-                    {{ member.current_city|default:"" }}{% if member.current_district %}, {{ member.current_district
+                    {{ member.current_city|default:"" }}{% if member.current_district  %}, {{ member.current_district
                     }}{% endif %}<br>
                     {{ member.current_state|default:"" }} - {{ member.current_pincode|default:"" }}
                     {% else %}
@@ -112,7 +112,7 @@
             <div class="detail-item">
                 <span class="detail-label">Aadhaar Number</span>
                 <span class="detail-value">
-                    {% if member.aadhar_number %}
+                    {% if member.aadhar_number  %}
                     XXXX XXXX {{ member.aadhar_number|slice:"-4:" }}
                     {% else %}
                     Not provided

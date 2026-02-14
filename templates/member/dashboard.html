@@ -37,7 +37,7 @@
             <a href="{% url 'member_portal:transactions' %}" class="btn btn-sm btn-outline">View All</a>
         </div>
         <div class="card-body">
-            {% if recent_transactions %}
+            {% if recent_transactions  %}
             <table class="table">
                 <thead>
                     <tr>
@@ -58,8 +58,8 @@
                             </span>
                         </td>
                         <td
-                            class="{% if txn.transaction_type == 'credit' %}text-success{% else %}text-danger{% endif %}">
-                            {% if txn.transaction_type == 'credit' %}+{% else %}-{% endif %}₹{{ txn.amount|floatformat:2
+                            class="{% if txn.transaction_type == 'credit'  %}text-success{% else %}text-danger{% endif %}">
+                            {% if txn.transaction_type == 'credit'  %}+{% else %}-{% endif %}₹{{ txn.amount|floatformat:2
                             }}
                         </td>
                     </tr>
@@ -79,7 +79,7 @@
             <a href="{% url 'member_portal:loans' %}" class="btn btn-sm btn-outline">View All</a>
         </div>
         <div class="card-body">
-            {% if active_loans %}
+            {% if active_loans  %}
             <table class="table">
                 <thead>
                     <tr>
@@ -121,7 +121,7 @@
         <a href="{% url 'member_portal:accounts' %}" class="btn btn-sm btn-outline">View All</a>
     </div>
     <div class="card-body">
-        {% if accounts %}
+        {% if accounts  %}
         <table class="table">
             <thead>
                 <tr>

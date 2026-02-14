@@ -13,13 +13,13 @@
         <select name="type" class="form-select form-select-sm" onchange="this.form.submit()">
             <option value="">All Types</option>
             {% for value, label in transaction_type_choices %}
-            <option value="{{ value }}" {% if current_type == value %}selected{% endif %}>{{ label }}</option>
+            <option value="{{ value }}" {% if current_type == value  %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
         </select>
         <select name="account" class="form-select form-select-sm" onchange="this.form.submit()">
             <option value="">All Accounts</option>
             {% for acc in member_accounts %}
-            <option value="{{ acc.id }}" {% if current_account == acc.id|stringformat:"d" %}selected{% endif %}>
+            <option value="{{ acc.id }}" {% if current_account == acc.id|stringformat:"d"  %}selected{% endif %}>
                 {{ acc.account_number }} ({{ acc.get_account_type_display }})
             </option>
             {% endfor %}
@@ -30,7 +30,7 @@
 <!-- Transactions Table -->
 <div class="card">
     <div class="card-body">
-        {% if transactions %}
+        {% if transactions  %}
         <div class="table-responsive">
             <table class="table">
                 <thead>
@@ -62,8 +62,8 @@
                         </td>
                         <td>{{ txn.get_payment_mode_display }}</td>
                         <td
-                            class="{% if txn.transaction_type == 'credit' %}text-success{% else %}text-danger{% endif %}">
-                            {% if txn.transaction_type == 'credit' %}+{% else %}-{% endif %}₹{{ txn.amount|floatformat:2
+                            class="{% if txn.transaction_type == 'credit'  %}text-success{% else %}text-danger{% endif %}">
+                            {% if txn.transaction_type == 'credit'  %}+{% else %}-{% endif %}₹{{ txn.amount|floatformat:2
                             }}
                         </td>
                         <td>₹{{ txn.balance_after|floatformat:2 }}</td>
@@ -74,15 +74,15 @@
             </table>
         </div>
 
-        {% if transactions.has_other_pages %}
+        {% if transactions.has_other_pages  %}
         <div class="pagination">
-            {% if transactions.has_previous %}
+            {% if transactions.has_previous  %}
             <a href="?page={{ transactions.previous_page_number }}&type={{ current_type }}&account={{ current_account }}"
                 class="btn btn-sm btn-outline">&laquo; Previous</a>
             {% endif %}
             <span class="pagination-info">Page {{ transactions.number }} of {{ transactions.paginator.num_pages
                 }}</span>
-            {% if transactions.has_next %}
+            {% if transactions.has_next  %}
             <a href="?page={{ transactions.next_page_number }}&type={{ current_type }}&account={{ current_account }}"
                 class="btn btn-sm btn-outline">Next &raquo;</a>
             {% endif %}

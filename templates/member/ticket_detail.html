@@ -42,16 +42,16 @@
     <div class="card-body">
         {% for msg in ticket_messages %}
         <div
-            class="ticket-message {% if msg.sender == request.user %}ticket-message-own{% else %}ticket-message-other{% endif %}">
+            class="ticket-message {% if msg.sender == request.user  %}ticket-message-own{% else %}ticket-message-other{% endif %}">
             <div class="ticket-message-header">
                 <strong>{{ msg.sender.display_name }}</strong>
-                {% if msg.sender.is_staff or msg.sender.role == 'admin' %}
+                {% if msg.sender.is_staff or msg.sender.role == 'admin'  %}
                 <span class="badge badge-info">Admin</span>
                 {% endif %}
                 <span class="text-muted" style="margin-left: auto;">{{ msg.created_at|date:"d M Y H:i" }}</span>
             </div>
             <div class="ticket-message-body">{{ msg.body|linebreaksbr }}</div>
-            {% if msg.attachment %}
+            {% if msg.attachment  %}
             <div class="ticket-message-attachment">
                 <a href="{{ msg.attachment.url }}" target="_blank" class="btn btn-sm btn-outline">📎 {{
                     msg.attachment.name|cut:"tickets/" }}</a>
@@ -63,7 +63,7 @@
 </div>
 
 <!-- Reply Form -->
-{% if ticket.status != "closed" %}
+{% if ticket.status != "closed"  %}
 <div class="card" style="margin-top: 1.5rem;">
     <div class="card-header">
         <h3>Reply</h3>

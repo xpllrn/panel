@@ -144,6 +144,64 @@
     color: #c62828;
 }
 
+/* Account status badges */
+.badge-active {
+    background: var(--color-success);
+    color: var(--color-success-text);
+}
+
+.badge-inactive {
+    background: var(--color-error);
+    color: var(--color-error-text);
+}
+
+.badge-frozen {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.badge-matured {
+    background: var(--color-warning);
+    color: var(--color-warning-text);
+}
+
+.badge-dormant {
+    background: var(--color-gray-200);
+    color: var(--color-gray-600);
+}
+
+/* Transaction type badges */
+.badge-credit {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.badge-debit {
+    background: #ffebee;
+    color: #c62828;
+}
+
+/* Loan status badges */
+.badge-pending {
+    background: #fff3e0;
+    color: #e65100;
+}
+
+.badge-approved {
+    background: #e3f2fd;
+    color: #1565c0;
+}
+
+.badge-disbursed {
+    background: var(--color-success);
+    color: var(--color-success-text);
+}
+
+.badge-rejected {
+    background: var(--color-error);
+    color: var(--color-error-text);
+}
+
 /* Status Badges */
 .status-badge {
     display: inline-block;

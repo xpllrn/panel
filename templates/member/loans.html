@@ -13,13 +13,13 @@
         <select name="type" class="form-select form-select-sm" onchange="this.form.submit()">
             <option value="">All Types</option>
             {% for value, label in loan_type_choices %}
-            <option value="{{ value }}" {% if current_type == value %}selected{% endif %}>{{ label }}</option>
+            <option value="{{ value }}" {% if current_type == value  %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
         </select>
         <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
             <option value="">All Statuses</option>
             {% for value, label in status_choices %}
-            <option value="{{ value }}" {% if current_status == value %}selected{% endif %}>{{ label }}</option>
+            <option value="{{ value }}" {% if current_status == value  %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
         </select>
     </form>
@@ -28,7 +28,7 @@
 <!-- Loans Table -->
 <div class="card">
     <div class="card-body">
-        {% if loans %}
+        {% if loans  %}
         <div class="table-responsive">
             <table class="table">
                 <thead>
@@ -68,14 +68,14 @@
             </table>
         </div>
 
-        {% if loans.has_other_pages %}
+        {% if loans.has_other_pages  %}
         <div class="pagination">
-            {% if loans.has_previous %}
+            {% if loans.has_previous  %}
             <a href="?page={{ loans.previous_page_number }}&type={{ current_type }}&status={{ current_status }}"
                 class="btn btn-sm btn-outline">&laquo; Previous</a>
             {% endif %}
             <span class="pagination-info">Page {{ loans.number }} of {{ loans.paginator.num_pages }}</span>
-            {% if loans.has_next %}
+            {% if loans.has_next  %}
             <a href="?page={{ loans.next_page_number }}&type={{ current_type }}&status={{ current_status }}"
                 class="btn btn-sm btn-outline">Next &raquo;</a>
             {% endif %}

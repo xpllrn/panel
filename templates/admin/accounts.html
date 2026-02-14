@@ -20,17 +20,17 @@
         <select name="type" class="filter-select" aria-label="Filter by account type">
             <option value="">All Types</option>
             {% for value, label in account_type_choices %}
-            <option value="{{ value }}" {% if selected_type == value %}selected{% endif %}>{{ label }}</option>
+            <option value="{{ value }}" {% if selected_type == value  %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
         </select>
         <select name="status" class="filter-select" aria-label="Filter by status">
             <option value="">All Status</option>
             {% for value, label in status_choices %}
-            <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>
+            <option value="{{ value }}" {% if selected_status == value  %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
         </select>
         <button type="submit" class="btn btn-primary btn-sm">Filter</button>
-        {% if search_query or selected_type or selected_status %}
+        {% if search_query or selected_type or selected_status  %}
         <a href="{% url 'accounts' %}" class="clear-search">Clear</a>
         {% endif %}
     </form>
@@ -38,12 +38,12 @@
     <button class="btn btn-primary btn-sm" onclick="showAddAccountModal()">+ Add Account</button>
 </div>
 
-{% if search_query or selected_type or selected_status %}
+{% if search_query or selected_type or selected_status  %}
 <div class="search-info">
     Showing {{ page_obj.paginator.count }} account(s)
-    {% if search_query %} matching "<strong>{{ search_query }}</strong>"{% endif %}
-    {% if selected_type %} of type <strong>{{ selected_type|upper }}</strong>{% endif %}
-    {% if selected_status %} with status <strong>{{ selected_status|title }}</strong>{% endif %}
+    {% if search_query  %} matching "<strong>{{ search_query }}</strong>"{% endif %}
+    {% if selected_type  %} of type <strong>{{ selected_type|upper }}</strong>{% endif %}
+    {% if selected_status  %} with status <strong>{{ selected_status|title }}</strong>{% endif %}
 </div>
 {% endif %}
 
@@ -72,7 +72,7 @@
                         <div class="avatar avatar-sm">{{ account.user.display_name|first|upper }}</div>
                         <div class="user-details">
                             <span class="user-name">{{ account.user.display_name }}</span>
-                            {% if account.user.member_id %}
+                            {% if account.user.member_id  %}
                             <span class="user-member-id">{{ account.user.member_id }}</span>
                             {% endif %}
                         </div>
@@ -105,22 +105,22 @@
 </div>
 
 <!-- Pagination -->
-{% if page_obj.has_other_pages %}
+{% if page_obj.has_other_pages  %}
 <div class="pagination" role="navigation" aria-label="Pagination">
     <div class="pagination-info">
         Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} accounts
     </div>
     <div class="pagination-nav">
-        {% if page_obj.has_previous %}
-        <a href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="First page">&laquo; First</a>
-        <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="Previous page">Previous</a>
+        {% if page_obj.has_previous  %}
+        <a href="?page=1{% if search_query  %}&q={{ search_query }}{% endif %}{% if selected_type  %}&type={{ selected_type }}{% endif %}{% if selected_status  %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="First page">&laquo; First</a>
+        <a href="?page={{ page_obj.previous_page_number }}{% if search_query  %}&q={{ search_query }}{% endif %}{% if selected_type  %}&type={{ selected_type }}{% endif %}{% if selected_status  %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="Previous page">Previous</a>
         {% endif %}
 
         <span class="page-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
 
-        {% if page_obj.has_next %}
-        <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="Next page">Next</a>
-        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="Last page">Last &raquo;</a>
+        {% if page_obj.has_next  %}
+        <a href="?page={{ page_obj.next_page_number }}{% if search_query  %}&q={{ search_query }}{% endif %}{% if selected_type  %}&type={{ selected_type }}{% endif %}{% if selected_status  %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="Next page">Next</a>
+        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query  %}&q={{ search_query }}{% endif %}{% if selected_type  %}&type={{ selected_type }}{% endif %}{% if selected_status  %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="Last page">Last &raquo;</a>
         {% endif %}
     </div>
 </div>
