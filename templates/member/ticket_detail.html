@@ -1,0 +1,128 @@
+{% extends "member/base.html" %}
+{% load static %}
+
+{% block title %}Ticket #{{ ticket.id }} - Member Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="page-header-left">
+        <a href="{% url 'member_portal:tickets' %}" class="btn btn-sm btn-outline">&larr; Back</a>
+        <h2>{{ ticket.subject }}</h2>
+    </div>
+    <span class="badge badge-{{ ticket.status }} badge-lg">{{ ticket.get_status_display }}</span>
+</div>
+
+<!-- Ticket Info -->
+<div class="card">
+    <div class="card-body">
+        <div class="detail-grid">
+            <div class="detail-item">
+                <span class="detail-label">Ticket #</span>
+                <span class="detail-value">{{ ticket.id }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Priority</span>
+                <span class="detail-value">
+                    <span class="badge badge-{{ ticket.priority }}">{{ ticket.get_priority_display }}</span>
+                </span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Created</span>
+                <span class="detail-value">{{ ticket.created_at|date:"d M Y H:i" }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Conversation -->
+<div class="card" style="margin-top: 1.5rem;">
+    <div class="card-header">
+        <h3>Conversation</h3>
+    </div>
+    <div class="card-body">
+        {% for msg in ticket_messages %}
+        <div
+            class="ticket-message {% if msg.sender == request.user %}ticket-message-own{% else %}ticket-message-other{% endif %}">
+            <div class="ticket-message-header">
+                <strong>{{ msg.sender.display_name }}</strong>
+                {% if msg.sender.is_staff or msg.sender.role == 'admin' %}
+                <span class="badge badge-info">Admin</span>
+                {% endif %}
+                <span class="text-muted" style="margin-left: auto;">{{ msg.created_at|date:"d M Y H:i" }}</span>
+            </div>
+            <div class="ticket-message-body">{{ msg.body|linebreaksbr }}</div>
+            {% if msg.attachment %}
+            <div class="ticket-message-attachment">
+                <a href="{{ msg.attachment.url }}" target="_blank" class="btn btn-sm btn-outline">📎 {{
+                    msg.attachment.name|cut:"tickets/" }}</a>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Reply Form -->
+{% if ticket.status != "closed" %}
+<div class="card" style="margin-top: 1.5rem;">
+    <div class="card-header">
+        <h3>Reply</h3>
+    </div>
+    <div class="card-body">
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="form-group">
+                <textarea name="body" class="form-input" rows="4" required placeholder="Type your reply..."></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Attachment (optional)</label>
+                <input type="file" name="attachment" class="form-input">
+            </div>
+            <button type="submit" class="btn btn-primary">Send Reply</button>
+        </form>
+    </div>
+</div>
+{% else %}
+<div class="card" style="margin-top: 1.5rem;">
+    <div class="card-body">
+        <p class="empty-state">This ticket is closed. No further replies can be added.</p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .ticket-message {
+        padding: 1rem;
+        border-radius: var(--radius-lg);
+        margin-bottom: 1rem;
+        border: 1px solid var(--color-gray-200);
+    }
+
+    .ticket-message-own {
+        background: var(--color-gray-50);
+    }
+
+    .ticket-message-other {
+        background: var(--color-primary-light);
+    }
+
+    .ticket-message-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+        font-size: var(--font-size-sm);
+    }
+
+    .ticket-message-body {
+        font-size: var(--font-size-base);
+        line-height: 1.6;
+    }
+
+    .ticket-message-attachment {
+        margin-top: 0.75rem;
+    }
+</style>
+{% endblock %}

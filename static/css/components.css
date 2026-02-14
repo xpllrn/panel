@@ -102,6 +102,48 @@
     color: var(--color-gray-700);
 }
 
+.badge-default {
+    background: var(--color-gray-200);
+    color: var(--color-gray-700);
+}
+
+/* Ticket status badges */
+.badge-open {
+    background: #e3f2fd;
+    color: #1565c0;
+}
+
+.badge-in_progress {
+    background: #fff3e0;
+    color: #e65100;
+}
+
+.badge-resolved {
+    background: var(--color-success);
+    color: var(--color-success-text);
+}
+
+.badge-closed {
+    background: var(--color-gray-200);
+    color: var(--color-gray-600);
+}
+
+/* Ticket priority badges */
+.badge-low {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.badge-medium {
+    background: #fff3e0;
+    color: #e65100;
+}
+
+.badge-high {
+    background: #ffebee;
+    color: #c62828;
+}
+
 /* Status Badges */
 .status-badge {
     display: inline-block;

@@ -12,7 +12,7 @@ from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
 
-from accounts.models import AuditLog, Loan, LoanRepayment, MemberAccount, Receipt, User
+from accounts.models import AuditLog, Loan, LoanRepayment, MemberAccount, Receipt, Ticket, TicketMessage, User
 from accounts.utils import log_action, split_full_name, validate_password_strength
 
 
@@ -2163,3 +2163,92 @@ def record_emi_payment_view(request, loan_id):
             return JsonResponse({"success": False, "error": str(e)})
 
     return JsonResponse({"success": False, "error": "Invalid request method"})
+
+
+# ========================================
+# Ticket Views
+# ========================================
+
+
+@login_required
+@admin_required
+def admin_tickets_view(request):
+    """List all support tickets."""
+    tickets_qs = Ticket.objects.select_related("user").all()
+
+    # Filters
+    status = request.GET.get("status", "")
+    priority = request.GET.get("priority", "")
+    q = request.GET.get("q", "").strip()
+
+    if status:
+        tickets_qs = tickets_qs.filter(status=status)
+    if priority:
+        tickets_qs = tickets_qs.filter(priority=priority)
+    if q:
+        tickets_qs = tickets_qs.filter(
+            Q(subject__icontains=q)
+            | Q(user__first_name__icontains=q)
+            | Q(user__last_name__icontains=q)
+            | Q(user__member_id__icontains=q)
+        )
+
+    paginator = Paginator(tickets_qs, 20)
+    page = request.GET.get("page", 1)
+    try:
+        tickets = paginator.page(page)
+    except PageNotAnInteger:
+        tickets = paginator.page(1)
+    except EmptyPage:
+        tickets = paginator.page(paginator.num_pages)
+
+    # Stats
+    total = Ticket.objects.count()
+    open_count = Ticket.objects.filter(status="open").count()
+
+    context = {
+        "tickets": tickets,
+        "status_choices": Ticket.STATUS_CHOICES,
+        "priority_choices": Ticket.PRIORITY_CHOICES,
+        "current_status": status,
+        "current_priority": priority,
+        "search_query": q,
+        "total_tickets": total,
+        "open_tickets": open_count,
+    }
+    return render(request, "admin/tickets.html", context)
+
+
+@login_required
+@admin_required
+def admin_ticket_detail_view(request, ticket_id):
+    """View ticket detail, reply, and change status."""
+    ticket = Ticket.objects.select_related("user").get(id=ticket_id)
+
+    if request.method == "POST":
+        action = request.POST.get("action", "reply")
+
+        if action == "reply":
+            body = request.POST.get("body", "").strip()
+            attachment = request.FILES.get("attachment")
+            if body:
+                TicketMessage.objects.create(ticket=ticket, sender=request.user, body=body, attachment=attachment)
+                ticket.save(update_fields=["updated_at"])
+
+        elif action == "status":
+            new_status = request.POST.get("status", "")
+            if new_status and new_status in dict(Ticket.STATUS_CHOICES):
+                ticket.status = new_status
+                ticket.save(update_fields=["status", "updated_at"])
+
+        return redirect("admin_ticket_detail", ticket_id=ticket.id)
+
+    messages_qs = ticket.messages.select_related("sender").all()
+
+    context = {
+        "ticket": ticket,
+        "ticket_messages": messages_qs,
+        "status_choices": Ticket.STATUS_CHOICES,
+    }
+    return render(request, "admin/ticket_detail.html", context)
+

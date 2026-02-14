@@ -6,7 +6,7 @@ from django.core.paginator import Paginator
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 
-from accounts.models import Loan, LoanRepayment, MemberAccount, Receipt
+from accounts.models import Loan, LoanRepayment, MemberAccount, Receipt, Ticket, TicketMessage
 
 # ========================================
 # Decorator
@@ -237,3 +237,75 @@ def member_profile_view(request):
         "password_error": password_error,
     }
     return render(request, "member/profile.html", context)
+
+
+# ========================================
+# Tickets / Support
+# ========================================
+
+
+@member_required
+def member_tickets_view(request):
+    """List all tickets raised by the member."""
+    user = request.user
+    tickets_qs = Ticket.objects.filter(user=user).order_by("-updated_at")
+
+    # Filter by status
+    status = request.GET.get("status", "")
+    if status:
+        tickets_qs = tickets_qs.filter(status=status)
+
+    paginator = Paginator(tickets_qs, 10)
+    page = request.GET.get("page", 1)
+    tickets = paginator.get_page(page)
+
+    context = {
+        "tickets": tickets,
+        "status_choices": Ticket.STATUS_CHOICES,
+        "current_status": status,
+    }
+    return render(request, "member/tickets.html", context)
+
+
+@member_required
+def member_ticket_create_view(request):
+    """Create a new support ticket with an initial message."""
+    if request.method == "POST":
+        subject = request.POST.get("subject", "").strip()
+        priority = request.POST.get("priority", "medium")
+        body = request.POST.get("body", "").strip()
+        attachment = request.FILES.get("attachment")
+
+        if subject and body:
+            ticket = Ticket.objects.create(user=request.user, subject=subject, priority=priority)
+            TicketMessage.objects.create(ticket=ticket, sender=request.user, body=body, attachment=attachment)
+            return redirect("member_portal:ticket_detail", ticket_id=ticket.id)
+
+    context = {
+        "priority_choices": Ticket.PRIORITY_CHOICES,
+    }
+    return render(request, "member/ticket_create.html", context)
+
+
+@member_required
+def member_ticket_detail_view(request, ticket_id):
+    """View ticket conversation and reply."""
+    ticket = get_object_or_404(Ticket, id=ticket_id, user=request.user)
+
+    if request.method == "POST":
+        body = request.POST.get("body", "").strip()
+        attachment = request.FILES.get("attachment")
+        if body:
+            TicketMessage.objects.create(ticket=ticket, sender=request.user, body=body, attachment=attachment)
+            # Update ticket timestamp
+            ticket.save(update_fields=["updated_at"])
+            return redirect("member_portal:ticket_detail", ticket_id=ticket.id)
+
+    messages_qs = ticket.messages.select_related("sender").all()
+
+    context = {
+        "ticket": ticket,
+        "ticket_messages": messages_qs,
+    }
+    return render(request, "member/ticket_detail.html", context)
+

@@ -697,3 +697,61 @@ class AuditLog(models.Model):
     def __str__(self):
         user_display = self.user.display_name if self.user else "System"
         return f"{user_display} - {self.get_action_display()} {self.get_entity_type_display()}"
+
+
+class Ticket(models.Model):
+    """
+    Support ticket raised by a member.
+    Admins can view all tickets; members can only view their own.
+    """
+
+    STATUS_CHOICES = [
+        ("open", "Open"),
+        ("in_progress", "In Progress"),
+        ("resolved", "Resolved"),
+        ("closed", "Closed"),
+    ]
+
+    PRIORITY_CHOICES = [
+        ("low", "Low"),
+        ("medium", "Medium"),
+        ("high", "High"),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="tickets")
+    subject = models.CharField(max_length=255)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="open", db_index=True)
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default="medium", db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        verbose_name = "Ticket"
+        verbose_name_plural = "Tickets"
+
+    def __str__(self):
+        return f"#{self.id} - {self.subject} ({self.user.display_name})"
+
+
+class TicketMessage(models.Model):
+    """
+    A single message in a ticket conversation.
+    Both members and admins can send messages. Supports optional file attachment.
+    """
+
+    ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE, related_name="messages")
+    sender = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="ticket_messages")
+    body = models.TextField()
+    attachment = models.FileField(upload_to="tickets/", blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        verbose_name = "Ticket Message"
+        verbose_name_plural = "Ticket Messages"
+
+    def __str__(self):
+        sender_name = self.sender.display_name if self.sender else "System"
+        return f"Message by {sender_name} on #{self.ticket_id}"
+

@@ -11,5 +11,9 @@ urlpatterns = [
     path("loans/", views.member_loans_view, name="loans"),
     path("loans/<int:loan_id>/", views.member_loan_detail_view, name="loan_detail"),
     path("transactions/", views.member_transactions_view, name="transactions"),
+    path("tickets/", views.member_tickets_view, name="tickets"),
+    path("tickets/create/", views.member_ticket_create_view, name="ticket_create"),
+    path("tickets/<int:ticket_id>/", views.member_ticket_detail_view, name="ticket_detail"),
     path("profile/", views.member_profile_view, name="profile"),
 ]
+

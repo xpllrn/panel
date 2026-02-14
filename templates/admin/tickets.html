@@ -1,0 +1,82 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Tickets - Admin{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Tickets</h1>
+    <div class="header-stats">
+        <span class="stat-item">Total: <strong>{{ total_tickets }}</strong></span>
+        <span class="stat-item">Open: <strong>{{ open_tickets }}</strong></span>
+    </div>
+    <form class="search-form" method="get">
+        <input type="text" name="q" class="search-input" placeholder="Search by subject or member..."
+            value="{{ search_query }}">
+        <select name="status" class="filter-select" onchange="this.form.submit()">
+            <option value="">All Statuses</option>
+            {% for value, label in status_choices %}
+            <option value="{{ value }}" {% if current_status==value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+        <select name="priority" class="filter-select" onchange="this.form.submit()">
+            <option value="">All Priorities</option>
+            {% for value, label in priority_choices %}
+            <option value="{{ value }}" {% if current_priority==value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+        {% if search_query or current_status or current_priority %}
+        <a href="{% url 'admin_tickets' %}" class="clear-search">Clear</a>
+        {% endif %}
+    </form>
+</div>
+
+<div class="data-table">
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Subject</th>
+                <th>Member</th>
+                <th>Priority</th>
+                <th>Status</th>
+                <th>Last Updated</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ticket in tickets %}
+            <tr onclick="window.location='{% url 'admin_ticket_detail' ticket.id %}'">
+                <td>{{ ticket.id }}</td>
+                <td><strong>{{ ticket.subject }}</strong></td>
+                <td>{{ ticket.user.display_name }}<br><small>{{ ticket.user.member_id|default:"" }}</small></td>
+                <td><span class="badge badge-{{ ticket.priority }}">{{ ticket.get_priority_display }}</span></td>
+                <td><span class="badge badge-{{ ticket.status }}">{{ ticket.get_status_display }}</span></td>
+                <td>{{ ticket.updated_at|date:"d M Y H:i" }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="6" style="text-align: center; padding: 2rem;">No tickets found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if tickets.has_other_pages %}
+<div class="pagination">
+    <span class="pagination-info">
+        Showing {{ tickets.start_index }}-{{ tickets.end_index }} of {{ tickets.paginator.count }}
+    </span>
+    <div class="pagination-nav">
+        {% if tickets.has_previous %}
+        <a href="?page={{ tickets.previous_page_number }}&q={{ search_query }}&status={{ current_status }}&priority={{ current_priority }}"
+            class="page-link">&laquo; Prev</a>
+        {% endif %}
+        <span class="page-current">Page {{ tickets.number }} of {{ tickets.paginator.num_pages }}</span>
+        {% if tickets.has_next %}
+        <a href="?page={{ tickets.next_page_number }}&q={{ search_query }}&status={{ current_status }}&priority={{ current_priority }}"
+            class="page-link">Next &raquo;</a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

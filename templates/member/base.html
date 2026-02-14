@@ -13,14 +13,11 @@
     <link rel="stylesheet" href="{% static 'css/components.css' %}">
     <link rel="stylesheet" href="{% static 'css/page-layout.css' %}">
 
-    <!-- Member-specific CSS -->
-    <link rel="stylesheet" href="{% static 'css/pages/member.css' %}">
-
     {% block extra_css %}{% endblock %}
 </head>
 
 <body>
-    <div class="app-layout member-portal">
+    <div class="app-layout">
         <!-- Sidebar Navigation -->
         <nav class="sidebar" role="navigation" aria-label="Main Navigation">
             <div class="sidebar-brand">
@@ -43,6 +40,10 @@
                 <a href="{% url 'member_portal:transactions' %}"
                     class="sidebar-link {% if request.resolver_match.url_name == 'transactions' %}active{% endif %}">
                     Transactions
+                </a>
+                <a href="{% url 'member_portal:tickets' %}"
+                    class="sidebar-link {% if request.resolver_match.url_name == 'tickets' or request.resolver_match.url_name == 'ticket_detail' or request.resolver_match.url_name == 'ticket_create' %}active{% endif %}">
+                    Support
                 </a>
             </div>
 

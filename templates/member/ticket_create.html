@@ -1,0 +1,43 @@
+{% extends "member/base.html" %}
+
+{% block title %}New Ticket - Member Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="page-header-left">
+        <a href="{% url 'member_portal:tickets' %}" class="btn btn-sm btn-outline">&larr; Back</a>
+        <h2>Raise a Query</h2>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form method="post" enctype="multipart/form-data" style="max-width: 600px;">
+            {% csrf_token %}
+            <div class="form-group">
+                <label class="form-label">Subject</label>
+                <input type="text" name="subject" class="form-input" required
+                    placeholder="Brief description of your issue">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Priority</label>
+                <select name="priority" class="form-select">
+                    {% for value, label in priority_choices %}
+                    <option value="{{ value }}" {% if value=="medium" %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Message</label>
+                <textarea name="body" class="form-input" rows="5" required
+                    placeholder="Describe your issue in detail..."></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Attachment (optional)</label>
+                <input type="file" name="attachment" class="form-input">
+            </div>
+            <button type="submit" class="btn btn-primary">Submit Ticket</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

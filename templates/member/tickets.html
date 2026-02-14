@@ -1,0 +1,77 @@
+{% extends "member/base.html" %}
+
+{% block title %}Support - Member Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Support Tickets</h2>
+    <a href="{% url 'member_portal:ticket_create' %}" class="btn btn-primary btn-sm">New Ticket</a>
+</div>
+
+<!-- Filters -->
+<div class="filters-bar">
+    <form method="get" class="filters-form">
+        <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="">All Statuses</option>
+            {% for value, label in status_choices %}
+            <option value="{{ value }}" {% if current_status==value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+
+<!-- Tickets Table -->
+<div class="card">
+    <div class="card-body">
+        {% if tickets %}
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Subject</th>
+                        <th>Priority</th>
+                        <th>Status</th>
+                        <th>Last Updated</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ticket in tickets %}
+                    <tr>
+                        <td>{{ ticket.id }}</td>
+                        <td><strong>{{ ticket.subject }}</strong></td>
+                        <td><span class="badge badge-{{ ticket.priority }}">{{ ticket.get_priority_display }}</span>
+                        </td>
+                        <td><span class="badge badge-{{ ticket.status }}">{{ ticket.get_status_display }}</span></td>
+                        <td>{{ ticket.updated_at|date:"d M Y H:i" }}</td>
+                        <td>
+                            <a href="{% url 'member_portal:ticket_detail' ticket.id %}"
+                                class="btn btn-sm btn-outline">View</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if tickets.has_other_pages %}
+        <div class="pagination">
+            {% if tickets.has_previous %}
+            <a href="?page={{ tickets.previous_page_number }}&status={{ current_status }}"
+                class="btn btn-sm btn-outline">&laquo; Previous</a>
+            {% endif %}
+            <span class="pagination-info">Page {{ tickets.number }} of {{ tickets.paginator.num_pages }}</span>
+            {% if tickets.has_next %}
+            <a href="?page={{ tickets.next_page_number }}&status={{ current_status }}"
+                class="btn btn-sm btn-outline">Next &raquo;</a>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% else %}
+        <p class="empty-state">No tickets found. Click "New Ticket" to raise a query.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
