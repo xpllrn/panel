@@ -13,7 +13,7 @@ def root_redirect(request):
         if request.user.is_staff or request.user.is_admin_role():
             return redirect("/home/")
         return redirect("/member/")
-    return redirect("/login/")
+    return redirect("/member/login/")
 
 
 urlpatterns = [

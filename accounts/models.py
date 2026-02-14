@@ -80,10 +80,10 @@ class User(AbstractUser):
     ]
 
     mobile_primary = models.CharField(
-        max_length=15, blank=True, null=True, verbose_name="Primary Mobile", validators=[phone_validator]
+        max_length=30, blank=True, null=True, verbose_name="Primary Mobile"
     )
     mobile_alternate = models.CharField(
-        max_length=15, blank=True, null=True, verbose_name="Alternate Mobile", validators=[phone_validator]
+        max_length=30, blank=True, null=True, verbose_name="Alternate Mobile"
     )
     preferred_comm_mode = models.CharField(max_length=20, choices=COMM_MODE_CHOICES, default="email")
     dnd_enabled = models.BooleanField(default=False, verbose_name="Do Not Disturb")
@@ -162,7 +162,7 @@ class User(AbstractUser):
     nominee_name = models.CharField(max_length=200, blank=True, null=True)
     nominee_relationship = models.CharField(max_length=100, blank=True, null=True)
     nominee_dob = models.DateField(blank=True, null=True, verbose_name="Nominee Date of Birth")
-    nominee_contact = models.CharField(max_length=15, blank=True, null=True)
+    nominee_contact = models.CharField(max_length=30, blank=True, null=True)
     nominee_address = models.TextField(blank=True, null=True)
     nominee_id_type = models.CharField(max_length=50, blank=True, null=True)
     nominee_id_number = models.CharField(max_length=50, blank=True, null=True)
@@ -171,7 +171,7 @@ class User(AbstractUser):
     alt_nominee_name = models.CharField(max_length=200, blank=True, null=True)
     alt_nominee_relationship = models.CharField(max_length=100, blank=True, null=True)
     alt_nominee_dob = models.DateField(blank=True, null=True)
-    alt_nominee_contact = models.CharField(max_length=15, blank=True, null=True)
+    alt_nominee_contact = models.CharField(max_length=30, blank=True, null=True)
 
     # 9. Account & Loan Summary (Read-Only)
     total_accounts_count = models.IntegerField(default=0, editable=False)
@@ -480,7 +480,7 @@ class Loan(models.Model):
     guarantor_name = models.CharField(max_length=200, blank=True, null=True)
     guarantor_member_id = models.CharField(max_length=50, blank=True, null=True)
     guarantor_relationship = models.CharField(max_length=100, blank=True, null=True)
-    guarantor_contact = models.CharField(max_length=15, blank=True, null=True)
+    guarantor_contact = models.CharField(max_length=30, blank=True, null=True)
 
     # Collateral / Security
     collateral_type = models.CharField(max_length=200, blank=True, null=True, verbose_name="Collateral Type")

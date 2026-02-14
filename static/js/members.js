@@ -86,9 +86,25 @@
         txnPage = 1;
         txnHasMore = false;
 
-        fetch('/members/' + memberId + '/get/')
-            .then(function (response) { return response.json(); })
+        fetch('/members/' + memberId + '/get/', {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+            .then(function (response) {
+                if (response.status === 401) {
+                    // Session expired, redirect to login
+                    window.location.href = '/portal/login/';
+                    return;
+                }
+                if (!response.ok) {
+                    throw new Error('HTTP error ' + response.status);
+                }
+                return response.json();
+            })
             .then(function (data) {
+                if (!data) return; // Handle redirect case
+                
                 if (data.success) {
                     var user = data.user;
 
@@ -463,9 +479,24 @@
         event.stopPropagation();
         document.getElementById('dropdown-' + memberId).classList.remove('show');
 
-        fetch('/members/' + memberId + '/get/')
-            .then(function (response) { return response.json(); })
+        fetch('/members/' + memberId + '/get/', {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+            .then(function (response) {
+                if (response.status === 401) {
+                    window.location.href = '/portal/login/';
+                    return;
+                }
+                if (!response.ok) {
+                    throw new Error('HTTP error ' + response.status);
+                }
+                return response.json();
+            })
             .then(function (data) {
+                if (!data) return;
+                
                 if (data.success) {
                     document.getElementById('edit-member-id').value = memberId;
                     document.getElementById('edit-username').value = data.user.username;

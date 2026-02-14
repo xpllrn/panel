@@ -25,6 +25,14 @@ if not DEBUG:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
 
+# Session Configuration
+SESSION_COOKIE_AGE = 86400  # 24 hours in seconds
+SESSION_SAVE_EVERY_REQUEST = True  # Extend session on every request
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # Keep session even after browser closes
+SESSION_COOKIE_NAME = "sessionid"
+SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access to session cookie
+SESSION_COOKIE_SAMESITE = "Lax"  # CSRF protection
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",

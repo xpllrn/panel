@@ -21,8 +21,18 @@ def admin_required(view_func):
 
     @functools.wraps(view_func)
     def wrapper(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            # Check if it's an AJAX request
+            if request.headers.get("X-Requested-With") == "XMLHttpRequest" or request.content_type == "application/json":
+                return JsonResponse({"success": False, "error": "Authentication required. Please log in."}, status=401)
+            return redirect("/portal/login/")
+        
         if not request.user.is_staff:
+            # Check if it's an AJAX request
+            if request.headers.get("X-Requested-With") == "XMLHttpRequest" or request.content_type == "application/json":
+                return JsonResponse({"success": False, "error": "Access denied. Administrators only."}, status=403)
             return HttpResponseForbidden("Access denied. Administrators only.")
+        
         return view_func(request, *args, **kwargs)
 
     return wrapper

@@ -44,8 +44,13 @@ SUPABASE_SERVICE_KEY=your-secret-key
 DB_NAME=postgres
 DB_USER=postgres
 DB_PASSWORD=your-db-password
-DB_HOST=db.your-project-ref.supabase.co
+DB_HOST=aws-0-[region].pooler.supabase.com
 DB_PORT=5432
+
+# IMPORTANT:
+# Use "Session Pooler" (port 5432) or "Transaction Pooler" (port 6543).
+# Do NOT use direct connection (db.xxx.supabase.co) as it is IPv6-only.
+# User format for pooler: postgres.[project-ref]
 ```
 
 ## Linting & Formatting
