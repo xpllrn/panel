@@ -3,27 +3,25 @@
 {% block title %}Support - Member Portal{% endblock %}
 
 {% block content %}
-<div class="page-header">
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: center;">
     <h2>Support Tickets</h2>
-    <a href="{% url 'member_portal:ticket_create' %}" class="btn btn-primary btn-sm">New Ticket</a>
-</div>
-
-<!-- Filters -->
-<div class="filters-bar">
-    <form method="get" class="filters-form">
-        <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
-            <option value="">All Statuses</option>
-            {% for value, label in status_choices %}
-            <option value="{{ value }}" {% if current_status == value  %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-        </select>
-    </form>
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <form method="get" class="filters-form">
+            <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">All Statuses</option>
+                {% for value, label in status_choices %}
+                <option value="{{ value }}" {% if current_status==value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        <a href="{% url 'member_portal:ticket_create' %}" class="btn btn-primary btn-sm">+ New Ticket</a>
+    </div>
 </div>
 
 <!-- Tickets Table -->
 <div class="card">
     <div class="card-body">
-        {% if tickets  %}
+        {% if tickets %}
         <div class="table-responsive">
             <table class="table">
                 <thead>
@@ -55,14 +53,14 @@
             </table>
         </div>
 
-        {% if tickets.has_other_pages  %}
+        {% if tickets.has_other_pages %}
         <div class="pagination">
-            {% if tickets.has_previous  %}
+            {% if tickets.has_previous %}
             <a href="?page={{ tickets.previous_page_number }}&status={{ current_status }}"
                 class="btn btn-sm btn-outline">&laquo; Previous</a>
             {% endif %}
             <span class="pagination-info">Page {{ tickets.number }} of {{ tickets.paginator.num_pages }}</span>
-            {% if tickets.has_next  %}
+            {% if tickets.has_next %}
             <a href="?page={{ tickets.next_page_number }}&status={{ current_status }}"
                 class="btn btn-sm btn-outline">Next &raquo;</a>
             {% endif %}

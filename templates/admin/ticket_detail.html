@@ -22,8 +22,7 @@
             </div>
             <div class="detail-item">
                 <span class="detail-label">Member</span>
-                <span class="detail-value">{{ ticket.user.display_name }} ({{ ticket.user.member_id|default:"N/A"
-                    }})</span>
+                <span class="detail-value">{{ ticket.user.display_name }} ({{ ticket.user.member_id|default:"N/A" }})</span>
             </div>
             <div class="detail-item">
                 <span class="detail-label">Priority</span>
@@ -48,7 +47,7 @@
                         <select name="status" class="form-select form-select-sm" onchange="this.form.submit()"
                             style="min-width: 140px;">
                             {% for value, label in status_choices %}
-                            <option value="{{ value }}" {% if ticket.status == value  %}selected{% endif %}>{{ label }}
+                            <option value="{{ value }}" {% if ticket.status==value %}selected{% endif %}>{{ label }}
                             </option>
                             {% endfor %}
                         </select>
@@ -70,7 +69,7 @@
             class="ticket-message {% if msg.sender.is_staff or msg.sender.role == 'admin'  %}ticket-message-admin{% else %}ticket-message-member{% endif %}">
             <div class="ticket-message-header">
                 <strong>{{ msg.sender.display_name }}</strong>
-                {% if msg.sender.is_staff or msg.sender.role == 'admin'  %}
+                {% if msg.sender.is_staff or msg.sender.role == 'admin' %}
                 <span class="badge badge-info">Admin</span>
                 {% else %}
                 <span class="badge badge-default">Member</span>
@@ -78,7 +77,7 @@
                 <span class="text-muted" style="margin-left: auto;">{{ msg.created_at|date:"d M Y H:i" }}</span>
             </div>
             <div class="ticket-message-body">{{ msg.body|linebreaksbr }}</div>
-            {% if msg.attachment  %}
+            {% if msg.attachment %}
             <div class="ticket-message-attachment">
                 <a href="{{ msg.attachment.url }}" target="_blank" class="btn btn-sm btn-outline">📎
                     {{ msg.attachment.name|cut:"tickets/" }}</a>

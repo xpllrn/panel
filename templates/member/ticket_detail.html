@@ -53,8 +53,7 @@
             <div class="ticket-message-body">{{ msg.body|linebreaksbr }}</div>
             {% if msg.attachment  %}
             <div class="ticket-message-attachment">
-                <a href="{{ msg.attachment.url }}" target="_blank" class="btn btn-sm btn-outline">📎 {{
-                    msg.attachment.name|cut:"tickets/" }}</a>
+                <a href="{{ msg.attachment.url }}" target="_blank" class="btn btn-sm btn-outline">📎 {{ msg.attachment.name|cut:"tickets/" }}</a>
             </div>
             {% endif %}
         </div>

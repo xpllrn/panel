@@ -78,10 +78,8 @@
                 <span class="detail-label">Current Address</span>
                 <span class="detail-value">
                     {% if member.current_address_line1  %}
-                    {{ member.current_address_line1 }}{% if member.current_address_line2  %}, {{
-                    member.current_address_line2 }}{% endif %}<br>
-                    {{ member.current_city|default:"" }}{% if member.current_district  %}, {{ member.current_district
-                    }}{% endif %}<br>
+                    {{ member.current_address_line1 }}{% if member.current_address_line2  %}, {{ member.current_address_line2 }}{% endif %}<br>
+                    {{ member.current_city|default:"" }}{% if member.current_district  %}, {{ member.current_district }}{% endif %}<br>
                     {{ member.current_state|default:"" }} - {{ member.current_pincode|default:"" }}
                     {% else %}
                     Not set

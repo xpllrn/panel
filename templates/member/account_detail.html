@@ -69,15 +69,13 @@
             </div>
             <div class="detail-item">
                 <span class="detail-label">Installments Paid</span>
-                <span class="detail-value">{{ account.rd_installments_paid }} / {{
-                    account.rd_total_installments|default:"—" }}</span>
+                <span class="detail-value">{{ account.rd_installments_paid }} / {{ account.rd_total_installments|default:"—" }}</span>
             </div>
             {% endif %}
             {% if account.nominee_name  %}
             <div class="detail-item">
                 <span class="detail-label">Nominee</span>
-                <span class="detail-value">{{ account.nominee_name }} ({{ account.nominee_relationship|default:"—"
-                    }})</span>
+                <span class="detail-value">{{ account.nominee_name }} ({{ account.nominee_relationship|default:"—" }})</span>
             </div>
             {% endif %}
         </div>
@@ -116,8 +114,7 @@
                         <td>{{ txn.get_payment_mode_display }}</td>
                         <td
                             class="{% if txn.transaction_type == 'credit'  %}text-success{% else %}text-danger{% endif %}">
-                            {% if txn.transaction_type == 'credit'  %}+{% else %}-{% endif %}₹{{ txn.amount|floatformat:2
-                            }}
+                            {% if txn.transaction_type == 'credit'  %}+{% else %}-{% endif %}₹{{ txn.amount|floatformat:2 }}
                         </td>
                         <td>₹{{ txn.balance_after|floatformat:2 }}</td>
                     </tr>
@@ -131,8 +128,7 @@
             {% if transactions.has_previous  %}
             <a href="?page={{ transactions.previous_page_number }}" class="btn btn-sm btn-outline">&laquo; Previous</a>
             {% endif %}
-            <span class="pagination-info">Page {{ transactions.number }} of {{ transactions.paginator.num_pages
-                }}</span>
+            <span class="pagination-info">Page {{ transactions.number }} of {{ transactions.paginator.num_pages }}</span>
             {% if transactions.has_next  %}
             <a href="?page={{ transactions.next_page_number }}" class="btn btn-sm btn-outline">Next &raquo;</a>
             {% endif %}
