@@ -255,6 +255,35 @@ class User(AbstractUser):
         """Check if user can manage other users"""
         return self.is_superuser or self.role == "admin"
 
+    def save(self, *args, **kwargs):
+        """Override save to auto-generate member_id if not provided"""
+        if not self.member_id and self.role == "member":
+            # Generate member_id in format: MBR{YEAR}{SEQUENTIAL}
+            # Example: MBR202600001, MBR202600002, etc.
+            from datetime import date
+
+            year = date.today().year
+            # Get the last member_id for this year
+            last_member = (
+                User.objects.filter(member_id__startswith=f"MBR{year}")
+                .order_by("-member_id")
+                .first()
+            )
+
+            if last_member and last_member.member_id:
+                # Extract the sequential number and increment
+                try:
+                    last_seq = int(last_member.member_id[7:])  # Get digits after MBR{YEAR}
+                    new_seq = last_seq + 1
+                except (ValueError, IndexError):
+                    new_seq = 1
+            else:
+                new_seq = 1
+
+            self.member_id = f"MBR{year}{new_seq:05d}"
+
+        super().save(*args, **kwargs)
+
 
 class MemberAccount(models.Model):
     """
