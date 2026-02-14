@@ -485,6 +485,56 @@ ps aux | grep nginx
 
 ---
 
-**Last Updated**: February 14, 2026
+## Recent Changes & Fixes
+
+### February 14, 2026 - Server Migration
+- Migrated from old EC2 (3.27.117.228) to new EC2 (13.201.60.211)
+- Updated DNS A records to point to new IP
+- SSL certificates installed via Certbot
+- Fixed Nginx configuration (removed duplicate Host header)
+- Fixed Django template syntax errors in `templates/admin/base.html`
+- Configured proxy headers for HTTPS support
+
+### Known Issues Fixed
+1. **Bad Request (400)**: Fixed by removing duplicate `proxy_set_header Host` in Nginx config
+2. **Template Syntax Error**: Fixed broken `{% if %}` tags split across lines in admin base template
+3. **HTTPS Redirect**: Configured `SECURE_PROXY_SSL_HEADER` for proper HTTPS detection behind Nginx
+
+---
+
+## Quick Reference Commands
+
+### Deploy Latest Code
+```bash
+ssh -i your-key.pem ubuntu@13.201.60.211
+cd /var/www/app
+source venv/bin/activate
+git pull origin supabase
+python manage.py migrate
+python manage.py collectstatic --noinput
+sudo systemctl restart gunicorn
+```
+
+### View Logs
+```bash
+# Gunicorn errors
+tail -f /var/www/app/gunicorn-error.log
+
+# Gunicorn access
+tail -f /var/www/app/gunicorn-access.log
+
+# Nginx errors
+sudo tail -f /var/log/nginx/error.log
+```
+
+### Restart Services
+```bash
+sudo systemctl restart gunicorn nginx
+```
+
+---
+
+**Last Updated**: February 15, 2026
 **Server IP**: 13.201.60.211
-**Domain**: delhiaamnagrik.org
+**Domain**: https://delhiaamnagrik.org
+**Status**: ✅ Live and Running
