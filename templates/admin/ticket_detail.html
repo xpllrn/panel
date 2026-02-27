@@ -47,7 +47,7 @@
                         <select name="status" class="form-select form-select-sm" onchange="this.form.submit()"
                             style="min-width: 140px;">
                             {% for value, label in status_choices %}
-                            <option value="{{ value }}" {% if ticket.status==value %}selected{% endif %}>{{ label }}
+                            <option value="{{ value }}" {% if ticket.status == value %}selected{% endif %}>{{ label }}
                             </option>
                             {% endfor %}
                         </select>
