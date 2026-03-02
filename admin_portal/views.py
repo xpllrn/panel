@@ -58,7 +58,7 @@ def home_view(request):
 
     # Account type distribution (for pie chart)
     account_type_data = list(
-        MemberAccount.objects.filter(is_deleted=False)
+        MemberAccount.objects.filter(is_deleted=False, user__is_deleted=False)
         .values("account_type")
         .annotate(count=Count("id"))
         .order_by("account_type")
@@ -822,8 +822,12 @@ def accounts_view(request):
     status = request.GET.get("status", "").strip()
     per_page = 25
 
-    # Base queryset with related user data
-    accounts = MemberAccount.objects.select_related("user").filter(is_deleted=False).order_by("-created_at")
+    # Base queryset with related user data (exclude accounts of deleted users)
+    accounts = (
+        MemberAccount.objects.select_related("user")
+        .filter(is_deleted=False, user__is_deleted=False)
+        .order_by("-created_at")
+    )
 
     # Apply search filter
     if query:
@@ -856,9 +860,9 @@ def accounts_view(request):
     account_type_choices = MemberAccount.ACCOUNT_TYPE_CHOICES
     status_choices = MemberAccount.STATUS_CHOICES
 
-    # Summary stats
-    total_accounts = MemberAccount.objects.filter(is_deleted=False).count()
-    active_accounts = MemberAccount.objects.filter(is_deleted=False, status="active").count()
+    # Summary stats (exclude accounts of deleted users)
+    total_accounts = MemberAccount.objects.filter(is_deleted=False, user__is_deleted=False).count()
+    active_accounts = MemberAccount.objects.filter(is_deleted=False, user__is_deleted=False, status="active").count()
 
     return render(
         request,
@@ -1751,7 +1755,7 @@ def export_accounts_view(request):
     for cell in ws[1]:
         cell.font = Font(bold=True)
 
-    accounts = MemberAccount.objects.filter(is_deleted=False).select_related("user").order_by("account_number")
+    accounts = MemberAccount.objects.filter(is_deleted=False, user__is_deleted=False).select_related("user").order_by("account_number")
     for a in accounts:
         ws.append(
             [
