@@ -49,6 +49,10 @@ def home_view(request):
     total_members = User.objects.filter(is_deleted=False).count()
     active_members = User.objects.filter(is_deleted=False, status="active").count()
 
+    # New members this month
+    first_of_month = today.replace(day=1)
+    new_members_this_month = User.objects.filter(is_deleted=False, date_joined__date__gte=first_of_month).count()
+
     # Account stats
     total_accounts = MemberAccount.objects.filter(is_deleted=False).count()
     active_accounts = MemberAccount.objects.filter(is_deleted=False, status="active").count()
@@ -64,6 +68,19 @@ def home_view(request):
         .order_by("account_type")
     )
 
+    # Loan summary stats
+    active_loans_count = Loan.objects.filter(status__in=["active", "approved"]).count()
+    loan_agg = Loan.objects.filter(status__in=["active", "approved"]).aggregate(
+        total_disbursed=Sum("principal_amount"),
+        total_outstanding=Sum("outstanding_balance"),
+    )
+    total_loan_disbursed = loan_agg["total_disbursed"] or 0
+    total_loan_outstanding = loan_agg["total_outstanding"] or 0
+
+    # Pending items
+    pending_loans_count = Loan.objects.filter(status="pending").count()
+    pending_tickets_count = Ticket.objects.filter(status="open").count()
+
     # Receipt/transaction stats
     total_receipts = Receipt.objects.count()
     today_receipts = Receipt.objects.filter(created_at__date=today).count()
@@ -75,6 +92,44 @@ def home_view(request):
     )
     today_debit = (
         Receipt.objects.filter(created_at__date=today, transaction_type="debit").aggregate(total=Sum("amount"))["total"]
+        or 0
+    )
+
+    # Monthly comparison: this month vs last month
+    if first_of_month.month == 1:
+        last_month_start = first_of_month.replace(year=first_of_month.year - 1, month=12)
+    else:
+        last_month_start = first_of_month.replace(month=first_of_month.month - 1)
+    last_month_end = first_of_month - timedelta(days=1)
+
+    this_month_credit = float(
+        Receipt.objects.filter(
+            created_at__date__gte=first_of_month,
+            transaction_type__in=["credit", "interest", "dividend", "share_capital"],
+        ).aggregate(total=Sum("amount"))["total"]
+        or 0
+    )
+    this_month_debit = float(
+        Receipt.objects.filter(
+            created_at__date__gte=first_of_month,
+            transaction_type__in=["debit", "transfer"],
+        ).aggregate(total=Sum("amount"))["total"]
+        or 0
+    )
+    last_month_credit = float(
+        Receipt.objects.filter(
+            created_at__date__gte=last_month_start,
+            created_at__date__lte=last_month_end,
+            transaction_type__in=["credit", "interest", "dividend", "share_capital"],
+        ).aggregate(total=Sum("amount"))["total"]
+        or 0
+    )
+    last_month_debit = float(
+        Receipt.objects.filter(
+            created_at__date__gte=last_month_start,
+            created_at__date__lte=last_month_end,
+            transaction_type__in=["debit", "transfer"],
+        ).aggregate(total=Sum("amount"))["total"]
         or 0
     )
 
@@ -141,13 +196,23 @@ def home_view(request):
         {
             "total_members": total_members,
             "active_members": active_members,
+            "new_members_this_month": new_members_this_month,
             "total_accounts": total_accounts,
             "active_accounts": active_accounts,
             "total_deposits": total_deposits,
+            "active_loans_count": active_loans_count,
+            "total_loan_disbursed": total_loan_disbursed,
+            "total_loan_outstanding": total_loan_outstanding,
+            "pending_loans_count": pending_loans_count,
+            "pending_tickets_count": pending_tickets_count,
             "total_receipts": total_receipts,
             "today_receipts": today_receipts,
             "today_credit": today_credit,
             "today_debit": today_debit,
+            "this_month_credit": this_month_credit,
+            "this_month_debit": this_month_debit,
+            "last_month_credit": last_month_credit,
+            "last_month_debit": last_month_debit,
             "recent_transactions": recent_transactions,
             "trend_data_json": json.dumps(trend_data),
             "account_type_data_json": json.dumps(account_type_data),
@@ -778,17 +843,34 @@ def reset_member_password_view(request, user_id):
 def profile_view(request):
     """Admin profile view"""
     if request.method == "POST":
-        # Handle name field - split into first_name and last_name using utility
-        name = request.POST.get("name", "").strip()
-        first_name, last_name = split_full_name(name)
-        request.user.first_name = first_name
-        request.user.last_name = last_name
+        if "change_password" in request.POST:
+            current_password = request.POST.get("current_password", "")
+            new_password = request.POST.get("new_password", "")
+            confirm_password = request.POST.get("confirm_password", "")
 
-        request.user.email = request.POST.get("email", "")
-        request.user.phone = request.POST.get("phone", "")
-        request.user.save()
-        messages.success(request, "Profile updated successfully!")
-        return redirect("/profile/")
+            if not request.user.check_password(current_password):
+                messages.error(request, "Current password is incorrect.")
+            elif new_password != confirm_password:
+                messages.error(request, "New passwords do not match.")
+            elif len(new_password) < 8:
+                messages.error(request, "Password must be at least 8 characters.")
+            else:
+                request.user.set_password(new_password)
+                request.user.save()
+                from django.contrib.auth import update_session_auth_hash
+                update_session_auth_hash(request, request.user)
+                messages.success(request, "Password changed successfully!")
+            return redirect("/profile/")
+        else:
+            name = request.POST.get("name", "").strip()
+            first_name, last_name = split_full_name(name)
+            request.user.first_name = first_name
+            request.user.last_name = last_name
+            request.user.email = request.POST.get("email", "")
+            request.user.phone = request.POST.get("phone", "")
+            request.user.save()
+            messages.success(request, "Profile updated successfully!")
+            return redirect("/profile/")
 
     return render(request, "admin/profile.html")
 

@@ -35,7 +35,6 @@
         {% endif %}
     </form>
     <a href="{% url 'export_accounts' %}" class="btn btn-secondary btn-sm">Export Excel</a>
-    <button class="btn btn-primary btn-sm" onclick="showAddAccountModal()">+ Add Account</button>
 </div>
 
 {% if search_query or selected_type or selected_status  %}
@@ -225,79 +224,6 @@
 
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeAccountModal()">Close</button>
-        </div>
-    </div>
-</div>
-
-<!-- Add Account Modal -->
-<div id="addAccountModal" class="modal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h3>Add New Account</h3>
-            <button class="modal-close" onclick="closeAddAccountModal()" aria-label="Close">&times;</button>
-        </div>
-        <div class="modal-body">
-            <form id="addAccountForm">
-                {% csrf_token %}
-                <div class="form-group">
-                    <label class="form-label">Member *</label>
-                    <div class="member-selector">
-                        <input type="text" id="add-member-search" class="form-input" placeholder="Type to search members..." autocomplete="off">
-                        <input type="hidden" id="add-member-id" name="user_id">
-                        <div class="member-selector-results" id="add-member-results"></div>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Account Type *</label>
-                    <select name="account_type" class="form-input" required>
-                        <option value="">Select type...</option>
-                        {% for value, label in account_type_choices %}
-                        <option value="{{ value }}">{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Opening Balance *</label>
-                    <input type="number" name="balance" class="form-input" step="0.01" min="0" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Interest Rate (%)</label>
-                    <input type="number" name="interest_rate" class="form-input" step="0.01" min="0" value="0">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Principal Amount</label>
-                    <input type="number" name="principal_amount" class="form-input" step="0.01" min="0" value="0">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Opening Date *</label>
-                    <input type="date" name="opening_date" class="form-input" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Maturity Date</label>
-                    <input type="date" name="maturity_date" class="form-input">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Tenure (Months)</label>
-                    <input type="number" name="tenure_months" class="form-input" min="0">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Nominee Name</label>
-                    <input type="text" name="nominee_name" class="form-input">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Nominee Relationship</label>
-                    <input type="text" name="nominee_relationship" class="form-input">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Remarks</label>
-                    <textarea name="remarks" class="form-input" rows="3"></textarea>
-                </div>
-                <div id="add-account-error" class="error-message"></div>
-            </form>
-        </div>
-        <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeAddAccountModal()">Cancel</button>
-            <button class="btn btn-primary" id="addAccountBtn" onclick="addAccount()">Add Account</button>
         </div>
     </div>
 </div>

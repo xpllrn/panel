@@ -1,0 +1,20 @@
+{
+  "enabled": true,
+  "name": "Auto Review & Push to GitHub",
+  "description": "Automatically reviews code changes for errors, security issues (API keys, secrets), validates admin/user page separation, checks UI simplicity, and pushes to GitHub with descriptive commit messages",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "*.py",
+      "*.js",
+      "*.html",
+      "*.css",
+      "*.env.example"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Review the code change that was just made:\n\n1. CHANGE ANALYSIS: Identify what was changed and why (check git diff)\n2. ERROR CHECK: Run diagnostics to find any syntax, linting, or type errors\n3. SECURITY AUDIT: Scan for hardcoded API keys, secrets, passwords, or sensitive data in the code\n4. ADMIN/USER SEPARATION: Verify admin and user portals have separate pages and proper access control\n5. UI SIMPLICITY: Ensure changes keep UI simple, don't paste code on top of old code, and follow clean coding practices\n6. CODE QUALITY: Check that new code doesn't duplicate existing functionality\n\nAfter review, if everything looks good:\n- Stage the changes with git add\n- Create a descriptive commit message explaining what changed and why\n- Push to GitHub with: git push origin main (or current branch)\n\nIf issues found, report them clearly and DO NOT push until fixed."
+  }
+}

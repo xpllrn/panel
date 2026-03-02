@@ -12,6 +12,14 @@
     <h2>Profile</h2>
 </div>
 
+{% if messages %}
+<div class="messages" style="margin-bottom: 1rem;">
+    {% for message in messages %}
+    <div class="message message-{{ message.tags }}">{{ message }}</div>
+    {% endfor %}
+</div>
+{% endif %}
+
 <div class="profile-container">
     <div class="profile-card">
         <div class="profile-header">
@@ -31,9 +39,8 @@
             <div class="field-row">
                 <div class="field-label">Name</div>
                 <input type="text" name="name" class="field-input"
-                    value="{% if user.first_name or user.last_name  %}{{ user.first_name }} {{ user.last_name }}{% endif %}"
-                    placeholder="Not set"
-                    disabled>
+                    value="{% if user.first_name or user.last_name %}{{ user.first_name }} {{ user.last_name }}{% endif %}"
+                    placeholder="Not set" disabled>
             </div>
 
             <div class="field-row">
@@ -56,6 +63,31 @@
                 <button type="button" class="btn btn-secondary" onclick="cancelEdit()">Cancel</button>
                 <button type="submit" class="btn btn-primary" id="saveBtn">Save Changes</button>
             </div>
+        </form>
+    </div>
+</div>
+
+<div class="profile-container" style="margin-top: 1.5rem;">
+    <div class="profile-card">
+        <div class="profile-header">
+            <h3 style="font-size: 15px; font-weight: 600; margin: 0;">Change Password</h3>
+        </div>
+        <form method="post" class="profile-form password-form" style="max-width: 380px;">
+            {% csrf_token %}
+            <input type="hidden" name="change_password" value="1">
+            <div class="field-row">
+                <div class="field-label">Current Password</div>
+                <input type="password" name="current_password" class="field-input" required>
+            </div>
+            <div class="field-row">
+                <div class="field-label">New Password</div>
+                <input type="password" name="new_password" class="field-input" required minlength="8">
+            </div>
+            <div class="field-row">
+                <div class="field-label">Confirm New Password</div>
+                <input type="password" name="confirm_password" class="field-input" required minlength="8">
+            </div>
+            <button type="submit" class="btn btn-primary">Change Password</button>
         </form>
     </div>
 </div>

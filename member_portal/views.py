@@ -43,12 +43,64 @@ def member_dashboard_view(request):
     active_accounts = accounts.filter(status="active")
     total_balance = sum(a.balance for a in active_accounts)
 
+    # Per-account details for mini-cards
+    account_details = []
+    for a in active_accounts[:6]:
+        account_details.append({
+            "id": a.id,
+            "account_number": a.account_number,
+            "account_type": a.account_type,
+            "account_type_display": a.get_account_type_display(),
+            "balance": a.balance,
+            "interest_rate": a.interest_rate,
+            "maturity_date": a.maturity_date,
+        })
+
     # Recent transactions (last 5)
     recent_transactions = Receipt.objects.filter(user=user).select_related("member_account")[:5]
 
-    # Active loans
+    # Active loans with progress
     active_loans = Loan.objects.filter(user=user, status__in=["active", "approved"])
     total_outstanding = sum(loan.outstanding_balance for loan in active_loans)
+
+    loan_details = []
+    for loan in active_loans[:5]:
+        loan_details.append({
+            "id": loan.id,
+            "loan_number": loan.loan_number,
+            "loan_type_display": loan.get_loan_type_display(),
+            "principal_amount": loan.principal_amount,
+            "outstanding_balance": loan.outstanding_balance,
+            "emi_amount": loan.emi_amount,
+            "completion_percentage": loan.completion_percentage,
+            "emis_paid": loan.emis_paid,
+            "total_emis": loan.total_emis,
+            "status": loan.status,
+        })
+
+    # Next EMI due
+    next_emi = (
+        LoanRepayment.objects.filter(
+            loan__user=user,
+            loan__status="active",
+            payment_status__in=["upcoming", "overdue"],
+        )
+        .select_related("loan")
+        .order_by("due_date")
+        .first()
+    )
+
+    next_emi_info = None
+    if next_emi:
+        next_emi_info = {
+            "due_date": next_emi.due_date,
+            "amount": next_emi.amount_due,
+            "loan_number": next_emi.loan.loan_number,
+            "is_overdue": next_emi.payment_status == "overdue",
+        }
+
+    # Open tickets count
+    open_tickets_count = Ticket.objects.filter(user=user, status="open").count()
 
     context = {
         "total_accounts": active_accounts.count(),
@@ -58,6 +110,10 @@ def member_dashboard_view(request):
         "recent_transactions": recent_transactions,
         "active_loans": active_loans[:5],
         "accounts": active_accounts[:5],
+        "account_details": account_details,
+        "loan_details": loan_details,
+        "next_emi_info": next_emi_info,
+        "open_tickets_count": open_tickets_count,
     }
     return render(request, "member/dashboard.html", context)
 

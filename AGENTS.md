@@ -6,20 +6,39 @@ This document provides instructions for AI coding agents working in this Django 
 
 - **Framework**: Django 4.2 with Django REST Framework 3.14.0
 - **Language**: Python 3.9+
-- **Database**: Supabase (PostgreSQL) — hosted, not local
+- **Database**: PostgreSQL (Local via Docker for dev, Supabase for production)
 - **Frontend**: Vanilla JavaScript with custom CSS
-- **Backend-as-a-Service**: Supabase (database, storage, auth APIs)
+- **Backend-as-a-Service**: Supabase (production database, storage, auth APIs)
 
 ## Build & Run Commands
 
-### Development Server
+### Local Development Setup (First Time)
 
 ```bash
 # Install dependencies
 pip install -r requirements.txt
 
-# Run locally
+# Start PostgreSQL with Docker and run migrations
+./dev-setup.sh
+
+# Create superuser
+python manage.py createsuperuser
+
+# Run development server
 python manage.py runserver
+```
+
+### Daily Development
+
+```bash
+# Start PostgreSQL (if not running)
+docker-compose up -d
+
+# Run development server
+python manage.py runserver
+
+# Stop PostgreSQL when done
+docker-compose down
 ```
 
 ### Database Migrations
@@ -29,20 +48,22 @@ python manage.py makemigrations    # Create new migrations
 python manage.py migrate           # Apply migrations to Supabase
 ```
 
-### Supabase Configuration
+### Supabase Configuration (Production Only)
+
+For production deployment, configure Supabase:
 
 1. Create a Supabase project at [supabase.com](https://supabase.com)
 2. Copy database credentials from **Settings → Database**
 3. Copy API keys from **Settings → API**
-4. Update `.env` with all Supabase credentials
+4. Update `.env.production` with all Supabase credentials
 
 ```bash
-# Required .env variables for Supabase:
+# Required .env variables for Supabase (production):
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_KEY=your-publishable-key
 SUPABASE_SERVICE_KEY=your-secret-key
 DB_NAME=postgres
-DB_USER=postgres
+DB_USER=postgres.[project-ref]
 DB_PASSWORD=your-db-password
 DB_HOST=aws-0-[region].pooler.supabase.com
 DB_PORT=5432
@@ -50,7 +71,19 @@ DB_PORT=5432
 # IMPORTANT:
 # Use "Session Pooler" (port 5432) or "Transaction Pooler" (port 6543).
 # Do NOT use direct connection (db.xxx.supabase.co) as it is IPv6-only.
-# User format for pooler: postgres.[project-ref]
+```
+
+### Local Development Configuration
+
+For local development, use `.env.local` (already configured):
+
+```bash
+# Local PostgreSQL via Docker
+DB_NAME=panel_dev
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_HOST=localhost
+DB_PORT=5432
 ```
 
 ## Linting & Formatting
@@ -306,4 +339,3 @@ status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active
 - Do not commit `.env` files or secrets
 - Do not use `DEBUG=True` in production
 - Do not skip CSRF tokens in forms/AJAX
-- Do not use Docker for development (database is on Supabase)

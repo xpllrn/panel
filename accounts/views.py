@@ -15,7 +15,7 @@ def signup_view(request):
 def _get_redirect_url(user):
     """Get the appropriate redirect URL based on user role."""
     if user.is_staff or user.is_admin_role():
-        return "/home/"
+        return "/admin/"
     return "/member/"
 
 
@@ -35,10 +35,10 @@ def admin_login_view(request):
             user = form.get_user()
             if not (user.is_staff or user.is_admin_role()):
                 messages.error(request, "You do not have admin access.")
-                return redirect("/portal/login/")
+                return redirect("/member/login/")
             login(request, user)
             messages.success(request, f"Welcome back, {user.username}!")
-            return redirect("/home/")
+            return redirect("/admin/")
     else:
         form = LoginForm()
 

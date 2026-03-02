@@ -3,6 +3,8 @@ from datetime import date
 from django.contrib.auth.models import AbstractUser
 from django.core.validators import RegexValidator
 from django.db import models
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
 # Validators for Indian identity documents
 pan_validator = RegexValidator(
@@ -79,12 +81,8 @@ class User(AbstractUser):
         ("letter", "Letter"),
     ]
 
-    mobile_primary = models.CharField(
-        max_length=30, blank=True, null=True, verbose_name="Primary Mobile"
-    )
-    mobile_alternate = models.CharField(
-        max_length=30, blank=True, null=True, verbose_name="Alternate Mobile"
-    )
+    mobile_primary = models.CharField(max_length=30, blank=True, null=True, verbose_name="Primary Mobile")
+    mobile_alternate = models.CharField(max_length=30, blank=True, null=True, verbose_name="Alternate Mobile")
     preferred_comm_mode = models.CharField(max_length=20, choices=COMM_MODE_CHOICES, default="email")
     dnd_enabled = models.BooleanField(default=False, verbose_name="Do Not Disturb")
 
@@ -264,11 +262,7 @@ class User(AbstractUser):
 
             year = date.today().year
             # Get the last member_id for this year
-            last_member = (
-                User.objects.filter(member_id__startswith=f"MBR{year}")
-                .order_by("-member_id")
-                .first()
-            )
+            last_member = User.objects.filter(member_id__startswith=f"MBR{year}").order_by("-member_id").first()
 
             if last_member and last_member.member_id:
                 # Extract the sequential number and increment
@@ -755,3 +749,48 @@ class TicketMessage(models.Model):
         sender_name = self.sender.display_name if self.sender else "System"
         return f"Message by {sender_name} on #{self.ticket_id}"
 
+
+# Signal handlers
+@receiver(post_save, sender=User)
+def create_member_accounts(sender, instance, created, **kwargs):
+    """
+    Automatically create accounts for all account types when a new user is created.
+    This ensures every member has all account types available from the start.
+    """
+    if created and instance.role == "member" and instance.member_id:
+        from datetime import date as date_today
+
+        # Get all account types from MemberAccount.ACCOUNT_TYPE_CHOICES
+        account_types = [choice[0] for choice in MemberAccount.ACCOUNT_TYPE_CHOICES]
+
+        # Create an account for each type
+        for account_type in account_types:
+            try:
+                # Generate unique account number: {TYPE_PREFIX}-{MEMBER_ID}
+                # Example: FD-MBR202600001, RD-MBR202600001, etc.
+                type_prefix = account_type.upper()
+                account_number = f"{type_prefix}-{instance.member_id}"
+
+                # Skip if account already exists (safety check)
+                if MemberAccount.objects.filter(account_number=account_number).exists():
+                    continue
+
+                # Create the account with default values
+                MemberAccount.objects.create(
+                    user=instance,
+                    account_number=account_number,
+                    account_type=account_type,
+                    status="active",
+                    balance=0.00,
+                    interest_rate=0.00,
+                    principal_amount=0.00,
+                    accrued_interest=0.00,
+                    opening_date=date_today.today(),
+                    remarks=f"Auto-created {account_type.upper()} account for member {instance.display_name}",
+                )
+            except Exception as e:
+                # Log error but don't fail user creation
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.error(f"Failed to create {account_type} account for user {instance.id}: {str(e)}")

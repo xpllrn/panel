@@ -78,19 +78,22 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-# Database - Supabase PostgreSQL
+# Database - Supabase PostgreSQL or Local PostgreSQL
 # Connection details are read from .env file
+db_options = {}
+# Only require SSL for remote databases (Supabase)
+if config("DB_HOST") not in ["localhost", "127.0.0.1"]:
+    db_options["sslmode"] = "require"
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": config("DB_NAME", default="postgres"),
         "USER": config("DB_USER", default="postgres"),
-        "PASSWORD": config("DB_PASSWORD"),
+        "PASSWORD": config("DB_PASSWORD", default=""),
         "HOST": config("DB_HOST"),
         "PORT": config("DB_PORT", default="5432"),
-        "OPTIONS": {
-            "sslmode": "require",
-        },
+        "OPTIONS": db_options,
     }
 }
 

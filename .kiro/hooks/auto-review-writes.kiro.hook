@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "name": "Auto Review Write Operations",
+  "description": "Automatically reviews code changes before write operations to ensure quality and standards compliance",
+  "version": "1",
+  "when": {
+    "type": "preToolUse",
+    "toolTypes": [
+      "write"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Review this write operation to ensure it follows Django best practices, coding standards from AGENTS.md, and doesn't introduce bugs or security issues. Check for proper error handling, naming conventions, and code quality."
+  }
+}

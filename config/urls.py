@@ -1,17 +1,22 @@
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.shortcuts import redirect
+from django.shortcuts import redirect, render
 from django.urls import include, path
 
+from accounts import views
 from admin_portal import views as admin_views
+
+
+def custom_404(request, exception=None):
+    return render(request, "404.html", status=404)
 
 
 def root_redirect(request):
     """Redirect root to admin home or member portal based on role"""
     if request.user.is_authenticated:
         if request.user.is_staff or request.user.is_admin_role():
-            return redirect("/home/")
+            return redirect("/admin/")
         return redirect("/member/")
     return redirect("/member/login/")
 
@@ -19,8 +24,9 @@ def root_redirect(request):
 urlpatterns = [
     path("", root_redirect, name="root"),
     path("member/", include("member_portal.urls")),
-    path("admin/", admin.site.urls),
-    path("home/", admin_views.home_view, name="home"),
+    path("django-admin/", admin.site.urls),
+    path("admin/", admin_views.home_view, name="home"),
+    path("admin/login/", views.admin_login_view, name="admin_login"),
     path("members/", admin_views.members_view, name="members"),
     path("members/add/", admin_views.add_member_view, name="add_member"),
     path("members/<int:user_id>/get/", admin_views.get_member_view, name="get_member"),
@@ -66,6 +72,10 @@ urlpatterns = [
     path("", include("accounts.urls")),
 ]
 
+handler404 = custom_404
+
 if settings.DEBUG:
+    # Add test URL so you can preview the 404 page even in debug mode
+    urlpatterns += [path("404-test/", custom_404)]
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

@@ -1,210 +1,379 @@
 /**
- * Dashboard Page Styles
- * Stats cards, charts, recent transactions
+ * Dashboard Styles — Minimal & Modern
+ * Shared by Admin and Member dashboards
  */
 
 /* ========================================
-   Stats Grid
+   Header
    ======================================== */
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: var(--spacing-xl);
-    margin-bottom: var(--spacing-2xl);
-}
-
-.stat-card {
-    background: var(--color-white);
-    padding: var(--spacing-xl);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-lg);
-}
-
-.stat-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: var(--radius-lg);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: var(--font-size-lg);
-    font-weight: 700;
-    flex-shrink: 0;
-}
-
-.stat-icon-members {
-    background: #e0f2fe;
-    color: #0369a1;
-}
-
-.stat-icon-accounts {
-    background: #d1fae5;
-    color: #047857;
-}
-
-.stat-icon-deposits {
-    background: #fef3c7;
-    color: #b45309;
-}
-
-.stat-icon-today {
-    background: #ddd6fe;
-    color: #7c3aed;
-}
-
-.stat-info {
-    min-width: 0;
-}
-
-.stat-value {
-    font-size: var(--font-size-xl);
-    font-weight: 700;
-    color: var(--color-gray-800);
-    line-height: 1.2;
-}
-
-.stat-value-amount::before {
-    content: '\20B9';
-    font-size: var(--font-size-lg);
-}
-
-.stat-label {
-    font-size: var(--font-size-sm);
-    color: var(--color-gray-500);
-    margin-top: var(--spacing-xs);
-}
-
-.stat-sub {
-    font-size: var(--font-size-xs);
-    color: var(--color-gray-400);
-    margin-top: 2px;
-}
-
-.stat-sub-split {
-    display: flex;
-    gap: var(--spacing-sm);
-}
-
-.stat-credit {
-    color: var(--color-success-text);
-}
-
-.stat-debit {
-    color: var(--color-error-text);
-}
-
-/* ========================================
-   Dashboard Layout
-   ======================================== */
-.dashboard-row {
-    display: flex;
-    gap: var(--spacing-xl);
-    margin-bottom: var(--spacing-xl);
-    flex-wrap: wrap;
-}
-
-.dashboard-card {
-    background: var(--color-white);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-}
-
-.dashboard-card-wide {
-    flex: 2;
-    min-width: 300px;
-}
-
-.dashboard-card-narrow {
-    flex: 1;
-    min-width: 250px;
-}
-
-.dashboard-card-header {
+.dash-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    padding: var(--spacing-lg) var(--spacing-xl);
-    border-bottom: 1px solid var(--color-gray-200);
+    align-items: flex-start;
+    margin-bottom: 1.5rem;
 }
 
-.dashboard-card-header h3 {
-    font-size: var(--font-size-base);
-    font-weight: 600;
-    color: var(--color-gray-800);
+.dash-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #111;
     margin: 0;
 }
 
-.view-all-link {
-    font-size: var(--font-size-sm);
-    color: var(--color-primary);
-    text-decoration: none;
+.dash-subtitle {
+    font-size: 0.8rem;
+    color: #888;
+    margin: 4px 0 0;
 }
 
-.view-all-link:hover {
+.dash-date {
+    font-size: 0.8rem;
+    color: #888;
+    white-space: nowrap;
+    padding: 6px 12px;
+    background: #fff;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+/* ========================================
+   Metrics Row
+   ======================================== */
+.metrics {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px;
+    margin-bottom: 1.25rem;
+}
+
+.metrics--4 {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+.metric {
+    background: #fff;
+    border-radius: 10px;
+    padding: 16px 18px;
+    border: 1px solid #f0f0f0;
+    transition: box-shadow 0.15s;
+}
+
+.metric:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.metric--alert {
+    border-color: #fecdd3;
+    background: #fff5f5;
+}
+
+.metric-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #999;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.metric-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #111;
+    line-height: 1.2;
+}
+
+.metric-value--money {
+    font-size: 1.25rem;
+}
+
+.metric-sub {
+    font-size: 0.7rem;
+    color: #aaa;
+    margin-top: 4px;
+}
+
+/* ========================================
+   Panels
+   ======================================== */
+.panel {
+    background: #fff;
+    border-radius: 10px;
+    border: 1px solid #f0f0f0;
+    margin-bottom: 1.25rem;
+    overflow: hidden;
+}
+
+.panel-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 1.25rem;
+}
+
+.panel-row .panel {
+    margin-bottom: 0;
+}
+
+.panel--grow {
+    flex: 2;
+    min-width: 0;
+}
+
+.panel--sm {
+    flex: 1;
+    min-width: 0;
+}
+
+.panel--half {
+    flex: 1;
+    min-width: 0;
+}
+
+.panel-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 18px;
+    border-bottom: 1px solid #f5f5f5;
+}
+
+.panel-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #333;
+}
+
+.panel-link {
+    font-size: 0.75rem;
+    color: var(--color-primary);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.panel-link:hover {
     text-decoration: underline;
 }
 
-.dashboard-card-body {
-    padding: var(--spacing-xl);
-    flex: 1;
+.panel-body {
+    padding: 18px;
 }
 
-.dashboard-card-body-table {
+.panel-body--flush {
     padding: 0;
 }
 
 /* ========================================
-   Bar Chart (CSS-only)
+   Sections (Member)
    ======================================== */
+.section {
+    margin-bottom: 1.25rem;
+}
+
+.section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.section-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #333;
+}
+
+/* ========================================
+   Tables
+   ======================================== */
+.tbl {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.tbl th,
+.tbl td {
+    padding: 10px 18px;
+    text-align: left;
+    font-size: 0.8rem;
+    border-bottom: 1px solid #f5f5f5;
+}
+
+.tbl th {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background: #fafafa;
+}
+
+.tbl tbody tr:hover {
+    background: #fafafa;
+}
+
+.tbl tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.cell-primary {
+    font-weight: 500;
+    color: #333;
+}
+
+.cell-secondary {
+    font-size: 0.7rem;
+    color: #bbb;
+    font-family: 'SF Mono', 'Menlo', monospace;
+}
+
+.mono {
+    font-family: 'SF Mono', 'Menlo', monospace;
+    font-size: 0.78rem;
+    font-weight: 500;
+}
+
+.text-green {
+    color: #16a34a;
+}
+
+.text-red {
+    color: #dc2626;
+}
+
+.text-muted {
+    color: #999;
+}
+
+.empty {
+    text-align: center;
+    color: #bbb;
+    padding: 1.5rem;
+    font-size: 0.8rem;
+}
+
+/* ========================================
+   Badges & Pills
+   ======================================== */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    font-weight: 700;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 100px;
+    margin-left: 4px;
+}
+
+.badge--red {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 100px;
+    font-size: 0.68rem;
+    font-weight: 600;
+}
+
+.pill--credit {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.pill--debit {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.pill--transfer {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.pill--interest {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.pill--dividend {
+    background: #f3e8ff;
+    color: #7c3aed;
+}
+
+.pill--share_capital {
+    background: #dcfce7;
+    color: #047857;
+}
+
+.pill--mild {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.pill--warning {
+    background: #fed7aa;
+    color: #c2410c;
+}
+
+.pill--critical {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+/* ========================================
+   Bar Chart
+   ======================================== */
+.chart-area {
+    min-height: 180px;
+}
+
 .bar-chart {
     display: flex;
     flex-direction: column;
-    height: 220px;
+    height: 200px;
 }
 
-.bar-chart-legend {
+.bar-legend {
     display: flex;
-    gap: var(--spacing-lg);
-    margin-bottom: var(--spacing-md);
-    font-size: var(--font-size-xs);
-    color: var(--color-gray-500);
+    gap: 16px;
+    margin-bottom: 10px;
+    font-size: 0.7rem;
+    color: #999;
 }
 
-.legend-item {
+.bar-legend-i {
     display: flex;
     align-items: center;
-    gap: var(--spacing-xs);
+    gap: 5px;
 }
 
-.legend-dot {
-    width: 10px;
-    height: 10px;
+.dot {
+    width: 8px;
+    height: 8px;
     border-radius: 2px;
 }
 
-.legend-credit {
-    background: var(--color-primary);
+.dot--blue {
+    background: #3b82f6;
 }
 
-.legend-debit {
-    background: var(--color-error-text);
+.dot--red {
+    background: #ef4444;
 }
 
-.bar-chart-bars {
+.bars {
     flex: 1;
     display: flex;
     align-items: flex-end;
-    gap: var(--spacing-md);
-    padding-bottom: var(--spacing-sm);
+    gap: 8px;
 }
 
-.bar-group {
+.bar-col {
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -216,366 +385,433 @@
     flex: 1;
     display: flex;
     align-items: flex-end;
-    gap: 3px;
+    gap: 2px;
     width: 100%;
-    max-width: 50px;
+    max-width: 40px;
 }
 
 .bar {
     flex: 1;
     border-radius: 3px 3px 0 0;
     min-height: 0;
-    transition: opacity var(--transition-fast);
-    position: relative;
+    transition: opacity 0.15s;
+    cursor: default;
 }
 
 .bar:hover {
-    opacity: 0.8;
+    opacity: 0.75;
 }
 
-.bar-credit {
-    background: var(--color-primary);
+.bar--blue {
+    background: #3b82f6;
 }
 
-.bar-debit {
-    background: var(--color-error-text);
+.bar--red {
+    background: #ef4444;
 }
 
-.bar-label {
-    font-size: var(--font-size-xs);
-    color: var(--color-gray-500);
-    margin-top: var(--spacing-xs);
-    text-align: center;
+.bar-day {
+    font-size: 0.68rem;
+    color: #bbb;
+    margin-top: 4px;
+    font-weight: 500;
 }
 
 /* ========================================
-   Horizontal Bars
+   Horizontal Bars (Account Types)
    ======================================== */
-.horizontal-bars {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-lg);
+.hbar {
+    margin-bottom: 12px;
 }
 
-.h-bar-item {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-xs);
+.hbar:last-child {
+    margin-bottom: 0;
 }
 
-.h-bar-header {
+.hbar-head {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-}
-
-.h-bar-label {
-    font-size: var(--font-size-sm);
+    font-size: 0.78rem;
     font-weight: 500;
-    color: var(--color-gray-700);
+    color: #555;
+    margin-bottom: 4px;
 }
 
-.h-bar-value {
-    font-size: var(--font-size-xs);
-    color: var(--color-gray-500);
-}
-
-.h-bar-track {
-    height: 8px;
-    background: var(--color-gray-100);
-    border-radius: 4px;
+.hbar-track {
+    height: 6px;
+    background: #f3f3f3;
+    border-radius: 100px;
     overflow: hidden;
 }
 
-.h-bar-fill {
+.hbar-fill {
     height: 100%;
-    border-radius: 4px;
+    border-radius: 100px;
     transition: width 0.5s ease;
 }
 
 /* ========================================
-   Status List
+   Monthly Comparison
    ======================================== */
-.status-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-md);
+.month-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
 }
 
-.status-row {
+.month-cell {
+    padding: 14px;
+    border-radius: 8px;
+    background: #fafafa;
+    border: 1px solid #f0f0f0;
+}
+
+
+.month-cell--muted .month-val {
+    color: #999;
+}
+
+.month-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #999;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.month-val {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #111;
+}
+
+.month-delta {
+    font-size: 0.7rem;
+    font-weight: 600;
+    margin-top: 4px;
+}
+
+.month-delta--up {
+    color: #16a34a;
+}
+
+.month-delta--down {
+    color: #dc2626;
+}
+
+/* ========================================
+   Alert Banner (Member)
+   ======================================== */
+.alert {
     display: flex;
     align-items: center;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-sm) 0;
-    border-bottom: 1px solid var(--color-gray-100);
+    gap: 12px;
+    padding: 12px 18px;
+    border-radius: 8px;
+    margin-bottom: 1.25rem;
+    font-size: 0.82rem;
+    color: #333;
 }
 
-.status-row:last-child {
-    border-bottom: none;
+.alert--blue {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
 }
 
-.status-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: var(--radius-full);
+.alert--red {
+    background: #fef2f2;
+    border: 1px solid #fecdd3;
+}
+
+.alert-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
     flex-shrink: 0;
 }
 
-.status-name {
-    font-size: var(--font-size-sm);
-    color: var(--color-gray-700);
-    flex: 1;
+.alert--blue .alert-dot {
+    background: #3b82f6;
 }
 
-.status-count {
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-    color: var(--color-gray-800);
-    min-width: 28px;
-    text-align: right;
-}
-
-.status-pct {
-    font-size: var(--font-size-xs);
-    color: var(--color-gray-400);
-    min-width: 36px;
-    text-align: right;
+.alert--red .alert-dot {
+    background: #ef4444;
 }
 
 /* ========================================
-   Quick Info
+   Account Cards (Member)
    ======================================== */
-.quick-info-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
+.card-grid {
+    display: grid;
+    gap: 12px;
 }
 
-.quick-info-item {
+.card-grid--3 {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.card-grid--2 {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.acc-card {
+    display: block;
+    background: #fff;
+    border-radius: 10px;
+    padding: 18px;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid #f0f0f0;
+    transition: box-shadow 0.15s, transform 0.15s;
+}
+
+.acc-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    transform: translateY(-1px);
+    text-decoration: none;
+}
+
+.acc-type {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #999;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.acc-type::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #d1d5db;
+    flex-shrink: 0;
+}
+
+.acc-card--fd .acc-type::before {
+    background: #f59e0b;
+}
+
+.acc-card--cd .acc-type::before {
+    background: #ec4899;
+}
+
+.acc-card--rd .acc-type::before {
+    background: #8b5cf6;
+}
+
+.acc-card--od .acc-type::before {
+    background: #10b981;
+}
+
+.acc-card--share .acc-type::before {
+    background: #3b82f6;
+}
+
+.acc-card--sukanya .acc-type::before {
+    background: #f97316;
+}
+
+.acc-card--suputra .acc-type::before {
+    background: #6366f1;
+}
+
+.acc-num {
+    font-family: 'SF Mono', 'Menlo', monospace;
+    font-size: 0.7rem;
+    color: #ccc;
+    margin: 2px 0 10px;
+}
+
+.acc-bal {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #111;
+}
+
+.acc-rate {
+    font-size: 0.68rem;
+    color: #bbb;
+    margin-top: 2px;
+}
+
+/* ========================================
+   Loan Cards (Member)
+   ======================================== */
+.loan-card {
+    display: block;
+    background: #fff;
+    border-radius: 10px;
+    padding: 18px;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid #f0f0f0;
+    transition: box-shadow 0.15s, transform 0.15s;
+}
+
+.loan-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    transform: translateY(-1px);
+    text-decoration: none;
+}
+
+.loan-head {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: var(--spacing-md) 0;
-    border-bottom: 1px solid var(--color-gray-100);
+    margin-bottom: 12px;
 }
 
-.quick-info-item:last-child {
-    border-bottom: none;
-}
-
-.quick-info-label {
-    font-size: var(--font-size-sm);
-    color: var(--color-gray-600);
-}
-
-.quick-info-value {
-    font-size: var(--font-size-md);
+.loan-type {
     font-weight: 600;
-    color: var(--color-gray-800);
+    font-size: 0.85rem;
+    color: #333;
 }
 
-/* ========================================
-   Dashboard Table (Recent Transactions)
-   ======================================== */
-.dashboard-table {
-    width: 100%;
-    border-collapse: collapse;
+.loan-num {
+    font-family: 'SF Mono', 'Menlo', monospace;
+    font-size: 0.68rem;
+    color: #ccc;
 }
 
-.dashboard-table th,
-.dashboard-table td {
-    padding: var(--spacing-sm) var(--spacing-lg);
-    text-align: left;
-    border-bottom: 1px solid var(--color-gray-100);
-    font-size: var(--font-size-sm);
+.loan-amounts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
 }
 
-.dashboard-table th {
-    background: var(--color-gray-50);
-    font-weight: 600;
-    color: var(--color-gray-600);
+.loan-amt-label {
+    font-size: 0.65rem;
+    color: #999;
     text-transform: uppercase;
     letter-spacing: 0.03em;
-    font-size: var(--font-size-xs);
 }
 
-.dashboard-table tbody tr:last-child td {
-    border-bottom: none;
+.loan-amt {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #111;
+    margin-top: 1px;
 }
 
-.txn-receipt-number {
-    font-family: monospace;
+.progress-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.68rem;
+    color: #999;
     font-weight: 500;
-    color: var(--color-gray-700);
-    white-space: nowrap;
+    margin-bottom: 5px;
 }
 
-.txn-member {
-    font-weight: 500;
-    color: var(--color-gray-800);
-    font-size: var(--font-size-sm);
+.progress-track {
+    height: 5px;
+    background: #f3f3f3;
+    border-radius: 100px;
+    overflow: hidden;
 }
 
-.txn-account {
-    font-size: var(--font-size-xs);
-    color: var(--color-gray-500);
-    font-family: monospace;
+.progress-fill {
+    height: 100%;
+    background: #10b981;
+    border-radius: 100px;
+    transition: width 0.5s ease;
 }
 
-.txn-type {
-    display: inline-block;
-    padding: 2px var(--spacing-sm);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-xs);
-    font-weight: 500;
-}
-
-.txn-type-credit {
-    background: var(--color-success);
-    color: var(--color-success-text);
-}
-
-.txn-type-debit {
-    background: var(--color-error);
-    color: var(--color-error-text);
-}
-
-.txn-type-transfer {
-    background: var(--color-info);
-    color: var(--color-info-text);
-}
-
-.txn-type-interest {
-    background: #fef3c7;
-    color: #b45309;
-}
-
-.txn-type-dividend {
-    background: #ddd6fe;
-    color: #7c3aed;
-}
-
-.txn-type-share_capital {
-    background: #d1fae5;
-    color: #047857;
-}
-
-.txn-amount {
-    font-family: monospace;
-    font-weight: 600;
-    text-align: right;
-    white-space: nowrap;
-}
-
-.txn-amount-credit {
-    color: var(--color-success-text);
-}
-
-.txn-amount-debit {
-    color: var(--color-error-text);
-}
-
-.txn-date {
-    color: var(--color-gray-500);
-    white-space: nowrap;
-}
-
-.chart-empty {
-    text-align: center;
-    color: var(--color-gray-400);
-    padding: var(--spacing-xl);
-    font-size: var(--font-size-sm);
+.loan-emi {
+    font-size: 0.7rem;
+    color: #bbb;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #f5f5f5;
 }
 
 /* ========================================
-   Overdue Payments
+   Quick Links (Member)
    ======================================== */
-.overdue-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--color-error);
-    color: var(--color-error-text);
-    font-size: var(--font-size-xs);
-    font-weight: 600;
-    min-width: 20px;
-    height: 20px;
-    padding: 0 var(--spacing-xs);
-    border-radius: var(--radius-full);
-    margin-left: var(--spacing-xs);
+.qlink {
+    display: block;
+    background: #fff;
+    border: 1px solid #f0f0f0;
+    border-radius: 10px;
+    padding: 18px;
+    text-decoration: none;
+    color: inherit;
+    transition: box-shadow 0.15s, transform 0.15s;
 }
 
-.overdue-table td {
-    vertical-align: middle;
+.qlink:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    transform: translateY(-1px);
+    text-decoration: none;
 }
 
-.overdue-count {
-    font-weight: 600;
-    color: var(--color-gray-700);
-    white-space: nowrap;
+.qlink strong {
+    display: block;
+    font-size: 0.85rem;
+    color: #333;
+    margin-bottom: 2px;
 }
 
-.overdue-amount {
-    font-family: monospace;
-    font-weight: 600;
-    color: var(--color-error-text);
-    white-space: nowrap;
-}
-
-.overdue-amount::before {
-    content: '\20B9';
-}
-
-.overdue-days {
-    display: inline-block;
-    padding: 2px var(--spacing-sm);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-xs);
-    font-weight: 600;
-    white-space: nowrap;
-}
-
-.overdue-days-mild {
-    background: #fef3c7;
-    color: #b45309;
-}
-
-.overdue-days-warning {
-    background: #fed7aa;
-    color: #c2410c;
-}
-
-.overdue-days-critical {
-    background: var(--color-error);
-    color: var(--color-error-text);
-}
-
-.overdue-empty {
-    padding: var(--spacing-2xl);
-    color: var(--color-success-text);
-    font-weight: 500;
+.qlink span {
+    font-size: 0.75rem;
+    color: #999;
 }
 
 /* ========================================
    Responsive
    ======================================== */
-@media (max-width: 1024px) {
-    .stats-grid {
+@media (max-width: 1100px) {
+    .metrics {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .month-grid {
         grid-template-columns: repeat(2, 1fr);
+    }
+
+    .panel-row {
+        flex-direction: column;
     }
 }
 
 @media (max-width: 768px) {
-    .stats-grid {
+
+    .metrics,
+    .metrics--4 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .card-grid--3 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .card-grid--2 {
         grid-template-columns: 1fr;
     }
 
-    .dashboard-row {
-        flex-direction: column;
+    .month-grid {
+        grid-template-columns: 1fr;
     }
 
-    .dashboard-card-wide,
-    .dashboard-card-narrow {
-        min-width: 0;
+    .dash-header {
+        flex-direction: column;
+        gap: 8px;
+    }
+}
+
+@media (max-width: 480px) {
+
+    .metrics,
+    .metrics--4 {
+        grid-template-columns: 1fr;
+    }
+
+    .card-grid--3 {
+        grid-template-columns: 1fr;
     }
 }

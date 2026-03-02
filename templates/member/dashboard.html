@@ -1,171 +1,120 @@
 {% extends "member/base.html" %}
+{% load static %}
 
 {% block title %}Dashboard - Member Portal{% endblock %}
 
 {% block extra_css %}
-<style>
-    /* Stats cards matching admin style */
-    .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 1.25rem;
-        margin-bottom: 1.5rem;
-    }
-
-    .stat-card {
-        background: var(--color-white);
-        padding: 1.25rem;
-        border-radius: var(--radius-lg);
-        box-shadow: var(--shadow-sm);
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-    }
-
-    .stat-icon {
-        width: 48px;
-        height: 48px;
-        border-radius: var(--radius-lg);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.1rem;
-        font-weight: 700;
-        flex-shrink: 0;
-    }
-
-    .stat-icon-accounts {
-        background: #e0f2fe;
-        color: #0369a1;
-    }
-
-    .stat-icon-balance {
-        background: #d1fae5;
-        color: #047857;
-    }
-
-    .stat-icon-loans {
-        background: #fef3c7;
-        color: #b45309;
-    }
-
-    .stat-icon-outstanding {
-        background: #fee2e2;
-        color: #dc2626;
-    }
-
-    .stat-info {
-        min-width: 0;
-    }
-
-    .stat-value {
-        font-size: 1.25rem;
-        font-weight: 700;
-        color: var(--color-gray-800);
-        line-height: 1.2;
-    }
-
-    .stat-label {
-        font-size: 0.8rem;
-        color: var(--color-gray-500);
-        margin-top: 0.25rem;
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
-    }
-
-    @media (max-width: 1024px) {
-        .stats-grid {
-            grid-template-columns: repeat(2, 1fr);
-        }
-    }
-
-    @media (max-width: 768px) {
-        .stats-grid {
-            grid-template-columns: 1fr;
-        }
-    }
-</style>
+<link rel="stylesheet" href="{% static 'css/pages/dashboard.css' %}">
 {% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h2>Welcome, {{ request.user.display_name }}</h2>
-    <p class="page-subtitle">Member ID: {{ request.user.member_id|default:"N/A" }}</p>
+<div class="dash-header">
+    <div>
+        <h2 class="dash-title">Welcome, {{ request.user.display_name }}</h2>
+        <p class="dash-subtitle">Member ID: <strong>{{ request.user.member_id|default:"N/A" }}</strong></p>
+    </div>
+    <div class="dash-date" id="memberDate"></div>
 </div>
 
-<!-- Summary Cards -->
-<div class="stats-grid">
-    <div class="stat-card">
-        <div class="stat-icon stat-icon-accounts">A</div>
-        <div class="stat-info">
-            <div class="stat-value">{{ total_accounts }}</div>
-            <div class="stat-label">Active Accounts</div>
-        </div>
+<div class="metrics metrics--4">
+    <div class="metric">
+        <div class="metric-label">Accounts</div>
+        <div class="metric-value">{{ total_accounts }}</div>
     </div>
-    <div class="stat-card">
-        <div class="stat-icon stat-icon-balance">₹</div>
-        <div class="stat-info">
-            <div class="stat-value">₹{{ total_balance|floatformat:2 }}</div>
-            <div class="stat-label">Total Balance</div>
-        </div>
+    <div class="metric">
+        <div class="metric-label">Total Balance</div>
+        <div class="metric-value metric-value--money">₹{{ total_balance|floatformat:2 }}</div>
     </div>
-    <div class="stat-card">
-        <div class="stat-icon stat-icon-loans">L</div>
-        <div class="stat-info">
-            <div class="stat-value">{{ total_active_loans }}</div>
-            <div class="stat-label">Active Loans</div>
-        </div>
+    <div class="metric">
+        <div class="metric-label">Active Loans</div>
+        <div class="metric-value">{{ total_active_loans }}</div>
     </div>
-    <div class="stat-card">
-        <div class="stat-icon stat-icon-outstanding">₹</div>
-        <div class="stat-info">
-            <div class="stat-value">₹{{ total_outstanding|floatformat:2 }}</div>
-            <div class="stat-label">Outstanding Loan</div>
-        </div>
+    <div class="metric">
+        <div class="metric-label">Outstanding</div>
+        <div class="metric-value metric-value--money">₹{{ total_outstanding|floatformat:2 }}</div>
     </div>
 </div>
 
-<!-- Quick Links -->
-<div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); margin-top: 0.5rem;">
-    <a href="{% url 'member_portal:accounts' %}" class="card" style="text-decoration: none;">
-        <div class="card-body" style="text-align: center; padding: 1.25rem;">
-            <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">📊</div>
-            <strong>My Accounts</strong>
-            <p style="font-size: 0.85rem; color: var(--color-gray-500); margin: 0.25rem 0 0;">View balances &
-                transactions</p>
-        </div>
-    </a>
-    <a href="{% url 'member_portal:loans' %}" class="card" style="text-decoration: none;">
-        <div class="card-body" style="text-align: center; padding: 1.25rem;">
-            <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">💰</div>
-            <strong>My Loans</strong>
-            <p style="font-size: 0.85rem; color: var(--color-gray-500); margin: 0.25rem 0 0;">Check loan status & EMIs
-            </p>
-        </div>
-    </a>
-    <a href="{% url 'member_portal:tickets' %}" class="card" style="text-decoration: none;">
-        <div class="card-body" style="text-align: center; padding: 1.25rem;">
-            <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">🎫</div>
-            <strong>Support</strong>
-            <p style="font-size: 0.85rem; color: var(--color-gray-500); margin: 0.25rem 0 0;">Raise a query or ticket
-            </p>
-        </div>
-    </a>
+{% if next_emi_info %}
+<div class="alert {% if next_emi_info.is_overdue %}alert--red{% else %}alert--blue{% endif %}">
+    <span class="alert-dot"></span>
+    <div><strong>{% if next_emi_info.is_overdue %}Overdue EMI{% else %}Next EMI Due{% endif %}</strong> — ₹{{ next_emi_info.amount|floatformat:2 }} for {{ next_emi_info.loan_number }}, {% if next_emi_info.is_overdue %}was
+        due{% else %}due{% endif %} {{ next_emi_info.due_date|date:"d M Y" }}</div>
+</div>
+{% endif %}
+
+{% if account_details %}
+<div class="section">
+    <div class="section-head">
+        <span class="section-title">My Accounts</span>
+        <a href="{% url 'member_portal:accounts' %}" class="panel-link">View All →</a>
+    </div>
+    <div class="card-grid card-grid--3">
+        {% for acc in account_details %}
+        <a href="{% url 'member_portal:account_detail' acc.id %}" class="acc-card acc-card--{{ acc.account_type }}">
+            <div class="acc-type">{{ acc.account_type_display }}</div>
+            <div class="acc-num">{{ acc.account_number }}</div>
+            <div class="acc-bal">₹{{ acc.balance|floatformat:2 }}</div>
+            {% if acc.interest_rate %}<div class="acc-rate">{{ acc.interest_rate }}% p.a.</div>{% endif %}
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if loan_details %}
+<div class="section">
+    <div class="section-head">
+        <span class="section-title">Active Loans</span>
+        <a href="{% url 'member_portal:loans' %}" class="panel-link">View All →</a>
+    </div>
+    <div class="card-grid card-grid--2">
+        {% for loan in loan_details %}
+        <a href="{% url 'member_portal:loan_detail' loan.id %}" class="loan-card">
+            <div class="loan-head"><span class="loan-type">{{ loan.loan_type_display }}</span><span class="loan-num">{{ loan.loan_number }}</span></div>
+            <div class="loan-amounts">
+                <div>
+                    <div class="loan-amt-label">Principal</div>
+                    <div class="loan-amt">₹{{ loan.principal_amount|floatformat:0 }}</div>
+                </div>
+                <div>
+                    <div class="loan-amt-label">Outstanding</div>
+                    <div class="loan-amt text-red">₹{{ loan.outstanding_balance|floatformat:0 }}</div>
+                </div>
+            </div>
+            <div class="progress-row"><span>{{ loan.emis_paid }}/{{ loan.total_emis }} EMIs</span><span>{{ loan.completion_percentage }}%</span></div>
+            <div class="progress-track">
+                <div class="progress-fill" style="width:{{ loan.completion_percentage }}%"></div>
+            </div>
+            {% if loan.emi_amount %}<div class="loan-emi">EMI: ₹{{ loan.emi_amount|floatformat:0 }}/mo</div>{% endif %}
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="section">
+    <div class="section-head"><span class="section-title">Quick Links</span></div>
+    <div class="card-grid card-grid--3">
+        <a href="{% url 'member_portal:accounts' %}" class="qlink"><strong>My Accounts</strong><span>View balances &
+                transactions</span></a>
+        <a href="{% url 'member_portal:loans' %}" class="qlink"><strong>My Loans</strong><span>Check loan status &
+                EMIs</span></a>
+        <a href="{% url 'member_portal:tickets' %}" class="qlink"><strong>Support</strong><span>Raise a query{% if open_tickets_count > 0 %} ({{ open_tickets_count }} open){% endif %}</span></a>
+    </div>
 </div>
 
-<!-- Recent Activity -->
 {% if recent_transactions %}
-<div class="card" style="margin-top: 1rem;">
-    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-        <h3 style="margin: 0;">Recent Transactions</h3>
-        <a href="{% url 'member_portal:transactions' %}" style="font-size: 0.85rem; color: var(--color-primary);">View
-            All</a>
+<div class="panel">
+    <div class="panel-head">
+        <span class="panel-title">Recent Transactions</span>
+        <a href="{% url 'member_portal:transactions' %}" class="panel-link">View All →</a>
     </div>
-    <div class="card-body" style="padding: 0;">
-        <table class="table">
+    <div class="panel-body panel-body--flush">
+        <table class="tbl">
             <thead>
                 <tr>
-                    <th>Receipt #</th>
+                    <th>Receipt</th>
                     <th>Account</th>
                     <th>Type</th>
                     <th>Amount</th>
@@ -175,11 +124,13 @@
             <tbody>
                 {% for txn in recent_transactions %}
                 <tr>
-                    <td style="font-family: monospace;">{{ txn.receipt_number }}</td>
+                    <td class="mono">{{ txn.receipt_number }}</td>
                     <td>{{ txn.member_account.account_number }}</td>
-                    <td><span class="badge badge-{{ txn.transaction_type }}">{{ txn.get_transaction_type_display }}</span></td>
-                    <td style="font-family: monospace; font-weight: 600;">₹{{ txn.amount|floatformat:2 }}</td>
-                    <td style="color: var(--color-gray-500);">{{ txn.created_at|date:"d M Y" }}</td>
+                    <td><span class="pill pill--{{ txn.transaction_type }}">{{  txn.get_transaction_type_display }}</span></td>
+                    <td
+                        class="mono {% if txn.transaction_type == 'credit' or txn.transaction_type == 'interest' or txn.transaction_type == 'dividend' or txn.transaction_type == 'share_capital' %}text-green{% else %}text-red{% endif %}">
+                        ₹{{ txn.amount|floatformat:2 }}</td>
+                    <td class="text-muted">{{ txn.created_at|date:"d M Y" }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -187,4 +138,13 @@
     </div>
 </div>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    (function () {
+        var d = document.getElementById('memberDate');
+        if (d) d.textContent = new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    })();
+</script>
 {% endblock %}

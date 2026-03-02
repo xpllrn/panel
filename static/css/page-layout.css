@@ -57,25 +57,32 @@
 }
 
 .search-input {
-    padding: var(--spacing-sm) var(--spacing-md);
-    border: 1px solid var(--color-gray-300);
-    border-radius: var(--radius-md);
-    font-size: var(--font-size-base);
+    padding: 7px 12px;
+    border: 1px solid #e5e5e5;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
     min-width: 220px;
+    color: #262626;
 }
 
 .search-input:focus {
     outline: none;
-    border-color: var(--color-primary);
+    border-color: #111;
 }
 
 .filter-select {
-    padding: var(--spacing-sm) var(--spacing-md);
-    border: 1px solid var(--color-gray-300);
-    border-radius: var(--radius-md);
-    font-size: var(--font-size-sm);
-    background: var(--color-white);
+    padding: 7px 28px 7px 10px;
+    border: 1px solid #e5e5e5;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: inherit;
+    background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23737373' d='M6 8L1 3h10z'/%3E%3C/svg%3E") no-repeat right 8px center;
+    -webkit-appearance: none;
+    appearance: none;
     min-width: 140px;
+    color: #262626;
+    cursor: pointer;
 }
 
 .filter-select:focus {
@@ -97,11 +104,11 @@
 /* Search Info Banner */
 .search-info {
     padding: var(--spacing-md) var(--spacing-lg);
-    background: var(--color-primary-light);
-    border-left: 3px solid var(--color-primary);
+    background: #f5f5f5;
+    border: 1px solid #e5e5e5;
     margin-bottom: var(--spacing-lg);
     color: var(--color-gray-700);
-    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    border-radius: var(--radius-md);
     font-size: var(--font-size-base);
 }
 
@@ -111,7 +118,7 @@
 .data-table {
     background: var(--color-white);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
+    border: 1px solid #f0f0f0;
     overflow: visible;
 }
 
@@ -345,24 +352,12 @@ tr:not(:nth-last-child(-n+3)) .dropdown-menu {
     background: var(--color-white);
     border-radius: var(--radius-lg);
     padding: 1.25rem;
-    box-shadow: var(--shadow-sm);
+    border: 1px solid #f0f0f0;
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
-    border-left: 4px solid var(--color-primary);
 }
 
-.stat-card-success {
-    border-left-color: #66bb6a;
-}
-
-.stat-card-warning {
-    border-left-color: #ffa726;
-}
-
-.stat-card-danger {
-    border-left-color: #ef5350;
-}
 
 .stat-value {
     font-size: 1.5rem;
