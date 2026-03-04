@@ -1,16 +1,21 @@
 {% extends "member/base.html" %}
+{% load static %}
 
 {% block title %}My Profile - Member Portal{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/pages/profile.css' %}">
+{% endblock %}
 
 {% block content %}
 <div class="page-header">
     <h2>My Profile</h2>
 </div>
 
-{% if password_changed  %}
+{% if password_changed %}
 <div class="message message-success">Password changed successfully!</div>
 {% endif %}
-{% if password_error  %}
+{% if password_error %}
 <div class="message message-error">{{ password_error }}</div>
 {% endif %}
 
@@ -77,9 +82,11 @@
             <div class="detail-item detail-item-full">
                 <span class="detail-label">Current Address</span>
                 <span class="detail-value">
-                    {% if member.current_address_line1  %}
-                    {{ member.current_address_line1 }}{% if member.current_address_line2  %}, {{ member.current_address_line2 }}{% endif %}<br>
-                    {{ member.current_city|default:"" }}{% if member.current_district  %}, {{ member.current_district }}{% endif %}<br>
+                    {% if member.current_address_line1 %}
+                    {{ member.current_address_line1 }}{% if member.current_address_line2 %}, {{
+                    member.current_address_line2 }}{% endif %}<br>
+                    {{ member.current_city|default:"" }}{% if member.current_district %}, {{ member.current_district
+                    }}{% endif %}<br>
                     {{ member.current_state|default:"" }} - {{ member.current_pincode|default:"" }}
                     {% else %}
                     Not set
@@ -110,7 +117,7 @@
             <div class="detail-item">
                 <span class="detail-label">Aadhaar Number</span>
                 <span class="detail-value">
-                    {% if member.aadhar_number  %}
+                    {% if member.aadhar_number %}
                     XXXX XXXX {{ member.aadhar_number|slice:"-4:" }}
                     {% else %}
                     Not provided
@@ -146,26 +153,27 @@
 
 <!-- Change Password -->
 <div class="card" style="margin-top: 1.5rem;">
-    <div class="card-header">
-        <h3>Change Password</h3>
-    </div>
     <div class="card-body">
-        <form method="post" class="password-form">
+        <div class="pw-section-title">Security</div>
+        <p class="pw-section-desc">Update your password to keep your account secure.</p>
+        <form method="post" style="max-width: 360px;">
             {% csrf_token %}
             <input type="hidden" name="change_password" value="1">
-            <div class="form-group">
-                <label class="form-label">Current Password</label>
-                <input type="password" name="current_password" class="form-input" required>
+            <div class="pw-field">
+                <label class="pw-label">Current Password</label>
+                <input type="password" name="current_password" class="pw-input" required placeholder="••••••••">
             </div>
-            <div class="form-group">
-                <label class="form-label">New Password</label>
-                <input type="password" name="new_password" class="form-input" required minlength="8">
+            <div class="pw-field">
+                <label class="pw-label">New Password</label>
+                <input type="password" name="new_password" class="pw-input" required minlength="8"
+                    placeholder="Min 8 characters">
             </div>
-            <div class="form-group">
-                <label class="form-label">Confirm New Password</label>
-                <input type="password" name="confirm_password" class="form-input" required minlength="8">
+            <div class="pw-field">
+                <label class="pw-label">Confirm Password</label>
+                <input type="password" name="confirm_password" class="pw-input" required minlength="8"
+                    placeholder="••••••••">
             </div>
-            <button type="submit" class="btn btn-primary">Change Password</button>
+            <button type="submit" class="pw-btn">Update Password</button>
         </form>
     </div>
 </div>

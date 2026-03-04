@@ -13,82 +13,87 @@
 </div>
 
 {% if messages %}
-<div class="messages" style="margin-bottom: 1rem;">
+<div style="margin-bottom: 1rem;">
     {% for message in messages %}
     <div class="message message-{{ message.tags }}">{{ message }}</div>
     {% endfor %}
 </div>
 {% endif %}
 
-<div class="profile-container">
-    <div class="profile-card">
-        <div class="profile-header">
-            <div class="profile-user">
-                <div class="avatar avatar-xl">{{ user.username|first|upper }}</div>
-                <div class="profile-info">
-                    <div class="profile-name">{{ user.username }}</div>
-                    <div class="profile-role">{{ user.get_role_display_name }}</div>
+<div class="profile-layout">
+    <!-- Left: Profile Info -->
+    <div class="profile-main">
+        <div class="profile-card">
+            <div class="profile-header">
+                <div class="profile-user">
+                    <div class="avatar avatar-xl">{{ user.username|first|upper }}</div>
+                    <div class="profile-info">
+                        <div class="profile-name">{{ user.username }}</div>
+                        <div class="profile-role">{{ user.get_role_display_name }}</div>
+                    </div>
                 </div>
+                <button class="btn btn-primary" id="editBtn" onclick="enableEdit()">Edit Profile</button>
             </div>
-            <button class="btn btn-primary" id="editBtn" onclick="enableEdit()">Edit Profile</button>
+
+            <form method="post" id="profileForm" class="profile-form">
+                {% csrf_token %}
+
+                <div class="field-row">
+                    <div class="field-label">Name</div>
+                    <input type="text" name="name" class="field-input"
+                        value="{% if user.first_name or user.last_name %}{{ user.first_name }} {{ user.last_name }}{% endif %}"
+                        placeholder="Not set" disabled>
+                </div>
+
+                <div class="field-row">
+                    <div class="field-label">Username</div>
+                    <input type="text" class="field-input" value="{{ user.username }}" disabled>
+                </div>
+
+                <div class="field-row">
+                    <div class="field-label">Email</div>
+                    <input type="email" name="email" class="field-input" value="{{ user.email }}" disabled required>
+                </div>
+
+                <div class="field-row">
+                    <div class="field-label">Phone Number</div>
+                    <input type="text" name="phone" class="field-input" value="{{ user.phone|default:'' }}"
+                        placeholder="Not set" disabled>
+                </div>
+
+                <div class="edit-actions" id="editActions">
+                    <button type="button" class="btn btn-secondary" onclick="cancelEdit()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="saveBtn">Save Changes</button>
+                </div>
+            </form>
         </div>
-
-        <form method="post" id="profileForm" class="profile-form">
-            {% csrf_token %}
-
-            <div class="field-row">
-                <div class="field-label">Name</div>
-                <input type="text" name="name" class="field-input"
-                    value="{% if user.first_name or user.last_name %}{{ user.first_name }} {{ user.last_name }}{% endif %}"
-                    placeholder="Not set" disabled>
-            </div>
-
-            <div class="field-row">
-                <div class="field-label">Username</div>
-                <input type="text" class="field-input" value="{{ user.username }}" disabled>
-            </div>
-
-            <div class="field-row">
-                <div class="field-label">Email</div>
-                <input type="email" name="email" class="field-input" value="{{ user.email }}" disabled required>
-            </div>
-
-            <div class="field-row">
-                <div class="field-label">Phone Number</div>
-                <input type="text" name="phone" class="field-input" value="{{ user.phone|default:'' }}"
-                    placeholder="Not set" disabled>
-            </div>
-
-            <div class="edit-actions" id="editActions">
-                <button type="button" class="btn btn-secondary" onclick="cancelEdit()">Cancel</button>
-                <button type="submit" class="btn btn-primary" id="saveBtn">Save Changes</button>
-            </div>
-        </form>
     </div>
-</div>
 
-<div class="profile-container" style="margin-top: 1.5rem;">
-    <div class="profile-card">
-        <div class="profile-header">
-            <h3 style="font-size: 15px; font-weight: 600; margin: 0;">Change Password</h3>
+    <!-- Right: Change Password -->
+    <div class="profile-sidebar">
+        <div class="profile-card">
+            <div class="pw-section-title">Security</div>
+            <p class="pw-section-desc">Update your password to keep your account secure.</p>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="change_password" value="1">
+                <div class="pw-field">
+                    <label class="pw-label">Current Password</label>
+                    <input type="password" name="current_password" class="pw-input" required placeholder="••••••••">
+                </div>
+                <div class="pw-field">
+                    <label class="pw-label">New Password</label>
+                    <input type="password" name="new_password" class="pw-input" required minlength="8"
+                        placeholder="Min 8 characters">
+                </div>
+                <div class="pw-field">
+                    <label class="pw-label">Confirm Password</label>
+                    <input type="password" name="confirm_password" class="pw-input" required minlength="8"
+                        placeholder="••••••••">
+                </div>
+                <button type="submit" class="pw-btn">Update Password</button>
+            </form>
         </div>
-        <form method="post" class="profile-form password-form" style="max-width: 380px;">
-            {% csrf_token %}
-            <input type="hidden" name="change_password" value="1">
-            <div class="field-row">
-                <div class="field-label">Current Password</div>
-                <input type="password" name="current_password" class="field-input" required>
-            </div>
-            <div class="field-row">
-                <div class="field-label">New Password</div>
-                <input type="password" name="new_password" class="field-input" required minlength="8">
-            </div>
-            <div class="field-row">
-                <div class="field-label">Confirm New Password</div>
-                <input type="password" name="confirm_password" class="field-input" required minlength="8">
-            </div>
-            <button type="submit" class="btn btn-primary">Change Password</button>
-        </form>
     </div>
 </div>
 {% endblock %}
