@@ -1,7 +1,7 @@
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from accounts.models import Loan, MemberAccount, Receipt, User
+from accounts.models import Loan, MemberAccount, User
 
 
 class MemberPortalTestMixin:

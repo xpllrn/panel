@@ -4,6 +4,19 @@
  * are now in page-layout.css
  */
 
+/* Zebra striping for table rows */
+.data-table tbody tr:nth-child(even) {
+    background-color: #f9fafb;
+}
+
+.data-table tbody tr:nth-child(odd) {
+    background-color: #ffffff;
+}
+
+.data-table tbody tr:hover {
+    background-color: #f3f4f6 !important;
+}
+
 /* Account number styling */
 .account-number {
     font-family: monospace;

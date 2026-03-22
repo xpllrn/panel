@@ -1,0 +1,13 @@
+{
+  "name": "Pre-Commit Quality Check",
+  "version": "1.0.0",
+  "description": "Comprehensive pre-commit checks: linting, formatting, and runtime validation",
+  "when": {
+    "type": "preToolUse",
+    "toolTypes": "write"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "CRITICAL PRE-WRITE VALIDATION - Before allowing this write operation:\n\n1. DECIMAL SERIALIZATION CHECK:\n   - If file is admin_portal/views.py or member_portal/views.py:\n   - Search for json.dumps() calls with account_type_data, trend_data, or any aggregated data\n   - Verify that ALL Decimal fields from Sum(), Avg(), or aggregate() are converted to float() BEFORE json.dumps()\n   - Example CORRECT: {'total': float(item['total']) if item['total'] else 0.0}\n   - Example WRONG: {'total': item['total']} where item['total'] comes from Sum()\n   - If missing float() conversion, REJECT the write and explain the fix\n\n2. JAVASCRIPT/PYTHON SYNC CHECK:\n   - If Python view changes data structure field names (e.g., 'count' to 'total'):\n   - Search ALL templates that use this view's context\n   - Verify JavaScript code uses the NEW field name (e.g., d.total not d.count)\n   - If mismatch found, REJECT and list all files that need updating\n\n3. TEMPLATE VARIABLE CHECK:\n   - If template file is being modified:\n   - Verify all {{ variable }} and data.field references exist in the view's context\n   - Check that JavaScript variable names match Python context keys\n   - If undefined references found, REJECT and explain\n\n4. DEPRECATED FIELD CHECK:\n   - Search for: user.phone (use user.mobile_primary instead)\n   - Search for: user.role (use user.is_staff instead)\n   - Search for: user.avatar (use user.photograph instead)\n   - If found, WARN but allow (not critical)\n\n5. LINTING CHECK:\n   - Run: docker-compose exec -T web ruff check <file> --fix\n   - If errors remain after --fix, REJECT the write\n\nONLY APPROVE if checks 1, 2, 3, and 5 pass. Report all issues found with specific line numbers and fixes needed."
+  }
+}

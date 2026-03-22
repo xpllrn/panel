@@ -7,13 +7,16 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Count, F, Q, Sum
+from django.db.models import F, Q, Sum
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
 
-from accounts.models import AuditLog, Loan, LoanRepayment, MemberAccount, Receipt, User
+from accounts.models import AuditLog, BankAccount, Loan, LoanRepayment, MemberAccount, Receipt, User
 from accounts.utils import log_action, split_full_name, validate_password_strength
+
+# Rate limiting cache for member creation (simple in-memory)
+_member_creation_timestamps = {}
 
 
 def admin_required(view_func):
@@ -46,13 +49,17 @@ def home_view(request):
         MemberAccount.objects.filter(is_deleted=False, status="active").aggregate(total=Sum("balance"))["total"] or 0
     )
 
-    # Account type distribution (for pie chart)
-    account_type_data = list(
-        MemberAccount.objects.filter(is_deleted=False)
+    # Account type distribution (for pie chart) - show total balance by type
+    account_type_data = []
+    for item in (
+        MemberAccount.objects.filter(is_deleted=False, status="active")
         .values("account_type")
-        .annotate(count=Count("id"))
+        .annotate(total=Sum("balance"))
         .order_by("account_type")
-    )
+    ):
+        account_type_data.append(
+            {"account_type": item["account_type"], "total": float(item["total"]) if item["total"] else 0.0}
+        )
 
     # Receipt/transaction stats
     total_receipts = Receipt.objects.count()
@@ -201,6 +208,18 @@ def add_member_view(request):
     """Create a new member with auto-generated password from DOB"""
     if request.method == "POST":
         try:
+            # Rate limiting: max 10 member creations per minute per admin
+            user_id = request.user.id
+            now = timezone.now()
+            if user_id in _member_creation_timestamps:
+                recent_creates = [ts for ts in _member_creation_timestamps[user_id] if (now - ts).seconds < 60]
+                if len(recent_creates) >= 10:
+                    return JsonResponse({"success": False, "error": "Rate limit exceeded. Please wait a moment."})
+                _member_creation_timestamps[user_id] = recent_creates
+            else:
+                _member_creation_timestamps[user_id] = []
+            _member_creation_timestamps[user_id].append(now)
+
             username = request.POST.get("username", "").strip()
             email = request.POST.get("email", "").strip()
             full_name = request.POST.get("full_name", "").strip()
@@ -251,15 +270,73 @@ def add_member_view(request):
             if role == "admin":
                 user.is_staff = True
 
-            user.save()
+            # Wrap member and account creation in transaction
+            with transaction.atomic():
+                # Auto-generate member_id: MBR-YEAR-SEQUENCE
+                year = date.today().year
+                last_member = (
+                    User.objects.select_for_update()
+                    .filter(member_id__startswith=f"MBR-{year}-")
+                    .order_by("-member_id")
+                    .first()
+                )
+                if last_member:
+                    try:
+                        last_seq = int(last_member.member_id.split("-")[-1])
+                        next_seq = last_seq + 1
+                    except (ValueError, IndexError):
+                        next_seq = 1
+                else:
+                    next_seq = 1
 
-            log_action(
-                request,
-                "create",
-                "member",
-                user.id,
-                f"Created member {username} ({user.display_name})",
-            )
+                user.member_id = f"MBR-{year}-{next_seq:05d}"
+                user.save()
+
+                # Auto-create all account types for the new member
+                account_types = [
+                    ("fd", "Fixed Deposit", 7.5),
+                    ("cd", "Certificate of Deposit", 7.0),
+                    ("rd", "Recurring Deposit", 7.0),
+                    ("od", "Overdraft", 12.0),
+                    ("share", "Share Account", 0.0),
+                    ("sukanya", "Sukanya Yojana", 8.0),
+                    ("suputra", "Suputra Yojana", 8.5),
+                ]
+
+                created_accounts = []
+                for account_type, account_name, default_rate in account_types:
+                    # Generate account number: TYPE-USERID-001
+                    # Note: Using user.id ensures uniqueness since each user gets one account per type
+                    account_number = f"{account_type.upper()}-{user.id:05d}-001"
+                    account = MemberAccount.objects.create(
+                        user=user,
+                        account_number=account_number,
+                        account_type=account_type,
+                        status="active",
+                        balance=0.00,
+                        interest_rate=default_rate,
+                        opening_date=date.today(),
+                    )
+                    created_accounts.append((account, account_name))
+
+                # Log member creation
+                log_action(
+                    request,
+                    "create",
+                    "member",
+                    user.id,
+                    f"Created member {username} ({user.display_name}) with 7 auto-generated accounts",
+                )
+
+                # Log each account creation
+                for account, account_name in created_accounts:
+                    log_action(
+                        request,
+                        "create",
+                        "account",
+                        account.id,
+                        f"Auto-created {account_name} account {account.account_number} for member {username}",
+                    )
 
             return JsonResponse({"success": True, "user_id": user.id, "password": password})
         except Exception as e:
@@ -556,15 +633,19 @@ def get_member_view(request, user_id):
             )
 
         # Get member accounts summary
-        accounts = MemberAccount.objects.filter(user=user, is_deleted=False).order_by("-created_at")
+        accounts = MemberAccount.objects.filter(user=user, is_deleted=False).order_by("account_type")
         accounts_data = [
             {
                 "id": a.id,
                 "account_number": a.account_number,
+                "account_type": a.account_type,
                 "account_type_display": a.get_account_type_display(),
                 "status": a.status,
                 "status_display": a.get_status_display(),
                 "balance": str(a.balance),
+                "interest_rate": str(a.interest_rate),
+                "opening_date": a.opening_date.strftime("%b %d, %Y") if a.opening_date else "",
+                "maturity_date": a.maturity_date.strftime("%b %d, %Y") if a.maturity_date else "",
             }
             for a in accounts
         ]
@@ -775,7 +856,7 @@ def profile_view(request):
         request.user.last_name = last_name
 
         request.user.email = request.POST.get("email", "")
-        request.user.phone = request.POST.get("phone", "")
+        request.user.mobile_primary = request.POST.get("mobile_primary", "")
         request.user.save()
         messages.success(request, "Profile updated successfully!")
         return redirect("/profile/")
@@ -789,8 +870,6 @@ def delete_account_view(request, account_id):
     """Delete a bank account"""
     if request.method == "POST":
         try:
-            from accounts.models import BankAccount
-
             account = BankAccount.objects.get(id=account_id, user=request.user)
             account.delete()
             return JsonResponse({"success": True})
@@ -805,64 +884,95 @@ def delete_account_view(request, account_id):
 @login_required
 @admin_required
 def accounts_view(request):
-    """Member accounts management view with pagination and filters"""
-    page = request.GET.get("page", 1)
+    """Account Book view - shows all members and their account balances in a grid"""
     query = request.GET.get("q", "").strip()
-    account_type = request.GET.get("type", "").strip()
-    status = request.GET.get("status", "").strip()
-    per_page = 25
+    page = request.GET.get("page", 1)
+    per_page = 50
 
-    # Base queryset with related user data
-    accounts = MemberAccount.objects.select_related("user").filter(is_deleted=False).order_by("-created_at")
+    # Get all members with their accounts
+    members = User.objects.filter(role="member").order_by("first_name", "last_name")
 
     # Apply search filter
     if query:
-        accounts = accounts.filter(
-            Q(account_number__icontains=query)
-            | Q(user__first_name__icontains=query)
-            | Q(user__last_name__icontains=query)
-            | Q(user__member_id__icontains=query)
-            | Q(user__username__icontains=query)
+        members = members.filter(
+            Q(first_name__icontains=query)
+            | Q(last_name__icontains=query)
+            | Q(username__icontains=query)
+            | Q(member_id__icontains=query)
         )
 
-    # Apply account type filter
-    if account_type:
-        accounts = accounts.filter(account_type=account_type)
-
-    # Apply status filter
-    if status:
-        accounts = accounts.filter(status=status)
-
-    # Paginate
-    paginator = Paginator(accounts, per_page)
+    # Paginate members
+    paginator = Paginator(members, per_page)
     try:
-        accounts_page = paginator.page(page)
+        members_page = paginator.page(page)
     except PageNotAnInteger:
-        accounts_page = paginator.page(1)
+        members_page = paginator.page(1)
     except EmptyPage:
-        accounts_page = paginator.page(paginator.num_pages)
+        members_page = paginator.page(paginator.num_pages)
 
-    # Get account type and status choices for filter dropdowns
-    account_type_choices = MemberAccount.ACCOUNT_TYPE_CHOICES
-    status_choices = MemberAccount.STATUS_CHOICES
+    # Build account book data structure
+    account_types = MemberAccount.ACCOUNT_TYPE_CHOICES
+    account_book = []
 
-    # Summary stats
-    total_accounts = MemberAccount.objects.filter(is_deleted=False).count()
-    active_accounts = MemberAccount.objects.filter(is_deleted=False, status="active").count()
+    for member in members_page:
+        member_data = {
+            "id": member.id,
+            "name": member.display_name,
+            "member_id": member.member_id or "-",
+            "username": member.username,
+            "account_balances": [],  # List of balances in order
+            "total_balance": 0,
+        }
+
+        # Get all accounts for this member
+        accounts = MemberAccount.objects.filter(user=member, is_deleted=False)
+        accounts_dict = {acc.account_type: acc for acc in accounts}
+
+        # Build ordered list of balances matching account_types order
+        for account_type, _ in account_types:
+            if account_type in accounts_dict:
+                acc = accounts_dict[account_type]
+                member_data["account_balances"].append(
+                    {
+                        "balance": acc.balance,
+                        "status": acc.status,
+                    }
+                )
+                if acc.status == "active":
+                    member_data["total_balance"] += acc.balance
+            else:
+                member_data["account_balances"].append(
+                    {
+                        "balance": 0,
+                        "status": "inactive",
+                    }
+                )
+
+        account_book.append(member_data)
+
+    # Calculate totals for each account type
+    account_totals = []
+    grand_total = 0
+    for account_type, _ in account_types:
+        total = (
+            MemberAccount.objects.filter(account_type=account_type, is_deleted=False, status="active").aggregate(
+                total=Sum("balance")
+            )["total"]
+            or 0
+        )
+        account_totals.append(total)
+        grand_total += total
 
     return render(
         request,
         "admin/accounts.html",
         {
-            "accounts": accounts_page,
+            "account_book": account_book,
+            "account_types": account_types,
+            "account_totals": account_totals,
+            "grand_total": grand_total,
             "search_query": query,
-            "selected_type": account_type,
-            "selected_status": status,
-            "account_type_choices": account_type_choices,
-            "status_choices": status_choices,
-            "page_obj": accounts_page,
-            "total_accounts": total_accounts,
-            "active_accounts": active_accounts,
+            "page_obj": members_page,
         },
     )
 
@@ -1690,7 +1800,7 @@ def export_members_view(request):
                 m.username,
                 m.display_name,
                 m.email or "",
-                m.mobile_primary or m.phone or "",
+                m.mobile_primary or "",
                 m.get_status_display(),
                 m.get_member_type_display(),
                 m.date_of_joining.strftime("%Y-%m-%d") if m.date_of_joining else "",

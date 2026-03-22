@@ -120,7 +120,6 @@
                     document.getElementById('modal-member-name').textContent = receipt.member_name || '-';
                     document.getElementById('modal-member-id').textContent = receipt.member_id || '-';
                     document.getElementById('modal-member-mobile').textContent = receipt.member_mobile || '-';
-                    document.getElementById('modal-member-address').textContent = receipt.member_address || '-';
 
                     // Account details
                     document.getElementById('modal-account-number').textContent = receipt.account_number || '-';
@@ -431,7 +430,6 @@
                     document.getElementById('modal-member-name').textContent = receipt.member_name || '-';
                     document.getElementById('modal-member-id').textContent = receipt.member_id || '-';
                     document.getElementById('modal-member-mobile').textContent = receipt.member_mobile || '-';
-                    document.getElementById('modal-member-address').textContent = receipt.member_address || '-';
                     document.getElementById('modal-account-number').textContent = receipt.account_number || '-';
                     document.getElementById('modal-account-type').textContent = receipt.account_type_display || '-';
                     document.getElementById('modal-transaction-type').textContent = receipt.transaction_type_display || '-';

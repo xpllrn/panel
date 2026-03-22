@@ -85,6 +85,51 @@
         button.textContent = originalText;
     }
 
+    /**
+     * Format number in Indian numbering system (lakhs and crores)
+     * Examples: 1,00,000 | 10,00,000 | 1,00,00,000
+     */
+    function formatIndianNumber(num) {
+        if (num === null || num === undefined || num === '') return '0';
+        
+        var number = parseFloat(num);
+        if (isNaN(number)) return '0';
+        
+        // Handle negative numbers
+        var isNegative = number < 0;
+        number = Math.abs(number);
+        
+        // Split into integer and decimal parts
+        var parts = number.toFixed(2).split('.');
+        var integerPart = parts[0];
+        var decimalPart = parts[1];
+        
+        // Indian numbering: last 3 digits, then groups of 2
+        var lastThree = integerPart.substring(integerPart.length - 3);
+        var otherNumbers = integerPart.substring(0, integerPart.length - 3);
+        
+        if (otherNumbers !== '') {
+            lastThree = ',' + lastThree;
+        }
+        
+        var result = otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + lastThree;
+        
+        // Add decimal part
+        if (decimalPart && decimalPart !== '00') {
+            result += '.' + decimalPart;
+        }
+        
+        return (isNegative ? '-' : '') + result;
+    }
+
+    /**
+     * Format currency in Indian Rupees
+     * Example: ₹1,00,000.00
+     */
+    function formatCurrency(amount) {
+        return '₹' + formatIndianNumber(amount);
+    }
+
     // Expose to global scope
     window.getCSRFToken = getCSRFToken;
     window.sanitizeHTML = sanitizeHTML;
@@ -93,4 +138,6 @@
     window.hideError = hideError;
     window.setButtonLoading = setButtonLoading;
     window.resetButton = resetButton;
+    window.formatIndianNumber = formatIndianNumber;
+    window.formatCurrency = formatCurrency;
 })();

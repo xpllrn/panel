@@ -1,105 +1,176 @@
 {% extends 'admin/base.html' %}
 {% load static %}
 
-{% block title %}Accounts - Admin Portal{% endblock %}
+{% block title %}Account Book - Admin Portal{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/pages/accounts.css' %}">
+<style>
+.account-book-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    background: white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.account-book-table th {
+    background: #2c3e50;
+    color: white;
+    padding: 12px 8px;
+    text-align: left;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.account-book-table th:first-child {
+    min-width: 150px;
+}
+
+.account-book-table th.account-col {
+    text-align: right;
+    min-width: 120px;
+}
+
+.account-book-table td {
+    padding: 10px 8px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.account-book-table tbody tr:hover {
+    background: #f8f9fa;
+}
+
+.account-book-table .member-cell {
+    font-weight: 500;
+}
+
+.account-book-table .member-id {
+    color: #666;
+    font-size: 12px;
+    display: block;
+}
+
+.account-book-table .balance-cell {
+    text-align: right;
+    font-family: 'Courier New', monospace;
+}
+
+.account-book-table .balance-cell.zero {
+    color: #999;
+}
+
+.account-book-table .balance-cell.positive {
+    color: #27ae60;
+}
+
+.account-book-table .total-row {
+    background: #ecf0f1;
+    font-weight: 600;
+}
+
+.account-book-table .total-row td {
+    border-top: 2px solid #2c3e50;
+    padding: 14px 8px;
+}
+
+.account-book-table .grand-total {
+    background: #2c3e50;
+    color: white;
+    font-size: 16px;
+}
+
+.table-container {
+    overflow-x: auto;
+    margin-top: 20px;
+}
+
+.account-type-header {
+    font-size: 11px;
+    text-transform: uppercase;
+}
+</style>
 {% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2 class="page-title">Member Accounts</h2>
-    <div class="header-stats">
-        <span class="stat-item">Total: <strong>{{ total_accounts }}</strong></span>
-        <span class="stat-item">Active: <strong>{{ active_accounts }}</strong></span>
-    </div>
+    <h2 class="page-title">Account Book</h2>
     <form class="search-form" method="get" action="">
-        <input type="text" name="q" placeholder="Search by account no, member name..."
-            value="{{ search_query|default:'' }}" class="search-input" aria-label="Search accounts">
-        <select name="type" class="filter-select" aria-label="Filter by account type">
-            <option value="">All Types</option>
-            {% for value, label in account_type_choices %}
-            <option value="{{ value }}" {% if selected_type == value %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-        </select>
-        <select name="status" class="filter-select" aria-label="Filter by status">
-            <option value="">All Status</option>
-            {% for value, label in status_choices %}
-            <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-        </select>
-        <button type="submit" class="btn btn-primary btn-sm">Filter</button>
-        {% if search_query or selected_type or selected_status %}
+        <input type="text" name="q" placeholder="Search members..."
+            value="{{ search_query|default:'' }}" class="search-input" aria-label="Search members">
+        <button type="submit" class="btn btn-primary btn-sm">Search</button>
+        {% if search_query %}
         <a href="{% url 'accounts' %}" class="clear-search">Clear</a>
         {% endif %}
     </form>
     <a href="{% url 'export_accounts' %}" class="btn btn-secondary btn-sm">Export Excel</a>
-    <button class="btn btn-primary btn-sm" onclick="showAddAccountModal()">+ Add Account</button>
 </div>
 
-{% if search_query or selected_type or selected_status %}
+{% if search_query %}
 <div class="search-info">
-    Showing {{ page_obj.paginator.count }} account(s)
-    {% if search_query %} matching "<strong>{{ search_query }}</strong>"{% endif %}
-    {% if selected_type %} of type <strong>{{ selected_type|upper }}</strong>{% endif %}
-    {% if selected_status %} with status <strong>{{ selected_status|title }}</strong>{% endif %}
+    Showing {{ page_obj.paginator.count }} member(s) matching "<strong>{{ search_query }}</strong>"
 </div>
 {% endif %}
 
-<div class="data-table">
-    <table>
+<div class="table-container">
+    <table class="account-book-table">
         <thead>
             <tr>
-                <th>Account Number</th>
                 <th>Member</th>
-                <th>Type</th>
-                <th>Balance</th>
-                <th>Interest Rate</th>
-                <th>Status</th>
-                <th>Opening Date</th>
-                <th style="width: 50px;"></th>
+                {% for account_type, account_label in account_types %}
+                <th class="account-col">
+                    <div>{{ account_label }}</div>
+                    <div class="account-type-header">({{ account_type|upper }})</div>
+                </th>
+                {% endfor %}
+                <th class="account-col">Total Balance</th>
             </tr>
         </thead>
         <tbody>
-            {% for account in accounts %}
-            <tr onclick="showAccountModal({{ account.id }})">
-                <td>
-                    <span class="account-number">{{ account.account_number }}</span>
+            {% for member in account_book %}
+            <tr>
+                <td class="member-cell">
+                    <div>{{ member.name }}</div>
+                    {% if member.member_id != '-' %}
+                    <span class="member-id">ID: {{ member.member_id }}</span>
+                    {% endif %}
                 </td>
-                <td>
-                    <div class="user-info">
-                        <div class="avatar avatar-sm">{{ account.user.display_name|first|upper }}</div>
-                        <div class="user-details">
-                            <span class="user-name">{{ account.user.display_name }}</span>
-                            {% if account.user.member_id %}
-                            <span class="user-member-id">{{ account.user.member_id }}</span>
-                            {% endif %}
-                        </div>
-                    </div>
+                {% for balance_data in member.account_balances %}
+                <td class="balance-cell {% if balance_data.balance == 0 %}zero{% else %}positive{% endif %}">
+                    {% if balance_data.balance > 0 %}
+                        ₹{{ balance_data.balance|floatformat:2 }}
+                    {% else %}
+                        -
+                    {% endif %}
                 </td>
-                <td>
-                    <span class="account-type-badge type-{{ account.account_type }}">{{ account.get_account_type_display }}</span>
-                </td>
-                <td class="amount">{{ account.balance|floatformat:2 }}</td>
-                <td>{{ account.interest_rate|floatformat:2 }}%</td>
-                <td>
-                    <span class="status-badge status-{{ account.status }}">{{ account.get_status_display }}</span>
-                </td>
-                <td>{{ account.opening_date|date:"M d, Y" }}</td>
-                <td class="actions-cell" onclick="event.stopPropagation();">
-                    <button class="kebab-menu" onclick="toggleDropdown(event, {{ account.id }})" aria-label="Actions">&#8942;</button>
-                    <div class="dropdown-menu" id="dropdown-{{ account.id }}">
-                        <button class="dropdown-item" onclick="showEditAccountModal(event, {{ account.id }})">Edit</button>
-                        <button class="dropdown-item dropdown-item-danger" onclick="confirmDeleteAccount(event, {{ account.id }}, '{{ account.account_number }}')">Delete</button>
-                    </div>
+                {% endfor %}
+                <td class="balance-cell {% if member.total_balance == 0 %}zero{% else %}positive{% endif %}">
+                    <strong>₹{{ member.total_balance|floatformat:2 }}</strong>
                 </td>
             </tr>
             {% empty %}
             <tr>
-                <td colspan="8" class="empty-state">No accounts found</td>
+                <td colspan="{{ account_types|length|add:2 }}" class="empty-state">No members found</td>
             </tr>
             {% endfor %}
+            
+            {% if account_book %}
+            <tr class="total-row">
+                <td><strong>TOTAL</strong></td>
+                {% for total in account_totals %}
+                <td class="balance-cell">
+                    <strong>₹{{ total|floatformat:2 }}</strong>
+                </td>
+                {% endfor %}
+                <td class="balance-cell grand-total">
+                    <strong>₹{{ grand_total|floatformat:2 }}</strong>
+                </td>
+            </tr>
+            {% endif %}
         </tbody>
     </table>
 </div>
@@ -108,291 +179,58 @@
 {% if page_obj.has_other_pages %}
 <div class="pagination" role="navigation" aria-label="Pagination">
     <div class="pagination-info">
-        Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} accounts
+        Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} members
     </div>
     <div class="pagination-nav">
         {% if page_obj.has_previous %}
-        <a href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="First page">&laquo; First</a>
-        <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="Previous page">Previous</a>
+        <a href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="First page">&laquo; First</a>
+        <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="Previous page">Previous</a>
         {% endif %}
 
         <span class="page-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
 
         {% if page_obj.has_next %}
-        <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="Next page">Next</a>
-        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="page-link" aria-label="Last page">Last &raquo;</a>
+        <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="Next page">Next</a>
+        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="Last page">Last &raquo;</a>
         {% endif %}
     </div>
 </div>
 {% endif %}
 
-<!-- Account View Modal -->
-<div id="accountModal" class="modal">
-    <div class="modal-content modal-content-lg">
-        <div class="modal-header">
-            <h3>Account Details</h3>
-            <button class="modal-close" onclick="closeAccountModal()" aria-label="Close">&times;</button>
-        </div>
-
-        <div class="modal-tabs">
-            <button class="modal-tab active" onclick="switchAccountTab('details')">Details</button>
-            <button class="modal-tab" onclick="switchAccountTab('statement')">Statement</button>
-        </div>
-
-        <div class="modal-body">
-            <!-- Details Tab -->
-            <div class="modal-tab-content active" id="tab-details">
-                <div class="account-header-section">
-                    <div class="account-type-icon" id="modal-type-icon">A</div>
-                    <div class="account-header-info">
-                        <div class="account-number-large" id="modal-account-number"></div>
-                        <div class="account-type-label" id="modal-account-type"></div>
-                    </div>
-                    <div class="account-status" id="modal-status-badge"></div>
-                </div>
-
-                <div class="account-balance-section">
-                    <div class="balance-label">Current Balance</div>
-                    <div class="balance-amount" id="modal-balance"></div>
-                </div>
-
-                <div class="account-details-grid">
-                    <div class="detail-item">
-                        <div class="detail-label">Member</div>
-                        <div class="detail-value" id="modal-member-name">-</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Member ID</div>
-                        <div class="detail-value" id="modal-member-id">-</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Interest Rate</div>
-                        <div class="detail-value" id="modal-interest-rate">-</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Principal Amount</div>
-                        <div class="detail-value" id="modal-principal">-</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Opening Date</div>
-                        <div class="detail-value" id="modal-opening-date">-</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Maturity Date</div>
-                        <div class="detail-value" id="modal-maturity-date">-</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Tenure</div>
-                        <div class="detail-value" id="modal-tenure">-</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Nominee</div>
-                        <div class="detail-value" id="modal-nominee">-</div>
-                    </div>
-                </div>
-
-                <div class="remarks-section" id="remarks-section" style="display: none;">
-                    <div class="detail-label">Remarks</div>
-                    <div class="detail-value" id="modal-remarks"></div>
-                </div>
-            </div>
-
-            <!-- Statement Tab -->
-            <div class="modal-tab-content" id="tab-statement">
-                <div class="modal-table-container">
-                    <table class="modal-table" id="transactions-table">
-                        <thead>
-                            <tr>
-                                <th>Receipt #</th>
-                                <th>Date</th>
-                                <th>Type</th>
-                                <th>Description</th>
-                                <th style="text-align: right;">Amount</th>
-                                <th style="text-align: right;">Balance After</th>
-                            </tr>
-                        </thead>
-                        <tbody id="transactions-tbody">
-                            <tr><td colspan="6" class="empty-state">Loading transactions...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div id="transactions-load-more" style="text-align: center; padding: var(--spacing-md); display: none;">
-                    <button class="btn btn-secondary btn-sm" onclick="loadMoreTransactions()">Load More</button>
-                </div>
-                <div id="transactions-summary" style="text-align: center; padding: var(--spacing-sm); color: var(--color-gray-500); font-size: var(--font-size-sm);"></div>
-            </div>
-        </div>
-
-        <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeAccountModal()">Close</button>
-        </div>
-    </div>
-</div>
-
-<!-- Add Account Modal -->
-<div id="addAccountModal" class="modal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h3>Add New Account</h3>
-            <button class="modal-close" onclick="closeAddAccountModal()" aria-label="Close">&times;</button>
-        </div>
-        <div class="modal-body">
-            <form id="addAccountForm">
-                {% csrf_token %}
-                <div class="form-group">
-                    <label class="form-label">Member *</label>
-                    <div class="member-selector">
-                        <input type="text" id="add-member-search" class="form-input" placeholder="Type to search members..." autocomplete="off">
-                        <input type="hidden" id="add-member-id" name="user_id">
-                        <div class="member-selector-results" id="add-member-results"></div>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Account Type *</label>
-                    <select name="account_type" class="form-input" required>
-                        <option value="">Select type...</option>
-                        {% for value, label in account_type_choices %}
-                        <option value="{{ value }}">{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Opening Balance *</label>
-                    <input type="number" name="balance" class="form-input" step="0.01" min="0" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Interest Rate (%)</label>
-                    <input type="number" name="interest_rate" class="form-input" step="0.01" min="0" value="0">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Principal Amount</label>
-                    <input type="number" name="principal_amount" class="form-input" step="0.01" min="0" value="0">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Opening Date *</label>
-                    <input type="date" name="opening_date" class="form-input" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Maturity Date</label>
-                    <input type="date" name="maturity_date" class="form-input">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Tenure (Months)</label>
-                    <input type="number" name="tenure_months" class="form-input" min="0">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Nominee Name</label>
-                    <input type="text" name="nominee_name" class="form-input">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Nominee Relationship</label>
-                    <input type="text" name="nominee_relationship" class="form-input">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Remarks</label>
-                    <textarea name="remarks" class="form-input" rows="3"></textarea>
-                </div>
-                <div id="add-account-error" class="error-message"></div>
-            </form>
-        </div>
-        <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeAddAccountModal()">Cancel</button>
-            <button class="btn btn-primary" id="addAccountBtn" onclick="addAccount()">Add Account</button>
-        </div>
-    </div>
-</div>
-
-<!-- Edit Account Modal -->
-<div id="editAccountModal" class="modal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h3>Edit Account</h3>
-            <button class="modal-close" onclick="closeEditAccountModal()" aria-label="Close">&times;</button>
-        </div>
-        <div class="modal-body">
-            <form id="editAccountForm">
-                {% csrf_token %}
-                <input type="hidden" id="edit-account-id" name="account_id">
-                <div class="form-group">
-                    <label class="form-label">Account Number</label>
-                    <input type="text" id="edit-account-number" class="form-input" disabled>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Account Type</label>
-                    <select id="edit-account-type" name="account_type" class="form-input" required>
-                        {% for value, label in account_type_choices %}
-                        <option value="{{ value }}">{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Status</label>
-                    <select id="edit-status" name="status" class="form-input" required>
-                        {% for value, label in status_choices %}
-                        <option value="{{ value }}">{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Balance</label>
-                    <input type="number" id="edit-balance" name="balance" class="form-input" step="0.01" min="0" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Interest Rate (%)</label>
-                    <input type="number" id="edit-interest-rate" name="interest_rate" class="form-input" step="0.01" min="0">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Principal Amount</label>
-                    <input type="number" id="edit-principal" name="principal_amount" class="form-input" step="0.01" min="0">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Opening Date</label>
-                    <input type="date" id="edit-opening-date" name="opening_date" class="form-input" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Maturity Date</label>
-                    <input type="date" id="edit-maturity-date" name="maturity_date" class="form-input">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Tenure (Months)</label>
-                    <input type="number" id="edit-tenure" name="tenure_months" class="form-input" min="0">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Nominee Name</label>
-                    <input type="text" id="edit-nominee-name" name="nominee_name" class="form-input">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Nominee Relationship</label>
-                    <input type="text" id="edit-nominee-relationship" name="nominee_relationship" class="form-input">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Remarks</label>
-                    <textarea id="edit-remarks" name="remarks" class="form-input" rows="3"></textarea>
-                </div>
-                <div id="edit-account-error" class="error-message"></div>
-            </form>
-        </div>
-        <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeEditAccountModal()">Cancel</button>
-            <button class="btn btn-primary" id="updateAccountBtn" onclick="updateAccount()">Update Account</button>
-        </div>
-    </div>
-</div>
-
-<!-- Delete Confirmation Dialog -->
-<div id="confirmDialog" class="confirm-dialog">
-    <h4>Confirm Delete</h4>
-    <p>Are you sure you want to delete account <strong id="delete-account-number"></strong>?</p>
-    <div class="confirm-buttons">
-        <button class="btn btn-secondary" onclick="closeConfirmDialog()">Cancel</button>
-        <button class="btn btn-danger" onclick="deleteAccount()">Delete</button>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'js/utils.js' %}"></script>
 <script>
-    window.CSRF_TOKEN = '{{ csrf_token }}';
+(function() {
+    'use strict';
+    
+    // Format all currency amounts in Indian numbering system
+    document.addEventListener('DOMContentLoaded', function() {
+        var balanceCells = document.querySelectorAll('.balance-cell');
+        balanceCells.forEach(function(cell) {
+            var text = cell.textContent.trim();
+            
+            // Skip if it's a dash or empty
+            if (text === '-' || text === '') return;
+            
+            // Extract number from text (remove ₹ and commas)
+            var match = text.match(/₹?([\d,]+\.?\d*)/);
+            if (match) {
+                var number = parseFloat(match[1].replace(/,/g, ''));
+                if (!isNaN(number)) {
+                    var formatted = formatCurrency(number);
+                    
+                    // Preserve the <strong> tag if it exists
+                    if (cell.querySelector('strong')) {
+                        cell.querySelector('strong').textContent = formatted;
+                    } else {
+                        cell.textContent = formatted;
+                    }
+                }
+            }
+        });
+    });
+})();
 </script>
-<script src="{% static 'js/accounts.js' %}"></script>
 {% endblock %}

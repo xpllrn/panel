@@ -5,6 +5,16 @@
 (function () {
     'use strict';
 
+    /**
+     * Escape HTML to prevent XSS
+     */
+    function escapeHTML(str) {
+        if (!str) return '';
+        var div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
     // State
     var deleteUserId = null;
     var isAddingMember = false;
@@ -15,6 +25,16 @@
 
     // DOM Elements (cached on init)
     var memberModal, addMemberModal, editMemberModal, confirmDialog, passwordDialog;
+
+    /**
+     * Escape HTML to prevent XSS
+     */
+    function escapeHTML(str) {
+        if (!str) return '';
+        var div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
 
     /**
      * Initialize the members module
@@ -207,7 +227,7 @@
         if (!container) return;
 
         if (!accounts || accounts.length === 0) {
-            container.innerHTML = '<p class="empty-state-text">No accounts found</p>';
+            container.innerHTML = '<p class="empty-state-text">No accounts found for this user</p>';
             return;
         }
 
@@ -216,16 +236,19 @@
         html += '<th>Account Number</th>';
         html += '<th>Type</th>';
         html += '<th>Status</th>';
-        html += '<th>Balance</th>';
+        html += '<th style="text-align: right;">Balance</th>';
+        html += '<th style="text-align: center;">Actions</th>';
         html += '</tr></thead><tbody>';
 
         for (var i = 0; i < accounts.length; i++) {
             var a = accounts[i];
+            var balanceClass = parseFloat(a.balance) > 0 ? 'amount-credit' : '';
             html += '<tr>';
-            html += '<td>' + escapeHTML(a.account_number) + '</td>';
+            html += '<td><strong>' + escapeHTML(a.account_number) + '</strong></td>';
             html += '<td>' + escapeHTML(a.account_type_display) + '</td>';
             html += '<td><span class="status-badge status-' + escapeHTML(a.status) + '">' + escapeHTML(a.status_display) + '</span></td>';
-            html += '<td>' + formatCurrency(a.balance) + '</td>';
+            html += '<td style="text-align: right;" class="' + balanceClass + '">' + formatCurrency(a.balance) + '</td>';
+            html += '<td style="text-align: center;"><button class="btn btn-sm btn-secondary" onclick="viewAccountDetails(' + a.id + ')">View</button></td>';
             html += '</tr>';
         }
 
@@ -628,6 +651,14 @@
         }
     }
 
+    /**
+     * View account details (redirect to accounts page or show modal)
+     */
+    function viewAccountDetails(accountId) {
+        // TODO: Implement account details modal with full account information
+        alert('Account details view coming soon.\n\nAccount ID: ' + accountId + '\n\nThis will show:\n- Account number\n- Opening date\n- Maturity date\n- Interest rate\n- Transaction history');
+    }
+
     // Initialize when DOM is ready
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
@@ -652,7 +683,8 @@
         confirmDelete: confirmDelete,
         closeConfirmDialog: closeConfirmDialog,
         deleteMember: deleteMember,
-        loadMoreTransactions: loadMoreTransactions
+        loadMoreTransactions: loadMoreTransactions,
+        viewAccountDetails: viewAccountDetails
     };
 
     // Also expose as globals for onclick handlers in HTML
@@ -672,5 +704,6 @@
     window.closeConfirmDialog = closeConfirmDialog;
     window.deleteMember = deleteMember;
     window.loadMoreTransactions = loadMoreTransactions;
+    window.viewAccountDetails = viewAccountDetails;
 
 })();

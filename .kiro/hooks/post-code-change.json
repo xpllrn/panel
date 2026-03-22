@@ -1,0 +1,13 @@
+{
+  "name": "Post-Code Change Validation",
+  "version": "1.0.0",
+  "description": "Validate code changes after they're made to catch runtime issues",
+  "when": {
+    "type": "postToolUse",
+    "toolTypes": "write"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "POST-WRITE VALIDATION - A file was just modified. Perform these checks:\n\n1. RUNTIME ERROR CHECK:\n   - If admin_portal/views.py or member_portal/views.py was modified:\n   - Scan for json.dumps() with Decimal fields (from Sum/Avg/aggregate)\n   - Scan for undefined variable references\n   - Scan for missing imports\n   - Report any potential runtime errors\n\n2. TEMPLATE SYNC CHECK:\n   - If a view file was modified and context variables changed:\n   - List all templates that use this view\n   - Check if templates need updates to match new context structure\n   - Report any mismatches\n\n3. JAVASCRIPT SYNC CHECK:\n   - If templates/admin/home.html was modified:\n   - Verify JavaScript data.field references match Python context keys\n   - Check that formatAmount() is used for currency display\n   - Report any undefined property access\n\n4. MIGRATION CHECK:\n   - If accounts/models.py was modified:\n   - Run: docker-compose exec -T web python manage.py makemigrations --dry-run\n   - Report if migrations are needed\n\n5. QUICK SMOKE TEST:\n   - Predict if the modified code would crash on first execution\n   - Check for common errors: missing imports, undefined variables, type mismatches\n   - Report confidence level: SAFE / RISKY / WILL CRASH\n\nProvide a summary with any issues found and suggested fixes."
+  }
+}

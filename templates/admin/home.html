@@ -211,19 +211,19 @@
 
         var total = 0;
         for (var i = 0; i < accountTypeData.length; i++) {
-            total += accountTypeData[i].count;
+            total += accountTypeData[i].total;
         }
 
         var html = '<div class="horizontal-bars">';
         for (var i = 0; i < accountTypeData.length; i++) {
             var d = accountTypeData[i];
             var info = accountTypeMap[d.account_type] || { label: d.account_type, color: '#888' };
-            var pct = total > 0 ? ((d.count / total) * 100).toFixed(1) : 0;
+            var pct = total > 0 ? ((d.total / total) * 100).toFixed(1) : 0;
 
             html += '<div class="h-bar-item">';
             html += '<div class="h-bar-header">';
             html += '<span class="h-bar-label">' + info.label + '</span>';
-            html += '<span class="h-bar-value">' + d.count + ' (' + pct + '%)</span>';
+            html += '<span class="h-bar-value">' + formatAmount(d.total) + ' (' + pct + '%)</span>';
             html += '</div>';
             html += '<div class="h-bar-track">';
             html += '<div class="h-bar-fill" style="width: ' + pct + '%; background: ' + info.color + ';"></div>';

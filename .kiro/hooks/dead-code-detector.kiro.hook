@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Dead Code Detector",
+  "description": "Reviews all modified or created files after agent execution to identify unused imports, variables, functions, deprecated fields, dead template code, commented code blocks, and unused JavaScript. Outputs a categorized report of safe deletions and items requiring confirmation.",
+  "version": "1",
+  "when": {
+    "type": "agentStop"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "You are a dead code detector for a Django banking system. Review all files that were modified or created in the previous agent execution and identify any unused or outdated code.\n\n--- UNUSED IMPORTS ---\n- Any import that is not referenced anywhere in the file\n- Any import that was needed for old code that no longer exists\n- Flag: file name + import line + \"remove this import\"\n\n--- UNUSED VARIABLES ---\n- Any variable assigned but never read\n- Any variable that is reassigned before being used\n- Any loop variable that is never used inside the loop (use _ instead)\n\n--- UNUSED FUNCTIONS & VIEWS ---\n- Any function or view not referenced in urls.py or called anywhere\n- Any helper function in utils.py not imported by any other file\n- Flag with: \"not referenced in urls.py or any other file — confirm and remove if no longer needed\"\n\n--- DEPRECATED FIELDS (KNOWN) ---\nThese fields exist in the User model but are marked deprecated. Flag if any new code references them:\n- User.role — deprecated, check if new code uses is_staff instead\n- User.phone — deprecated, flag if used instead of mobile_primary\n- User.avatar — deprecated, flag if used instead of photograph\n\n--- DEAD TEMPLATE CODE ---\n- Any {% block %} defined in a child template that does not exist in the parent base template\n- Any {% load static %} in a template that has no static file references\n- Any {% url %} referencing a URL name that no longer exists in urls.py\n\n--- COMMENTED OUT CODE ---\n- Any block of code that has been commented out for more than a few lines\n- Do NOT flag single-line comments that are explanatory\n- Flag only code comments like: # user.save() or # return redirect(...) that suggest old logic was left behind\n\n--- JAVASCRIPT ---\n- Any function defined in a .js file but never called in any template or other JS file\n- Any variable declared with let or const but never used\n\n--- OUTPUT FORMAT ---\nAt the end output:\n🧹 Clean: list files checked with no dead code found\n🗑️ Remove: file + line + what it is + \"safe to delete\"\n⚠️ Confirm before removing: file + line + what it is + reason why it needs manual confirmation before deletion"
+  }
+}

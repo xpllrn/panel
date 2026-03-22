@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Security Audit Enforcer",
+  "description": "Reviews all modified/created files after agent execution to enforce authentication, data isolation, sensitive data protection, database safety, and secrets management rules for the Django banking system",
+  "version": "1",
+  "when": {
+    "type": "agentStop"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "You are a security enforcer for a Django banking system. Review all files modified or created in this execution and check the following security rules. Flag every issue with file name and a fix.\n\n--- AUTHENTICATION ---\n- Every new view in admin_portal must have @login_required + @admin_required\n- Every new view in member_portal must have @member_required\n- No new public views unless it is login_view, logout_view, or signup_view\n\n--- MEMBER DATA ISOLATION ---\n- Member portal views must NEVER use .all() on User, MemberAccount, Receipt, Loan, or LoanRepayment\n- Member portal views must always filter by request.user: MemberAccount.objects.filter(user=request.user)\n- Admin portal views are exempt from this rule — they are allowed to access any member's data\n\n--- SENSITIVE DATA ---\n- No view should return raw password values in JsonResponse (add_member_view and reset_member_password_view are known exceptions — flag if any NEW view does this)\n- No serializer or view should expose aadhar_number, pan_number, or password fields to member portal users\n- Serializers must never use fields = '__all__' on User or MemberAccount\n\n--- DATABASE SAFETY ---\n- No raw SQL string concatenation — use ORM only\n- No .filter() using unvalidated request.GET or request.POST data directly without cleaning\n\n--- SECRETS ---\n- No hardcoded passwords, tokens, or secret keys in any file\n- Sensitive config must use os.environ.get() or django-environ\n\n--- OUTPUT FORMAT ---\n✅ Passed: list what was checked and passed\n⚠️ Security Issues: file name + what rule was broken + severity (Critical / High / Medium) + suggested fix"
+  }
+}
