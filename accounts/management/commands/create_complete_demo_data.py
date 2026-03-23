@@ -103,7 +103,7 @@ class Command(BaseCommand):
                         last_name=last_name,
                         date_of_birth=dob,
                         mobile_primary=mobile,
-                        role="member",
+                        is_staff=False,
                     )
 
                     # Auto-generate member_id
