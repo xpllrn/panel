@@ -8,7 +8,7 @@
    ======================================== */
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: var(--spacing-xl);
     margin-bottom: var(--spacing-2xl);
 }
@@ -53,6 +53,19 @@
 .stat-icon-today {
     background: #ddd6fe;
     color: #7c3aed;
+}
+
+.stat-icon-profit {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+.stat-profit-positive {
+    color: #16a34a;
+}
+
+.stat-profit-negative {
+    color: #dc2626;
 }
 
 .stat-info {
@@ -559,6 +572,12 @@
 /* ========================================
    Responsive
    ======================================== */
+@media (max-width: 1200px) {
+    .stats-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
 @media (max-width: 1024px) {
     .stats-grid {
         grid-template-columns: repeat(2, 1fr);

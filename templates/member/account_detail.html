@@ -1,4 +1,5 @@
 {% extends "member/base.html" %}
+{% load currency_filters %}
 
 {% block title %}Account {{ account.account_number }} - Member Portal{% endblock %}
 
@@ -8,6 +9,7 @@
         <a href="{% url 'member_portal:accounts' %}" class="btn btn-sm btn-outline">&larr; Back to Accounts</a>
         <h2>Account: {{ account.account_number }}</h2>
     </div>
+    <a href="{% url 'member_portal:account_statement' account.id %}?months=3" class="btn btn-sm btn-primary">Download Statement (PDF)</a>
 </div>
 
 <!-- Account Details Card -->
@@ -28,7 +30,7 @@
             </div>
             <div class="detail-item">
                 <span class="detail-label">Balance</span>
-                <span class="detail-value">₹{{ account.balance|floatformat:2 }}</span>
+                <span class="detail-value">₹{{ account.balance|inr }}</span>
             </div>
             <div class="detail-item">
                 <span class="detail-label">Interest Rate</span>
@@ -36,11 +38,11 @@
             </div>
             <div class="detail-item">
                 <span class="detail-label">Principal Amount</span>
-                <span class="detail-value">₹{{ account.principal_amount|floatformat:2 }}</span>
+                <span class="detail-value">₹{{ account.principal_amount|inr }}</span>
             </div>
             <div class="detail-item">
                 <span class="detail-label">Accrued Interest</span>
-                <span class="detail-value">₹{{ account.accrued_interest|floatformat:2 }}</span>
+                <span class="detail-value">₹{{ account.accrued_interest|inr }}</span>
             </div>
             <div class="detail-item">
                 <span class="detail-label">Opening Date</span>
@@ -59,25 +61,23 @@
             {% if account.is_term_deposit %}
             <div class="detail-item">
                 <span class="detail-label">Estimated Maturity Amount</span>
-                <span class="detail-value">₹{{ account.maturity_amount|floatformat:2 }}</span>
+                <span class="detail-value">₹{{ account.maturity_amount|inr }}</span>
             </div>
             {% endif %}
             {% if account.account_type == 'rd' %}
             <div class="detail-item">
                 <span class="detail-label">Monthly Installment</span>
-                <span class="detail-value">₹{{ account.rd_monthly_amount|floatformat:2|default:"N/A" }}</span>
+                <span class="detail-value">₹{{ account.rd_monthly_amount|inr }}</span>
             </div>
             <div class="detail-item">
                 <span class="detail-label">Installments Paid</span>
-                <span class="detail-value">{{ account.rd_installments_paid }} / {{
-                    account.rd_total_installments|default:"—" }}</span>
+                <span class="detail-value">{{ account.rd_installments_paid }} / {{ account.rd_total_installments|default:"—" }}</span>
             </div>
             {% endif %}
             {% if account.nominee_name %}
             <div class="detail-item">
                 <span class="detail-label">Nominee</span>
-                <span class="detail-value">{{ account.nominee_name }} ({{ account.nominee_relationship|default:"—"
-                    }})</span>
+                <span class="detail-value">{{ account.nominee_name }} ({{ account.nominee_relationship|default:"—" }})</span>
             </div>
             {% endif %}
         </div>
@@ -114,12 +114,10 @@
                             </span>
                         </td>
                         <td>{{ txn.get_payment_mode_display }}</td>
-                        <td
-                            class="{% if txn.transaction_type == 'credit' %}text-success{% else %}text-danger{% endif %}">
-                            {% if txn.transaction_type == 'credit' %}+{% else %}-{% endif %}₹{{ txn.amount|floatformat:2
-                            }}
+                        <td class="{% if txn.transaction_type == 'credit' %}text-success{% else %}text-danger{% endif %}">
+                            {% if txn.transaction_type == 'credit' %}+{% else %}-{% endif %}₹{{ txn.amount|inr }}
                         </td>
-                        <td>₹{{ txn.balance_after|floatformat:2 }}</td>
+                        <td>₹{{ txn.balance_after|inr }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -131,8 +129,7 @@
             {% if transactions.has_previous %}
             <a href="?page={{ transactions.previous_page_number }}" class="btn btn-sm btn-outline">&laquo; Previous</a>
             {% endif %}
-            <span class="pagination-info">Page {{ transactions.number }} of {{ transactions.paginator.num_pages
-                }}</span>
+            <span class="pagination-info">Page {{ transactions.number }} of {{ transactions.paginator.num_pages }}</span>
             {% if transactions.has_next %}
             <a href="?page={{ transactions.next_page_number }}" class="btn btn-sm btn-outline">Next &raquo;</a>
             {% endif %}

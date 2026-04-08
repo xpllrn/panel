@@ -1,0 +1,420 @@
+{% extends 'admin/base.html' %}
+{% load static currency_filters %}
+
+{% block title %}Financial Reports - Admin Portal{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/pages/members.css' %}">
+<style>
+.report-filters {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.report-filters select {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.85rem;
+    border: 1px solid var(--color-gray-300);
+    border-radius: var(--radius-md);
+    background: var(--color-white);
+}
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+@media (max-width: 992px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 576px) { .stats-grid { grid-template-columns: 1fr; } }
+.stat-card {
+    background: var(--color-white);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    box-shadow: var(--shadow-sm);
+}
+.stat-value { font-size: 1.3rem; font-weight: 700; color: var(--color-gray-800); }
+.stat-label { font-size: 0.75rem; color: var(--color-gray-500); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 0.25rem; }
+.stat-sub { font-size: 0.8rem; color: var(--color-gray-400); margin-top: 0.15rem; }
+.report-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+@media (max-width: 768px) { .report-row { grid-template-columns: 1fr; } }
+.report-card {
+    background: var(--color-white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 1.25rem;
+}
+.report-card h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: var(--color-gray-700);
+}
+.chart-container { position: relative; overflow-x: auto; }
+.chart-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+.chart-table th {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    font-weight: 500;
+    color: var(--color-gray-500);
+    border-bottom: 1px solid var(--color-gray-200);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+}
+.chart-table td {
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--color-gray-100);
+    vertical-align: middle;
+}
+.chart-table tr:nth-child(even) { background: var(--color-gray-50, #f9fafb); }
+.chart-bar-cell { width: 45%; }
+.chart-bar-track {
+    height: 18px;
+    background: var(--color-gray-100);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+}
+.chart-bar-fill-rev {
+    height: 100%;
+    background: #22c55e;
+    border-radius: 3px 0 0 3px;
+    transition: width 0.3s;
+}
+.chart-bar-fill-exp {
+    height: 100%;
+    background: #ef4444;
+    border-radius: 0 3px 3px 0;
+    transition: width 0.3s;
+}
+.chart-amount { font-weight: 600; font-size: 0.8rem; white-space: nowrap; }
+.chart-amount-rev { color: #16a34a; }
+.chart-amount-exp { color: #dc2626; }
+.chart-amount-profit { font-weight: 700; }
+.chart-legend {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.75rem;
+    color: var(--color-gray-500);
+    margin-top: 0.75rem;
+}
+.legend-dot-r {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    margin-right: 4px;
+    vertical-align: middle;
+}
+.portfolio-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--color-gray-100);
+    font-size: 0.85rem;
+}
+.portfolio-item:last-child { border-bottom: none; }
+.portfolio-label { color: var(--color-gray-600); }
+.portfolio-value { font-weight: 600; color: var(--color-gray-800); }
+.fund-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--color-gray-100);
+    font-size: 0.85rem;
+}
+.fund-row:last-child { border-bottom: none; }
+.fund-name { color: var(--color-gray-700); font-weight: 500; }
+.fund-balance { font-weight: 600; color: var(--color-gray-800); }
+.npa-badge {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    border-radius: var(--radius-md);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.npa-substandard { background: #fef3c7; color: #92400e; }
+.npa-doubtful { background: #fed7aa; color: #9a3412; }
+.npa-loss { background: #fecaca; color: #991b1b; }
+.profit-positive { color: #16a34a; }
+.profit-negative { color: #dc2626; }
+.distribute-section {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background: var(--color-gray-50);
+    border-radius: var(--radius-md);
+    text-align: center;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2 class="page-title">Financial Reports</h2>
+    <div class="report-filters">
+        <select id="periodSelect" onchange="updatePeriod()">
+            <option value="month" {% if period == 'month' %}selected{% endif %}>Monthly</option>
+            <option value="quarter" {% if period == 'quarter' %}selected{% endif %}>Quarterly</option>
+            <option value="year" {% if period == 'year' %}selected{% endif %}>Yearly</option>
+        </select>
+        <select id="yearSelect" onchange="updatePeriod()">
+            {% for y in "2024,2025,2026"|make_list %}{% endfor %}
+            <option value="2024" {% if year == 2024 %}selected{% endif %}>2024</option>
+            <option value="2025" {% if year == 2025 %}selected{% endif %}>2025</option>
+            <option value="2026" {% if year == 2026 %}selected{% endif %}>2026</option>
+        </select>
+    </div>
+</div>
+
+<p style="font-size: 0.85rem; color: var(--color-gray-500); margin-bottom: 1rem;">
+    Period: {{ start_date|date:"d M Y" }} to {{ end_date|date:"d M Y" }}
+</p>
+
+<!-- Top Stat Cards -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value">₹{{ summary.loan_interest_income|inr }}</div>
+        <div class="stat-label">Loan Interest Income</div>
+        {% if summary.penalty_income %}
+        <div class="stat-sub">+ ₹{{ summary.penalty_income|inr }} penalties</div>
+        {% endif %}
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">₹{{ summary.deposit_interest_expense|inr }}</div>
+        <div class="stat-label">Deposit Interest Expense</div>
+        <div class="stat-sub">Monthly: ₹{{ summary.monthly_interest_liability|inr }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value {% if summary.net_profit >= 0 %}profit-positive{% else %}profit-negative{% endif %}">
+            ₹{{ summary.net_profit|inr }}
+        </div>
+        <div class="stat-label">Net Profit</div>
+        <div class="stat-sub">Revenue: ₹{{ summary.gross_revenue|inr }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">₹{{ summary.total_loans_outstanding|inr }}</div>
+        <div class="stat-label">Loans Outstanding</div>
+        <div class="stat-sub">{{ summary.active_loans_count }} active loans</div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="report-row">
+    <!-- Revenue vs Expense Chart -->
+    <div class="report-card" style="grid-column: 1 / -1;">
+        <h3>Revenue vs Expense (Monthly Breakdown)</h3>
+        <div class="chart-container" id="revenueChart"></div>
+        <div class="chart-legend">
+            <span><span class="legend-dot-r" style="background: #22c55e;"></span> Revenue</span>
+            <span><span class="legend-dot-r" style="background: #ef4444;"></span> Expense</span>
+        </div>
+    </div>
+</div>
+
+<!-- Portfolio Row -->
+<div class="report-row">
+    <!-- Loan Portfolio -->
+    <div class="report-card">
+        <h3>Loan Portfolio</h3>
+        <div class="portfolio-item">
+            <span class="portfolio-label">Active Loans</span>
+            <span class="portfolio-value">{{ summary.active_loans_count }}</span>
+        </div>
+        <div class="portfolio-item">
+            <span class="portfolio-label">Disbursed (This Period)</span>
+            <span class="portfolio-value">₹{{ summary.total_disbursed|inr }}</span>
+        </div>
+        <div class="portfolio-item">
+            <span class="portfolio-label">Outstanding</span>
+            <span class="portfolio-value">₹{{ summary.total_loans_outstanding|inr }}</span>
+        </div>
+        <div class="portfolio-item">
+            <span class="portfolio-label">Overdue</span>
+            <span class="portfolio-value" style="color: #dc2626;">₹{{ summary.total_overdue|inr }}</span>
+        </div>
+        <div class="portfolio-item">
+            <span class="portfolio-label">Recovery Rate</span>
+            <span class="portfolio-value">{{ summary.recovery_rate }}%</span>
+        </div>
+        <div class="portfolio-item">
+            <span class="portfolio-label">Interest Earned</span>
+            <span class="portfolio-value" style="color: #16a34a;">₹{{ summary.loan_interest_income|inr }}</span>
+        </div>
+        <div class="portfolio-item">
+            <span class="portfolio-label">Processing Fees</span>
+            <span class="portfolio-value">₹{{ summary.processing_fees|inr }}</span>
+        </div>
+
+        {% if npa_loans %}
+        <h4 style="margin-top: 1rem; font-size: 0.85rem; color: #dc2626;">NPA Classification ({{ npa_loans|length }} loans)</h4>
+        {% for category, data in npa_summary.items %}
+        <div class="portfolio-item">
+            <span class="portfolio-label">
+                <span class="npa-badge npa-{{ category }}">{{ category|title }}</span>
+                ({{ data.count }})
+            </span>
+            <span class="portfolio-value" style="color: #dc2626;">₹{{ data.amount|inr }}</span>
+        </div>
+        {% endfor %}
+        {% endif %}
+    </div>
+
+    <!-- Deposit Portfolio -->
+    <div class="report-card">
+        <h3>Deposit Portfolio</h3>
+        {% for type_name, data in summary.deposit_by_type.items %}
+        <div class="portfolio-item">
+            <span class="portfolio-label">{{ type_name }} ({{ data.count }})</span>
+            <span class="portfolio-value">₹{{ data.balance|inr }} <span style="font-size: 0.75rem; color: var(--color-gray-400);">@ {{ data.avg_rate }}%</span></span>
+        </div>
+        {% empty %}
+        <p style="color: var(--color-gray-400); font-size: 0.85rem; font-style: italic;">No active deposit accounts.</p>
+        {% endfor %}
+        <div class="portfolio-item" style="border-top: 2px solid var(--color-gray-200); margin-top: 0.5rem; padding-top: 0.75rem;">
+            <span class="portfolio-label" style="font-weight: 600;">Monthly Interest Liability</span>
+            <span class="portfolio-value" style="color: #dc2626;">₹{{ summary.monthly_interest_liability|inr }}</span>
+        </div>
+    </div>
+</div>
+
+<!-- Fund Balances -->
+<div class="report-card" style="margin-bottom: 1.5rem;">
+    <h3>Fund Balances</h3>
+    {% for fund in fund_balances %}
+    <div class="fund-row">
+        <span class="fund-name">{{ fund.name }} <span style="font-size: 0.75rem; color: var(--color-gray-400);">({{ fund.get_fund_type_display }})</span></span>
+        <span class="fund-balance">₹{{ fund.balance|inr }}</span>
+    </div>
+    {% empty %}
+    <p style="color: var(--color-gray-400); font-size: 0.85rem; font-style: italic;">No funds created yet. <a href="{% url 'funds' %}">Create funds</a></p>
+    {% endfor %}
+
+    {% if summary.fund_allocations %}
+    <div class="fund-row" style="border-top: 2px solid var(--color-gray-200); margin-top: 0.5rem; padding-top: 0.75rem;">
+        <span class="fund-name" style="font-weight: 600;">Total Allocated This Period</span>
+        <span class="fund-balance">₹{{ summary.fund_allocations|inr }}</span>
+    </div>
+    {% endif %}
+
+    {% if period == 'year' %}
+    <div class="distribute-section">
+        <p style="font-size: 0.85rem; color: var(--color-gray-600); margin-bottom: 0.75rem;">
+            Distribute FY {{ year }}-{{ year|add:"1" }} profit (₹{{ summary.net_profit|inr }}) to funds using allocation rules.
+        </p>
+        <button class="btn btn-primary btn-sm" onclick="distributeProfit()" id="distributeBtn"
+            {% if summary.net_profit <= 0 %}disabled title="No distributable profit"{% endif %}>
+            Distribute Annual Profit
+        </button>
+        <div id="distributeResult" style="margin-top: 0.5rem; font-size: 0.85rem;"></div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    window.CSRF_TOKEN = '{{ csrf_token }}';
+</script>
+<script>
+(function() {
+    'use strict';
+
+    var monthlyData = {{ monthly_data_json|safe }};
+
+    function renderRevenueChart() {
+        var container = document.getElementById('revenueChart');
+        if (!container || !monthlyData.length) {
+            if (container) container.innerHTML = '<p style="color: var(--color-gray-400); text-align: center; padding: 2rem;">No data for this period.</p>';
+            return;
+        }
+
+        // Find max for bar scaling
+        var maxVal = 0;
+        for (var i = 0; i < monthlyData.length; i++) {
+            var total = monthlyData[i].revenue + monthlyData[i].expense;
+            if (total > maxVal) maxVal = total;
+        }
+        if (maxVal === 0) maxVal = 1;
+
+        var html = '<table class="chart-table">';
+        html += '<thead><tr><th>Month</th><th>Revenue</th><th>Expense</th><th>Breakdown</th><th>Net Profit</th></tr></thead>';
+        html += '<tbody>';
+
+        for (var i = 0; i < monthlyData.length; i++) {
+            var d = monthlyData[i];
+            var revPct = (d.revenue / maxVal) * 100;
+            var expPct = (d.expense / maxVal) * 100;
+            var profitClass = d.profit >= 0 ? 'chart-amount-rev' : 'chart-amount-exp';
+
+            html += '<tr>';
+            html += '<td style="font-weight:500; white-space:nowrap;">' + d.month + '</td>';
+            html += '<td class="chart-amount chart-amount-rev">₹' + formatINR(d.revenue) + '</td>';
+            html += '<td class="chart-amount chart-amount-exp">₹' + formatINR(d.expense) + '</td>';
+            html += '<td class="chart-bar-cell"><div class="chart-bar-track">';
+            if (d.revenue > 0) html += '<div class="chart-bar-fill-rev" style="width:' + revPct.toFixed(1) + '%" title="Revenue: ₹' + formatINR(d.revenue) + '"></div>';
+            if (d.expense > 0) html += '<div class="chart-bar-fill-exp" style="width:' + expPct.toFixed(1) + '%" title="Expense: ₹' + formatINR(d.expense) + '"></div>';
+            html += '</div></td>';
+            html += '<td class="chart-amount chart-amount-profit ' + profitClass + '">' + (d.profit >= 0 ? '' : '-') + '₹' + formatINR(Math.abs(d.profit)) + '</td>';
+            html += '</tr>';
+        }
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    }
+
+    function formatINR(num) {
+        return num.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', renderRevenueChart);
+    } else {
+        renderRevenueChart();
+    }
+})();
+
+function updatePeriod() {
+    var period = document.getElementById('periodSelect').value;
+    var year = document.getElementById('yearSelect').value;
+    window.location.href = '/reports/?period=' + period + '&year=' + year;
+}
+
+function distributeProfit() {
+    var btn = document.getElementById('distributeBtn');
+    var result = document.getElementById('distributeResult');
+    btn.disabled = true;
+    btn.textContent = 'Distributing...';
+
+    fetch('/reports/distribute-profit/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': window.CSRF_TOKEN,
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'year={{ year }}'
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            result.innerHTML = '<span style="color: #16a34a;">' + data.message + '</span>';
+            setTimeout(function() { location.reload(); }, 2000);
+        } else {
+            result.innerHTML = '<span style="color: #dc2626;">' + data.error + '</span>';
+            btn.disabled = false;
+            btn.textContent = 'Distribute Annual Profit';
+        }
+    });
+}
+</script>
+{% endblock %}

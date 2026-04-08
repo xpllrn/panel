@@ -1,5 +1,5 @@
 {% extends 'admin/base.html' %}
-{% load static %}
+{% load static currency_filters %}
 
 {% block title %}Account Book - Admin Portal{% endblock %}
 
@@ -142,14 +142,14 @@
                 {% for balance_data in member.account_balances %}
                 <td class="balance-cell {% if balance_data.balance == 0 %}zero{% else %}positive{% endif %}">
                     {% if balance_data.balance > 0 %}
-                        ₹{{ balance_data.balance|floatformat:2 }}
+                        ₹{{ balance_data.balance|inr }}
                     {% else %}
                         -
                     {% endif %}
                 </td>
                 {% endfor %}
                 <td class="balance-cell {% if member.total_balance == 0 %}zero{% else %}positive{% endif %}">
-                    <strong>₹{{ member.total_balance|floatformat:2 }}</strong>
+                    <strong>₹{{ member.total_balance|inr }}</strong>
                 </td>
             </tr>
             {% empty %}
@@ -163,11 +163,11 @@
                 <td><strong>TOTAL</strong></td>
                 {% for total in account_totals %}
                 <td class="balance-cell">
-                    <strong>₹{{ total|floatformat:2 }}</strong>
+                    <strong>₹{{ total|inr }}</strong>
                 </td>
                 {% endfor %}
                 <td class="balance-cell grand-total">
-                    <strong>₹{{ grand_total|floatformat:2 }}</strong>
+                    <strong>₹{{ grand_total|inr }}</strong>
                 </td>
             </tr>
             {% endif %}

@@ -1,4 +1,5 @@
 {% extends "member/base.html" %}
+{% load currency_filters %}
 
 {% block title %}My Accounts - Member Portal{% endblock %}
 
@@ -48,7 +49,7 @@
                     <tr>
                         <td><strong>{{ acc.account_number }}</strong></td>
                         <td>{{ acc.get_account_type_display }}</td>
-                        <td>₹{{ acc.balance|floatformat:2 }}</td>
+                        <td>₹{{ acc.balance|inr }}</td>
                         <td>{{ acc.interest_rate }}%</td>
                         <td>{{ acc.opening_date|date:"d M Y" }}</td>
                         <td>{{ acc.maturity_date|date:"d M Y"|default:"-" }}</td>

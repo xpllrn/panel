@@ -1,4 +1,5 @@
 {% extends "member/base.html" %}
+{% load currency_filters %}
 
 {% block title %}Transactions - Member Portal{% endblock %}
 
@@ -61,12 +62,10 @@
                             </span>
                         </td>
                         <td>{{ txn.get_payment_mode_display }}</td>
-                        <td
-                            class="{% if txn.transaction_type == 'credit' %}text-success{% else %}text-danger{% endif %}">
-                            {% if txn.transaction_type == 'credit' %}+{% else %}-{% endif %}₹{{ txn.amount|floatformat:2
-                            }}
+                        <td class="{% if txn.transaction_type == 'credit' %}text-success{% else %}text-danger{% endif %}">
+                            {% if txn.transaction_type == 'credit' %}+{% else %}-{% endif %}₹{{ txn.amount|inr }}
                         </td>
-                        <td>₹{{ txn.balance_after|floatformat:2 }}</td>
+                        <td>₹{{ txn.balance_after|inr }}</td>
                         <td>{{ txn.description|default:"-"|truncatewords:8 }}</td>
                     </tr>
                     {% endfor %}
@@ -80,8 +79,7 @@
             <a href="?page={{ transactions.previous_page_number }}&type={{ current_type }}&account={{ current_account }}"
                 class="btn btn-sm btn-outline">&laquo; Previous</a>
             {% endif %}
-            <span class="pagination-info">Page {{ transactions.number }} of {{ transactions.paginator.num_pages
-                }}</span>
+            <span class="pagination-info">Page {{ transactions.number }} of {{ transactions.paginator.num_pages }}</span>
             {% if transactions.has_next %}
             <a href="?page={{ transactions.next_page_number }}&type={{ current_type }}&account={{ current_account }}"
                 class="btn btn-sm btn-outline">Next &raquo;</a>

@@ -21,6 +21,7 @@ A modern admin panel built with Django, Django REST Framework, and PostgreSQL, f
 - PostgreSQL 15
 - Docker & Docker Compose
 - Bootstrap 5
+- code-review-graph (AI-powered code review optimization)
 
 ## Quick Start
 
@@ -66,6 +67,19 @@ docker-compose exec web python manage.py createsuperuser
 8. Access the application:
    - Admin panel: http://localhost:8000
    - Django admin: http://localhost:8000/admin
+
+### Code Review Graph Setup (Optional)
+
+For AI-assisted code reviews with optimized token usage:
+
+```bash
+# Install in Docker container
+docker-compose exec web pip install code-review-graph
+docker-compose exec web code-review-graph install
+docker-compose exec web code-review-graph build
+```
+
+This builds a knowledge graph of your codebase that reduces AI token usage by up to 8.2x during code reviews. See `CODE_REVIEW_GRAPH_SETUP.md` for details.
 
 ### Environment Variables
 

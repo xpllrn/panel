@@ -1,5 +1,5 @@
 {% extends 'admin/base.html' %}
-{% load static %}
+{% load static currency_filters %}
 
 {% block title %}Dashboard - Admin Portal{% endblock %}
 
@@ -36,7 +36,7 @@
     <div class="stat-card">
         <div class="stat-icon stat-icon-deposits">D</div>
         <div class="stat-info">
-            <div class="stat-value stat-value-amount">{{ total_deposits|floatformat:0 }}</div>
+            <div class="stat-value">₹{{ total_deposits|inr }}</div>
             <div class="stat-label">Total Deposits</div>
             <div class="stat-sub">across all accounts</div>
         </div>
@@ -47,9 +47,17 @@
             <div class="stat-value">{{ today_receipts }}</div>
             <div class="stat-label">Today's Transactions</div>
             <div class="stat-sub stat-sub-split">
-                <span class="stat-credit">+{{ today_credit|floatformat:0 }}</span>
-                <span class="stat-debit">-{{ today_debit|floatformat:0 }}</span>
+                <span class="stat-credit">+₹{{ today_credit|inr }}</span>
+                <span class="stat-debit">-₹{{ today_debit|inr }}</span>
             </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon stat-icon-profit">P</div>
+        <div class="stat-info">
+            <div class="stat-value {% if net_profit >= 0 %}stat-profit-positive{% else %}stat-profit-negative{% endif %}">₹{{ net_profit|inr }}</div>
+            <div class="stat-label">Net Profit (FY)</div>
+            <div class="stat-sub">Revenue: ₹{{ gross_revenue|inr }}</div>
         </div>
     </div>
 </div>
@@ -59,7 +67,7 @@
     <!-- Transaction Trend Chart -->
     <div class="dashboard-card dashboard-card-wide">
         <div class="dashboard-card-header">
-            <h3>Transaction Trend (Last 7 Days)</h3>
+            <h3>Transaction Trend (Last 30 Days)</h3>
         </div>
         <div class="dashboard-card-body">
             <div class="chart-container" id="trendChart"></div>
@@ -119,7 +127,7 @@
                             <span class="txn-type txn-type-{{ txn.transaction_type }}">{{ txn.get_transaction_type_display }}</span>
                         </td>
                         <td class="txn-amount {% if txn.transaction_type == 'credit' or txn.transaction_type == 'interest' or txn.transaction_type == 'dividend' or txn.transaction_type == 'share_capital' %}txn-amount-credit{% else %}txn-amount-debit{% endif %}">
-                            {{ txn.amount|floatformat:2 }}
+                            ₹{{ txn.amount|inr }}
                         </td>
                         <td class="txn-date">{{ txn.created_at|date:"M d, Y" }}</td>
                     </tr>

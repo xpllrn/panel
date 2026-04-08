@@ -12,8 +12,18 @@ from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
 
-from accounts.models import AuditLog, BankAccount, Loan, LoanRepayment, MemberAccount, Receipt, User
-from accounts.utils import log_action, split_full_name, validate_password_strength
+from accounts.models import (
+    AuditLog,
+    FundAccount,
+    FundAllocationRule,
+    FundTransaction,
+    Loan,
+    LoanRepayment,
+    MemberAccount,
+    Receipt,
+    User,
+)
+from accounts.utils import apply_fund_allocations, log_action, split_full_name, validate_password_strength
 
 # Rate limiting cache for member creation (simple in-memory)
 _member_creation_timestamps = {}
@@ -75,9 +85,10 @@ def home_view(request):
         or 0
     )
 
-    # Transaction trend - last 7 days (for bar chart)
+    # Transaction trend - last 30 days (for bar chart)
+    # Use 30-day window to ensure chart shows data even when recent activity is sparse
     trend_data = []
-    for i in range(6, -1, -1):
+    for i in range(29, -1, -1):
         day = today - timedelta(days=i)
         day_credits = (
             Receipt.objects.filter(
@@ -91,14 +102,29 @@ def home_view(request):
             )["total"]
             or 0
         )
-        trend_data.append(
-            {
-                "date": day.strftime("%b %d"),
-                "day": day.strftime("%a"),
-                "credits": float(day_credits),
-                "debits": float(day_debits),
-            }
-        )
+        # Only include days that have transactions to keep chart clean
+        if day_credits or day_debits:
+            trend_data.append(
+                {
+                    "date": day.strftime("%b %d"),
+                    "day": day.strftime("%a %d"),
+                    "credits": float(day_credits),
+                    "debits": float(day_debits),
+                }
+            )
+
+    # If no data in 30 days, show last 7 days anyway (empty bars)
+    if not trend_data:
+        for i in range(6, -1, -1):
+            day = today - timedelta(days=i)
+            trend_data.append(
+                {
+                    "date": day.strftime("%b %d"),
+                    "day": day.strftime("%a"),
+                    "credits": 0,
+                    "debits": 0,
+                }
+            )
 
     # Recent 10 transactions
     recent_transactions = Receipt.objects.select_related("user", "member_account").all().order_by("-created_at")[:10]
@@ -132,6 +158,19 @@ def home_view(request):
     overdue_list = sorted(overdue_loans.values(), key=lambda x: -x["days_overdue"])[:10]
     total_overdue_count = len(overdue_loans)
 
+    # Fund stats
+    fund_total_balance = FundAccount.objects.filter(is_deleted=False).aggregate(total=Sum("balance"))["total"] or 0
+    total_funds = FundAccount.objects.filter(is_deleted=False).count()
+
+    # Net profit for current fiscal year (April-March)
+    from accounts.utils import get_financial_summary
+
+    fiscal_year_start = date(today.year, 4, 1) if today.month >= 4 else date(today.year - 1, 4, 1)
+    fiscal_year_end = date(fiscal_year_start.year + 1, 3, 31)
+    financial_summary = get_financial_summary(fiscal_year_start, fiscal_year_end)
+    net_profit = financial_summary["net_profit"]
+    gross_revenue = financial_summary["gross_revenue"]
+
     return render(
         request,
         "admin/home.html",
@@ -150,6 +189,10 @@ def home_view(request):
             "account_type_data_json": json.dumps(account_type_data),
             "overdue_data_json": json.dumps(overdue_list),
             "total_overdue_count": total_overdue_count,
+            "fund_total_balance": fund_total_balance,
+            "total_funds": total_funds,
+            "net_profit": net_profit,
+            "gross_revenue": gross_revenue,
         },
     )
 
@@ -337,6 +380,18 @@ def add_member_view(request):
                         account.id,
                         f"Auto-created {account_name} account {account.account_number} for member {username}",
                     )
+
+                # Apply fund allocations for member registration (wrapped in try/except to never break member creation)
+                try:
+                    apply_fund_allocations(
+                        request,
+                        "member_registration",
+                        Decimal("200.00"),
+                        f"Member registration fee: {user.display_name} ({username})",
+                        source_member=user,
+                    )
+                except Exception:
+                    pass
 
             return JsonResponse({"success": True, "user_id": user.id, "password": password})
         except Exception as e:
@@ -866,23 +921,6 @@ def profile_view(request):
 
 @login_required
 @admin_required
-def delete_account_view(request, account_id):
-    """Delete a bank account"""
-    if request.method == "POST":
-        try:
-            account = BankAccount.objects.get(id=account_id, user=request.user)
-            account.delete()
-            return JsonResponse({"success": True})
-        except BankAccount.DoesNotExist:
-            return JsonResponse({"success": False, "error": "Account not found"})
-        except Exception as e:
-            return JsonResponse({"success": False, "error": str(e)})
-
-    return JsonResponse({"success": False, "error": "Invalid request method"})
-
-
-@login_required
-@admin_required
 def accounts_view(request):
     """Account Book view - shows all members and their account balances in a grid"""
     query = request.GET.get("q", "").strip()
@@ -1303,6 +1341,20 @@ def add_receipt_view(request):
                         f"Created receipt {receipt.receipt_number} - {transaction_type} of "
                         f"\u20b9{amount_decimal} for {user.display_name}",
                     )
+
+                    # Apply fund allocations for loan interest (wrapped in try/except to never break receipt creation)
+                    if transaction_type == "interest":
+                        try:
+                            apply_fund_allocations(
+                                request,
+                                "loan_interest",
+                                amount_decimal,
+                                f"Loan interest: {user.display_name} - {account.account_number}",
+                                source_member=user,
+                            )
+                        except Exception:
+                            pass
+
                     return JsonResponse({"success": True, "receipt_id": receipt.id})
                 except IntegrityError:
                     if attempt == max_retries - 1:
@@ -1757,6 +1809,150 @@ def get_audit_log_view(request, log_id):
 
 @login_required
 @admin_required
+def reports_view(request):
+    """Financial reports page with profit calculation and portfolio analysis."""
+    from accounts.utils import get_financial_summary
+
+    # Period selector
+    period = request.GET.get("period", "year")
+    year = int(request.GET.get("year", date.today().year))
+
+    if period == "month":
+        month = int(request.GET.get("month", date.today().month))
+        import calendar
+
+        start_date = date(year, month, 1)
+        last_day = calendar.monthrange(year, month)[1]
+        end_date = date(year, month, last_day)
+    elif period == "quarter":
+        quarter = int(request.GET.get("quarter", (date.today().month - 1) // 3 + 1))
+        start_month = (quarter - 1) * 3 + 1
+        import calendar
+
+        end_month = start_month + 2
+        start_date = date(year, start_month, 1)
+        last_day = calendar.monthrange(year, end_month)[1]
+        end_date = date(year, end_month, last_day)
+    else:  # year
+        start_date = date(year, 4, 1)  # Indian fiscal year: April 1
+        end_date = date(year + 1, 3, 31)
+
+    summary = get_financial_summary(start_date, end_date)
+
+    # Monthly breakdown for chart (revenue vs expense per month)
+    monthly_data = []
+    import calendar
+
+    current = start_date
+    while current <= end_date:
+        month_start = current.replace(day=1)
+        last_day = calendar.monthrange(current.year, current.month)[1]
+        month_end = current.replace(day=last_day)
+        month_summary = get_financial_summary(month_start, month_end)
+        monthly_data.append(
+            {
+                "month": current.strftime("%b %Y"),
+                "revenue": float(month_summary["gross_revenue"]),
+                "expense": float(month_summary["total_expenses"]),
+                "profit": float(month_summary["net_profit"]),
+            }
+        )
+        # Move to next month
+        if current.month == 12:
+            current = current.replace(year=current.year + 1, month=1, day=1)
+        else:
+            current = current.replace(month=current.month + 1, day=1)
+
+    # Fund balances
+    fund_balances = FundAccount.objects.filter(is_deleted=False, is_active=True)
+
+    # NPA summary
+    npa_loans = [loan for loan in Loan.objects.filter(status="active") if loan.is_npa]
+    npa_summary = {}
+    for loan in npa_loans:
+        cat = loan.npa_category or "substandard"
+        if cat not in npa_summary:
+            npa_summary[cat] = {"count": 0, "amount": Decimal("0.00")}
+        npa_summary[cat]["count"] += 1
+        npa_summary[cat]["amount"] += loan.outstanding_balance
+
+    context = {
+        "summary": summary,
+        "monthly_data_json": json.dumps(monthly_data),
+        "fund_balances": fund_balances,
+        "npa_summary": npa_summary,
+        "npa_loans": npa_loans,
+        "period": period,
+        "year": year,
+        "start_date": start_date,
+        "end_date": end_date,
+        "current_year": date.today().year,
+    }
+    return render(request, "admin/reports.html", context)
+
+
+@login_required
+@admin_required
+def distribute_profit_view(request):
+    """Distribute annual profit to funds based on allocation rules."""
+    if request.method == "POST":
+        try:
+            from accounts.utils import get_financial_summary
+
+            year = int(request.POST.get("year", date.today().year))
+            start_date = date(year, 4, 1)
+            end_date = date(year + 1, 3, 31)
+
+            summary = get_financial_summary(start_date, end_date)
+            net_profit = summary["net_profit"]
+
+            if net_profit <= 0:
+                return JsonResponse(
+                    {"success": False, "error": f"No distributable profit for FY {year}-{year + 1}. Net: ₹{net_profit}"}
+                )
+
+            # Apply annual_profit allocation rules
+            from accounts.utils import apply_fund_allocations
+
+            transactions = apply_fund_allocations(
+                request,
+                "annual_profit",
+                net_profit,
+                f"Annual profit distribution for FY {year}-{year + 1}",
+            )
+
+            if not transactions:
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "error": "No allocation rules configured for 'Annual Profit'. Add rules in Allocation Rules page.",
+                    }
+                )
+
+            total_allocated = sum(t.amount for t in transactions)
+            log_action(
+                request,
+                "create",
+                "fund",
+                None,
+                f"Distributed annual profit ₹{net_profit} for FY {year}-{year + 1}. "
+                f"Allocated ₹{total_allocated} across {len(transactions)} funds.",
+            )
+
+            return JsonResponse(
+                {
+                    "success": True,
+                    "message": f"Distributed ₹{total_allocated} across {len(transactions)} funds.",
+                }
+            )
+        except Exception as e:
+            return JsonResponse({"success": False, "error": str(e)})
+
+    return JsonResponse({"success": False, "error": "Invalid request method"})
+
+
+@login_required
+@admin_required
 def calculator_view(request):
     """Banking calculator page"""
     return render(request, "admin/calculator.html")
@@ -2022,6 +2218,12 @@ def approve_loan_view(request, loan_id):
             if loan.status != "pending":
                 return JsonResponse({"success": False, "error": "Only pending loans can be approved"})
 
+            # Segregation of duties: creator cannot approve their own loan
+            if loan.created_by == request.user:
+                return JsonResponse(
+                    {"success": False, "error": "You cannot approve a loan you created. Another admin must approve it."}
+                )
+
             disbursement_date_str = request.POST.get("disbursement_date")
             if not disbursement_date_str:
                 return JsonResponse({"success": False, "error": "Disbursement date is required"})
@@ -2169,8 +2371,18 @@ def record_emi_payment_view(request, loan_id):
                         if repayment.payment_status == "paid":
                             return JsonResponse({"success": False, "error": "This installment is already paid"})
 
+                        # Calculate late penalty (2% per month on overdue amount)
+                        penalty = Decimal("0.00")
+                        if repayment.due_date < date.today():
+                            days_late = (date.today() - repayment.due_date).days
+                            months_late = max(1, days_late / 30)
+                            penalty = (
+                                repayment.amount_due * Decimal("2") * Decimal(str(months_late)) / Decimal("100")
+                            ).quantize(Decimal("0.01"))
+
                         repayment.paid_date = date.today()
                         repayment.amount_paid = amount
+                        repayment.penalty = penalty
                         repayment.payment_mode = payment_mode
                         repayment.payment_status = "paid" if amount >= repayment.amount_due else "partial"
 
@@ -2230,9 +2442,18 @@ def record_emi_payment_view(request, loan_id):
                         if loan.outstanding_balance < 0:
                             loan.outstanding_balance = Decimal("0")
                         loan.emis_paid = LoanRepayment.objects.filter(loan=loan, payment_status="paid").count()
-                        loan.emis_overdue = LoanRepayment.objects.filter(
+
+                        # Mark any upcoming EMIs past due date as overdue
+                        LoanRepayment.objects.filter(
                             loan=loan, payment_status="upcoming", due_date__lt=date.today()
-                        ).count()
+                        ).update(payment_status="overdue")
+
+                        loan.emis_overdue = LoanRepayment.objects.filter(loan=loan, payment_status="overdue").count()
+
+                        # Update overdue_amount dynamically
+                        loan.overdue_amount = LoanRepayment.objects.filter(
+                            loan=loan, payment_status="overdue"
+                        ).aggregate(total=Sum("amount_due"))["total"] or Decimal("0")
 
                         # Check if all EMIs paid
                         unpaid = LoanRepayment.objects.filter(loan=loan).exclude(payment_status="paid").count()
@@ -2259,6 +2480,582 @@ def record_emi_payment_view(request, loan_id):
 
         except Loan.DoesNotExist:
             return JsonResponse({"success": False, "error": "Loan not found"})
+        except Exception as e:
+            return JsonResponse({"success": False, "error": str(e)})
+
+    return JsonResponse({"success": False, "error": "Invalid request method"})
+
+
+# ========================================
+# Fund Management Views
+# ========================================
+
+
+@login_required
+@admin_required
+def funds_view(request):
+    """Funds list view with pagination and search"""
+    page = request.GET.get("page", 1)
+    query = request.GET.get("q", "").strip()
+    per_page = 25
+
+    # Base queryset
+    funds = FundAccount.objects.filter(is_deleted=False).order_by("name")
+
+    # Apply search filter
+    if query:
+        funds = funds.filter(Q(name__icontains=query) | Q(account_number__icontains=query))
+
+    # Paginate
+    paginator = Paginator(funds, per_page)
+    try:
+        funds_page = paginator.page(page)
+    except PageNotAnInteger:
+        funds_page = paginator.page(1)
+    except EmptyPage:
+        funds_page = paginator.page(paginator.num_pages)
+
+    # Summary stats
+    total_funds = FundAccount.objects.filter(is_deleted=False).count()
+    total_balance = FundAccount.objects.filter(is_deleted=False).aggregate(total=Sum("balance"))["total"] or 0
+
+    return render(
+        request,
+        "admin/funds.html",
+        {
+            "funds": funds_page,
+            "search_query": query,
+            "page_obj": funds_page,
+            "total_funds": total_funds,
+            "total_balance": total_balance,
+        },
+    )
+
+
+@login_required
+@admin_required
+def add_fund_view(request):
+    """Create a new fund account"""
+    if request.method == "POST":
+        try:
+            name = request.POST.get("name", "").strip()
+            fund_type = request.POST.get("fund_type")
+            description = request.POST.get("description", "").strip()
+
+            # Validate required fields
+            if not name:
+                return JsonResponse({"success": False, "error": "Fund name is required"})
+            if not fund_type:
+                return JsonResponse({"success": False, "error": "Fund type is required"})
+
+            # Auto-generate account number: FUND-YEAR-SEQUENCE
+            max_retries = 5
+            for attempt in range(max_retries):
+                try:
+                    with transaction.atomic():
+                        year = date.today().year
+                        last_fund = (
+                            FundAccount.objects.select_for_update()
+                            .filter(account_number__startswith=f"FUND-{year}-")
+                            .order_by("-account_number")
+                            .first()
+                        )
+                        if last_fund:
+                            try:
+                                last_seq = int(last_fund.account_number.split("-")[-1])
+                                next_seq = last_seq + 1
+                            except (ValueError, IndexError):
+                                next_seq = 1
+                        else:
+                            next_seq = 1
+
+                        account_number = f"FUND-{year}-{next_seq:05d}"
+
+                        fund = FundAccount.objects.create(
+                            name=name,
+                            fund_type=fund_type,
+                            account_number=account_number,
+                            description=description or None,
+                            created_by=request.user,
+                        )
+
+                    log_action(
+                        request,
+                        "create",
+                        "fund",
+                        fund.id,
+                        f"Created fund {name} ({account_number})",
+                    )
+                    return JsonResponse({"success": True, "fund_id": fund.id})
+                except IntegrityError:
+                    if attempt == max_retries - 1:
+                        raise
+                    continue
+
+        except Exception as e:
+            return JsonResponse({"success": False, "error": str(e)})
+
+    return JsonResponse({"success": False, "error": "Invalid request method"})
+
+
+@login_required
+@admin_required
+def get_fund_view(request, fund_id):
+    """Get fund details with recent transactions and allocation rules"""
+    try:
+        fund = FundAccount.objects.get(id=fund_id, is_deleted=False)
+
+        # Get recent transactions
+        transactions = fund.transactions.all().order_by("-created_at")[:10]
+        transactions_data = [
+            {
+                "id": t.id,
+                "transaction_type": t.transaction_type,
+                "transaction_type_display": t.get_transaction_type_display(),
+                "amount": str(t.amount),
+                "description": t.description or "",
+                "payment_mode_display": t.get_payment_mode_display(),
+                "balance_after": str(t.balance_after),
+                "created_at": t.created_at.strftime("%b %d, %Y") if t.created_at else "",
+            }
+            for t in transactions
+        ]
+
+        # Get allocation rules
+        rules = fund.allocation_rules.filter(is_active=True).order_by("trigger_event")
+        rules_data = [
+            {
+                "id": r.id,
+                "trigger_event": r.trigger_event,
+                "trigger_event_display": r.get_trigger_event_display(),
+                "allocation_type": r.allocation_type,
+                "allocation_type_display": r.get_allocation_type_display(),
+                "amount": str(r.amount) if r.amount else "",
+                "percentage": str(r.percentage) if r.percentage else "",
+            }
+            for r in rules
+        ]
+
+        return JsonResponse(
+            {
+                "success": True,
+                "fund": {
+                    "id": fund.id,
+                    "name": fund.name,
+                    "fund_type": fund.fund_type,
+                    "fund_type_display": fund.get_fund_type_display(),
+                    "account_number": fund.account_number,
+                    "balance": str(fund.balance),
+                    "description": fund.description or "",
+                    "is_active": fund.is_active,
+                    "created_at": fund.created_at.strftime("%b %d, %Y") if fund.created_at else "",
+                    "transactions": transactions_data,
+                    "rules": rules_data,
+                },
+            }
+        )
+    except FundAccount.DoesNotExist:
+        return JsonResponse({"success": False, "error": "Fund not found"})
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)})
+
+
+@login_required
+@admin_required
+def edit_fund_view(request, fund_id):
+    """Update fund details"""
+    if request.method == "POST":
+        try:
+            fund = FundAccount.objects.get(id=fund_id, is_deleted=False)
+
+            name = request.POST.get("name", "").strip()
+            fund_type = request.POST.get("fund_type")
+            description = request.POST.get("description", "").strip()
+            is_active = request.POST.get("is_active") == "true"
+
+            if not name:
+                return JsonResponse({"success": False, "error": "Fund name is required"})
+            if not fund_type:
+                return JsonResponse({"success": False, "error": "Fund type is required"})
+
+            fund.name = name
+            fund.fund_type = fund_type
+            fund.description = description or None
+            fund.is_active = is_active
+            fund.save()
+
+            log_action(
+                request,
+                "update",
+                "fund",
+                fund.id,
+                f"Updated fund {fund.name} ({fund.account_number})",
+            )
+            return JsonResponse({"success": True})
+        except FundAccount.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Fund not found"})
+        except Exception as e:
+            return JsonResponse({"success": False, "error": str(e)})
+
+    return JsonResponse({"success": False, "error": "Invalid request method"})
+
+
+@login_required
+@admin_required
+def delete_fund_view(request, fund_id):
+    """Soft-delete a fund account (only if balance is zero)"""
+    if request.method == "POST":
+        try:
+            fund = FundAccount.objects.get(id=fund_id, is_deleted=False)
+
+            # Protect funds with non-zero balance
+            if fund.balance > 0:
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "error": f"Cannot delete fund with balance ₹{fund.balance}. Please transfer funds first.",
+                    }
+                )
+
+            fund.is_deleted = True
+            fund.deleted_at = timezone.now()
+            fund.is_active = False
+            fund.save()
+
+            log_action(
+                request,
+                "delete",
+                "fund",
+                fund.id,
+                f"Deleted fund {fund.name} ({fund.account_number})",
+            )
+            return JsonResponse({"success": True})
+        except FundAccount.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Fund not found"})
+        except Exception as e:
+            return JsonResponse({"success": False, "error": str(e)})
+
+    return JsonResponse({"success": False, "error": "Invalid request method"})
+
+
+@login_required
+@admin_required
+def add_fund_transaction_view(request, fund_id):
+    """Add a manual fund transaction"""
+    if request.method == "POST":
+        try:
+            transaction_type = request.POST.get("transaction_type")
+            amount = request.POST.get("amount")
+            description = request.POST.get("description", "").strip()
+            payment_mode = request.POST.get("payment_mode", "cash")
+            reference_number = request.POST.get("reference_number", "").strip()
+
+            # Validate required fields
+            if not transaction_type:
+                return JsonResponse({"success": False, "error": "Transaction type is required"})
+            if not amount:
+                return JsonResponse({"success": False, "error": "Amount is required"})
+            if not description:
+                return JsonResponse({"success": False, "error": "Description is required"})
+
+            amount_decimal = Decimal(str(amount))
+            if amount_decimal <= 0:
+                return JsonResponse({"success": False, "error": "Amount must be greater than zero"})
+
+            with transaction.atomic():
+                # Lock the fund account
+                fund = FundAccount.objects.select_for_update().get(id=fund_id, is_deleted=False)
+
+                # Calculate new balance
+                if transaction_type == "credit":
+                    new_balance = fund.balance + amount_decimal
+                else:
+                    # Check sufficient balance for debit
+                    if amount_decimal > fund.balance:
+                        return JsonResponse(
+                            {
+                                "success": False,
+                                "error": f"Insufficient balance. Fund has ₹{fund.balance} but ₹{amount_decimal} was requested.",
+                            }
+                        )
+                    new_balance = fund.balance - amount_decimal
+
+                # Update balance using F() expression
+                if transaction_type == "credit":
+                    FundAccount.objects.filter(id=fund.id).update(balance=F("balance") + amount_decimal)
+                else:
+                    FundAccount.objects.filter(id=fund.id).update(balance=F("balance") - amount_decimal)
+
+                # Create transaction record
+                fund_txn = FundTransaction.objects.create(
+                    fund=fund,
+                    transaction_type=transaction_type,
+                    amount=amount_decimal,
+                    description=description,
+                    payment_mode=payment_mode,
+                    reference_number=reference_number or None,
+                    balance_after=new_balance,
+                    trigger_event="manual",
+                    created_by=request.user,
+                )
+
+            log_action(
+                request,
+                "create",
+                "fund",
+                fund.id,
+                f"Manual {transaction_type} of ₹{amount_decimal} to {fund.name}: {description}",
+            )
+            return JsonResponse({"success": True, "transaction_id": fund_txn.id})
+        except FundAccount.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Fund not found"})
+        except Exception as e:
+            return JsonResponse({"success": False, "error": str(e)})
+
+    return JsonResponse({"success": False, "error": "Invalid request method"})
+
+
+@login_required
+@admin_required
+def fund_transactions_view(request, fund_id):
+    """Get paginated transaction history for a fund"""
+    try:
+        fund = FundAccount.objects.get(id=fund_id, is_deleted=False)
+        page = int(request.GET.get("page", 1))
+        per_page = 25
+
+        transactions = fund.transactions.all().order_by("-created_at")
+        total = transactions.count()
+        start = (page - 1) * per_page
+        end = start + per_page
+        page_transactions = transactions[start:end]
+
+        results = [
+            {
+                "id": t.id,
+                "transaction_type": t.transaction_type,
+                "transaction_type_display": t.get_transaction_type_display(),
+                "amount": str(t.amount),
+                "description": t.description or "",
+                "payment_mode_display": t.get_payment_mode_display(),
+                "reference_number": t.reference_number or "",
+                "balance_after": str(t.balance_after),
+                "trigger_event_display": t.get_trigger_event_display() if t.trigger_event else "",
+                "source_member": t.source_member.display_name if t.source_member else "",
+                "created_by": t.created_by.display_name if t.created_by else "",
+                "created_at": t.created_at.strftime("%b %d, %Y %I:%M %p") if t.created_at else "",
+            }
+            for t in page_transactions
+        ]
+
+        return JsonResponse(
+            {
+                "success": True,
+                "fund_name": fund.name,
+                "fund_account_number": fund.account_number,
+                "transactions": results,
+                "total": total,
+                "page": page,
+                "has_more": end < total,
+            }
+        )
+    except FundAccount.DoesNotExist:
+        return JsonResponse({"success": False, "error": "Fund not found"})
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)})
+
+
+@login_required
+@admin_required
+def allocation_rules_view(request):
+    """Allocation rules list view with pagination"""
+    page = request.GET.get("page", 1)
+    per_page = 25
+
+    # Base queryset
+    rules = FundAllocationRule.objects.select_related("fund", "created_by").all().order_by("trigger_event", "fund")
+
+    # Paginate
+    paginator = Paginator(rules, per_page)
+    try:
+        rules_page = paginator.page(page)
+    except PageNotAnInteger:
+        rules_page = paginator.page(1)
+    except EmptyPage:
+        rules_page = paginator.page(paginator.num_pages)
+
+    # Get all funds for dropdown
+    funds = FundAccount.objects.filter(is_deleted=False, is_active=True).order_by("name")
+
+    return render(
+        request,
+        "admin/allocation_rules.html",
+        {
+            "rules": rules_page,
+            "page_obj": rules_page,
+            "funds": funds,
+        },
+    )
+
+
+@login_required
+@admin_required
+def add_allocation_rule_view(request):
+    """Create a new allocation rule"""
+    if request.method == "POST":
+        try:
+            trigger_event = request.POST.get("trigger_event")
+            fund_id = request.POST.get("fund_id")
+            allocation_type = request.POST.get("allocation_type")
+            amount = request.POST.get("amount", "").strip()
+            percentage = request.POST.get("percentage", "").strip()
+            description = request.POST.get("description", "").strip()
+
+            # Validate required fields
+            if not trigger_event:
+                return JsonResponse({"success": False, "error": "Trigger event is required"})
+            if not fund_id:
+                return JsonResponse({"success": False, "error": "Fund is required"})
+            if not allocation_type:
+                return JsonResponse({"success": False, "error": "Allocation type is required"})
+
+            # Validate allocation amount/percentage
+            if allocation_type == "fixed":
+                if not amount:
+                    return JsonResponse({"success": False, "error": "Amount is required for fixed allocation"})
+                amount_decimal = Decimal(str(amount))
+                if amount_decimal <= 0:
+                    return JsonResponse({"success": False, "error": "Amount must be greater than zero"})
+                percentage_decimal = None
+            else:
+                if not percentage:
+                    return JsonResponse({"success": False, "error": "Percentage is required for percentage allocation"})
+                percentage_decimal = Decimal(str(percentage))
+                if percentage_decimal <= 0 or percentage_decimal > 100:
+                    return JsonResponse({"success": False, "error": "Percentage must be between 0 and 100"})
+                amount_decimal = None
+
+            # Validate fund exists
+            try:
+                fund = FundAccount.objects.get(id=fund_id, is_deleted=False)
+            except FundAccount.DoesNotExist:
+                return JsonResponse({"success": False, "error": "Fund not found"})
+
+            rule = FundAllocationRule.objects.create(
+                trigger_event=trigger_event,
+                fund=fund,
+                allocation_type=allocation_type,
+                amount=amount_decimal,
+                percentage=percentage_decimal,
+                description=description or None,
+                created_by=request.user,
+            )
+
+            log_action(
+                request,
+                "create",
+                "fund",
+                rule.id,
+                f"Created allocation rule: {rule.get_trigger_event_display()} → {fund.name}",
+            )
+            return JsonResponse({"success": True, "rule_id": rule.id})
+        except Exception as e:
+            return JsonResponse({"success": False, "error": str(e)})
+
+    return JsonResponse({"success": False, "error": "Invalid request method"})
+
+
+@login_required
+@admin_required
+def edit_allocation_rule_view(request, rule_id):
+    """Update an allocation rule"""
+    if request.method == "POST":
+        try:
+            rule = FundAllocationRule.objects.get(id=rule_id)
+
+            trigger_event = request.POST.get("trigger_event")
+            fund_id = request.POST.get("fund_id")
+            allocation_type = request.POST.get("allocation_type")
+            amount = request.POST.get("amount", "").strip()
+            percentage = request.POST.get("percentage", "").strip()
+            description = request.POST.get("description", "").strip()
+            is_active = request.POST.get("is_active") == "true"
+
+            # Validate required fields
+            if not trigger_event:
+                return JsonResponse({"success": False, "error": "Trigger event is required"})
+            if not fund_id:
+                return JsonResponse({"success": False, "error": "Fund is required"})
+            if not allocation_type:
+                return JsonResponse({"success": False, "error": "Allocation type is required"})
+
+            # Validate allocation amount/percentage
+            if allocation_type == "fixed":
+                if not amount:
+                    return JsonResponse({"success": False, "error": "Amount is required for fixed allocation"})
+                amount_decimal = Decimal(str(amount))
+                if amount_decimal <= 0:
+                    return JsonResponse({"success": False, "error": "Amount must be greater than zero"})
+                percentage_decimal = None
+            else:
+                if not percentage:
+                    return JsonResponse({"success": False, "error": "Percentage is required for percentage allocation"})
+                percentage_decimal = Decimal(str(percentage))
+                if percentage_decimal <= 0 or percentage_decimal > 100:
+                    return JsonResponse({"success": False, "error": "Percentage must be between 0 and 100"})
+                amount_decimal = None
+
+            # Validate fund exists
+            try:
+                fund = FundAccount.objects.get(id=fund_id, is_deleted=False)
+            except FundAccount.DoesNotExist:
+                return JsonResponse({"success": False, "error": "Fund not found"})
+
+            rule.trigger_event = trigger_event
+            rule.fund = fund
+            rule.allocation_type = allocation_type
+            rule.amount = amount_decimal
+            rule.percentage = percentage_decimal
+            rule.description = description or None
+            rule.is_active = is_active
+            rule.save()
+
+            log_action(
+                request,
+                "update",
+                "fund",
+                rule.id,
+                f"Updated allocation rule: {rule.get_trigger_event_display()} → {fund.name}",
+            )
+            return JsonResponse({"success": True})
+        except FundAllocationRule.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Allocation rule not found"})
+        except Exception as e:
+            return JsonResponse({"success": False, "error": str(e)})
+
+    return JsonResponse({"success": False, "error": "Invalid request method"})
+
+
+@login_required
+@admin_required
+def delete_allocation_rule_view(request, rule_id):
+    """Delete an allocation rule"""
+    if request.method == "POST":
+        try:
+            rule = FundAllocationRule.objects.get(id=rule_id)
+            rule_desc = f"{rule.get_trigger_event_display()} → {rule.fund.name}"
+            rule.delete()
+
+            log_action(
+                request,
+                "delete",
+                "fund",
+                rule_id,
+                f"Deleted allocation rule: {rule_desc}",
+            )
+            return JsonResponse({"success": True})
+        except FundAllocationRule.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Allocation rule not found"})
         except Exception as e:
             return JsonResponse({"success": False, "error": str(e)})
 

@@ -1,0 +1,367 @@
+{% extends 'admin/base.html' %}
+{% load static currency_filters %}
+
+{% block title %}Allocation Rules - Admin Portal{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/pages/members.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2 class="page-title">Fund Allocation Rules</h2>
+    <a href="{% url 'funds' %}" class="btn btn-secondary btn-sm">← Back to Funds</a>
+    <button class="btn btn-primary btn-sm" onclick="showAddRuleModal()">+ Add Rule</button>
+</div>
+
+<div class="data-table">
+    <table>
+        <thead>
+            <tr>
+                <th>Trigger Event</th>
+                <th>Fund</th>
+                <th>Allocation Type</th>
+                <th>Amount/Percentage</th>
+                <th>Status</th>
+                <th style="width: 50px;"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for rule in rules %}
+            <tr>
+                <td>{{ rule.get_trigger_event_display }}</td>
+                <td>{{ rule.fund.name }}</td>
+                <td>{{ rule.get_allocation_type_display }}</td>
+                <td>
+                    {% if rule.allocation_type == 'fixed' %}
+                        ₹{{ rule.amount|inr }}
+                    {% else %}
+                        {{ rule.percentage }}%
+                    {% endif %}
+                </td>
+                <td>
+                    <span class="status-badge {% if rule.is_active %}status-active{% else %}status-inactive{% endif %}">
+                        {% if rule.is_active %}Active{% else %}Inactive{% endif %}
+                    </span>
+                </td>
+                <td class="actions-cell">
+                    <button class="kebab-menu" onclick="toggleDropdown(event, {{ rule.id }})" aria-label="Actions">&#8942;</button>
+                    <div class="dropdown-menu" id="dropdown-{{ rule.id }}">
+                        <button class="dropdown-item" onclick="editRule(event, {{ rule.id }})">Edit</button>
+                        <button class="dropdown-item dropdown-item-danger" onclick="confirmDeleteRule(event, {{ rule.id }})">Delete</button>
+                    </div>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="6" class="empty-state">No allocation rules found</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if page_obj.has_other_pages %}
+<div class="pagination" role="navigation" aria-label="Pagination">
+    <div class="pagination-info">
+        Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} rules
+    </div>
+    <div class="pagination-nav">
+        {% if page_obj.has_previous %}
+        <a href="?page=1" class="page-link" aria-label="First page">&laquo; First</a>
+        <a href="?page={{ page_obj.previous_page_number }}" class="page-link" aria-label="Previous page">Previous</a>
+        {% endif %}
+
+        <span class="page-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}" class="page-link" aria-label="Next page">Next</a>
+        <a href="?page={{ page_obj.paginator.num_pages }}" class="page-link" aria-label="Last page">Last &raquo;</a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Add Rule Modal -->
+<div id="addRuleModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Add Allocation Rule</h3>
+            <button class="modal-close" onclick="closeAddRuleModal()" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="addRuleForm">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label class="form-label">Trigger Event *</label>
+                    <select name="trigger_event" class="form-input" required>
+                        <option value="">Select event...</option>
+                        <option value="member_registration">Member Registration</option>
+                        <option value="loan_interest">Loan Interest</option>
+                        <option value="loan_penalty">Loan Penalty</option>
+                        <option value="account_interest">Account Interest</option>
+                        <option value="annual_profit">Annual Profit</option>
+                        <option value="manual">Manual</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Fund *</label>
+                    <select name="fund_id" class="form-input" required>
+                        <option value="">Select fund...</option>
+                        {% for fund in funds %}
+                        <option value="{{ fund.id }}">{{ fund.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Allocation Type *</label>
+                    <select name="allocation_type" id="add-allocation-type" class="form-input" required onchange="toggleAllocationFields('add')">
+                        <option value="">Select type...</option>
+                        <option value="fixed">Fixed Amount</option>
+                        <option value="percentage">Percentage</option>
+                    </select>
+                </div>
+                <div class="form-group" id="add-amount-group" style="display:none;">
+                    <label class="form-label">Amount *</label>
+                    <input type="number" name="amount" id="add-amount" class="form-input" step="0.01" min="0.01">
+                </div>
+                <div class="form-group" id="add-percentage-group" style="display:none;">
+                    <label class="form-label">Percentage *</label>
+                    <input type="number" name="percentage" id="add-percentage" class="form-input" step="0.01" min="0.01" max="100">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea name="description" class="form-input" rows="2"></textarea>
+                </div>
+                <div id="add-rule-error" class="error-message"></div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeAddRuleModal()">Cancel</button>
+            <button class="btn btn-primary" id="addRuleBtn" onclick="addRule()">Add Rule</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Rule Modal -->
+<div id="editRuleModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Edit Allocation Rule</h3>
+            <button class="modal-close" onclick="closeEditRuleModal()" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="editRuleForm">
+                {% csrf_token %}
+                <input type="hidden" id="edit-rule-id" name="rule_id">
+                <div class="form-group">
+                    <label class="form-label">Trigger Event *</label>
+                    <select name="trigger_event" id="edit-trigger-event" class="form-input" required>
+                        <option value="member_registration">Member Registration</option>
+                        <option value="loan_interest">Loan Interest</option>
+                        <option value="loan_penalty">Loan Penalty</option>
+                        <option value="account_interest">Account Interest</option>
+                        <option value="annual_profit">Annual Profit</option>
+                        <option value="manual">Manual</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Fund *</label>
+                    <select name="fund_id" id="edit-fund-id" class="form-input" required>
+                        {% for fund in funds %}
+                        <option value="{{ fund.id }}">{{ fund.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Allocation Type *</label>
+                    <select name="allocation_type" id="edit-allocation-type" class="form-input" required onchange="toggleAllocationFields('edit')">
+                        <option value="fixed">Fixed Amount</option>
+                        <option value="percentage">Percentage</option>
+                    </select>
+                </div>
+                <div class="form-group" id="edit-amount-group">
+                    <label class="form-label">Amount *</label>
+                    <input type="number" name="amount" id="edit-amount" class="form-input" step="0.01" min="0.01">
+                </div>
+                <div class="form-group" id="edit-percentage-group">
+                    <label class="form-label">Percentage *</label>
+                    <input type="number" name="percentage" id="edit-percentage" class="form-input" step="0.01" min="0.01" max="100">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea name="description" id="edit-description" class="form-input" rows="2"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">
+                        <input type="checkbox" id="edit-is-active" name="is_active" value="true" checked>
+                        Active
+                    </label>
+                </div>
+                <div id="edit-rule-error" class="error-message"></div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeEditRuleModal()">Cancel</button>
+            <button class="btn btn-primary" id="updateRuleBtn" onclick="updateRule()">Update Rule</button>
+        </div>
+    </div>
+</div>
+
+<!-- Confirmation Dialog -->
+<div id="confirmDialog" class="confirm-dialog">
+    <h4>Confirm Delete</h4>
+    <p>Are you sure you want to delete this allocation rule?</p>
+    <div class="confirm-buttons">
+        <button class="btn btn-secondary" onclick="closeConfirmDialog()">Cancel</button>
+        <button class="btn btn-danger" onclick="deleteRule()">Delete</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    window.CSRF_TOKEN = '{{ csrf_token }}';
+</script>
+<script src="{% static 'js/utils.js' %}"></script>
+<script>
+let deleteTargetId = null;
+
+function showAddRuleModal() {
+    document.getElementById('addRuleModal').style.display = 'flex';
+}
+
+function closeAddRuleModal() {
+    document.getElementById('addRuleModal').style.display = 'none';
+    document.getElementById('addRuleForm').reset();
+    document.getElementById('add-amount-group').style.display = 'none';
+    document.getElementById('add-percentage-group').style.display = 'none';
+}
+
+function toggleAllocationFields(prefix) {
+    const type = document.getElementById(`${prefix}-allocation-type`).value;
+    const amountGroup = document.getElementById(`${prefix}-amount-group`);
+    const percentageGroup = document.getElementById(`${prefix}-percentage-group`);
+    const amountInput = document.getElementById(`${prefix}-amount`);
+    const percentageInput = document.getElementById(`${prefix}-percentage`);
+    
+    if (type === 'fixed') {
+        amountGroup.style.display = 'block';
+        percentageGroup.style.display = 'none';
+        amountInput.required = true;
+        percentageInput.required = false;
+        percentageInput.value = '';
+    } else if (type === 'percentage') {
+        amountGroup.style.display = 'none';
+        percentageGroup.style.display = 'block';
+        amountInput.required = false;
+        percentageInput.required = true;
+        amountInput.value = '';
+    } else {
+        amountGroup.style.display = 'none';
+        percentageGroup.style.display = 'none';
+        amountInput.required = false;
+        percentageInput.required = false;
+    }
+}
+
+function addRule() {
+    const form = document.getElementById('addRuleForm');
+    const formData = new FormData(form);
+    const btn = document.getElementById('addRuleBtn');
+    btn.disabled = true;
+    
+    fetch('/allocation-rules/add/', {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            document.getElementById('add-rule-error').textContent = data.error;
+            btn.disabled = false;
+        }
+    });
+}
+
+function editRule(e, ruleId) {
+    e.stopPropagation();
+    // Fetch rule data and populate edit form
+    // For now, just show the modal
+    document.getElementById('edit-rule-id').value = ruleId;
+    document.getElementById('editRuleModal').style.display = 'flex';
+}
+
+function closeEditRuleModal() {
+    document.getElementById('editRuleModal').style.display = 'none';
+}
+
+function updateRule() {
+    const ruleId = document.getElementById('edit-rule-id').value;
+    const form = document.getElementById('editRuleForm');
+    const formData = new FormData(form);
+    const btn = document.getElementById('updateRuleBtn');
+    btn.disabled = true;
+    
+    fetch(`/allocation-rules/${ruleId}/edit/`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            document.getElementById('edit-rule-error').textContent = data.error;
+            btn.disabled = false;
+        }
+    });
+}
+
+function confirmDeleteRule(e, ruleId) {
+    e.stopPropagation();
+    deleteTargetId = ruleId;
+    document.getElementById('confirmDialog').style.display = 'flex';
+}
+
+function closeConfirmDialog() {
+    document.getElementById('confirmDialog').style.display = 'none';
+    deleteTargetId = null;
+}
+
+function deleteRule() {
+    if (!deleteTargetId) return;
+    
+    fetch(`/allocation-rules/${deleteTargetId}/delete/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': window.CSRF_TOKEN
+        }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error);
+        }
+    });
+}
+
+function toggleDropdown(e, id) {
+    e.stopPropagation();
+    const dropdown = document.getElementById(`dropdown-${id}`);
+    document.querySelectorAll('.dropdown-menu').forEach(d => {
+        if (d !== dropdown) d.style.display = 'none';
+    });
+    dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+}
+
+document.addEventListener('click', () => {
+    document.querySelectorAll('.dropdown-menu').forEach(d => d.style.display = 'none');
+});
+</script>
+{% endblock %}

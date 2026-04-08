@@ -4,6 +4,8 @@ from django.contrib import admin
 from django.shortcuts import redirect
 from django.urls import include, path
 
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+
 from admin_portal import views as admin_views
 
 
@@ -18,6 +20,11 @@ def root_redirect(request):
 
 urlpatterns = [
     path("", root_redirect, name="root"),
+    # API v1
+    path("api/v1/", include("accounts.api_urls")),
+    path("api/v1/schema/", SpectacularAPIView.as_view(), name="schema"),
+    path("api/v1/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
+    # Portals
     path("member/", include("member_portal.urls")),
     path("admin/", admin.site.urls),
     path("home/", admin_views.home_view, name="home"),
@@ -54,13 +61,29 @@ urlpatterns = [
     path("loans/<int:loan_id>/record-emi/", admin_views.record_emi_payment_view, name="record_emi_payment"),
     path("audit-logs/", admin_views.audit_logs_view, name="audit_logs"),
     path("audit-logs/<int:log_id>/get/", admin_views.get_audit_log_view, name="get_audit_log"),
+    # Funds
+    path("funds/", admin_views.funds_view, name="funds"),
+    path("funds/add/", admin_views.add_fund_view, name="add_fund"),
+    path("funds/<int:fund_id>/get/", admin_views.get_fund_view, name="get_fund"),
+    path("funds/<int:fund_id>/edit/", admin_views.edit_fund_view, name="edit_fund"),
+    path("funds/<int:fund_id>/delete/", admin_views.delete_fund_view, name="delete_fund"),
+    path("funds/<int:fund_id>/add-transaction/", admin_views.add_fund_transaction_view, name="add_fund_transaction"),
+    path("funds/<int:fund_id>/transactions/", admin_views.fund_transactions_view, name="fund_transactions"),
+    # Allocation Rules
+    path("allocation-rules/", admin_views.allocation_rules_view, name="allocation_rules"),
+    path("allocation-rules/add/", admin_views.add_allocation_rule_view, name="add_allocation_rule"),
+    path("allocation-rules/<int:rule_id>/edit/", admin_views.edit_allocation_rule_view, name="edit_allocation_rule"),
+    path(
+        "allocation-rules/<int:rule_id>/delete/", admin_views.delete_allocation_rule_view, name="delete_allocation_rule"
+    ),
+    path("reports/", admin_views.reports_view, name="reports"),
+    path("reports/distribute-profit/", admin_views.distribute_profit_view, name="distribute_profit"),
     path("calculator/", admin_views.calculator_view, name="calculator"),
     path("export/members/", admin_views.export_members_view, name="export_members"),
     path("export/accounts/", admin_views.export_accounts_view, name="export_accounts"),
     path("export/receipts/", admin_views.export_receipts_view, name="export_receipts"),
     path("export/loans/", admin_views.export_loans_view, name="export_loans"),
     path("profile/", admin_views.profile_view, name="profile"),
-    path("profile/account/<int:account_id>/delete/", admin_views.delete_account_view, name="delete_account"),
     path("", include("accounts.urls")),
 ]
 

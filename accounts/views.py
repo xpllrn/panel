@@ -5,6 +5,7 @@ from django.http import HttpResponseNotAllowed
 from django.shortcuts import redirect, render
 
 from .forms import LoginForm
+from .utils import log_action
 
 
 def signup_view(request):
@@ -28,6 +29,7 @@ def login_view(request):
         if form.is_valid():
             user = form.get_user()
             login(request, user)
+            log_action(request, "login", "system", user.id, f"User logged in: {user.display_name}")
             messages.success(request, f"Welcome back, {user.username}!")
             return redirect(_get_redirect_url(user))
     else:
@@ -40,6 +42,7 @@ def login_view(request):
 def logout_view(request):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
+    log_action(request, "logout", "system", request.user.id, f"User logged out: {request.user.display_name}")
     logout(request)
     messages.info(request, "You have been logged out.")
     return redirect("/login/")

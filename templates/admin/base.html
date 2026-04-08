@@ -51,7 +51,17 @@
                    {% if request.resolver_match.url_name == 'receipts' %}aria-current="page"{% endif %}>
                     Receipts
                 </a>
-                <a href="{% url 'audit_logs' %}" 
+                <a href="{% url 'funds' %}" 
+                   class="sidebar-link {% if request.resolver_match.url_name == 'funds' or request.resolver_match.url_name == 'allocation_rules' %}active{% endif %}"
+                   {% if request.resolver_match.url_name == 'funds' or request.resolver_match.url_name == 'allocation_rules' %}aria-current="page"{% endif %}>
+                    Funds
+                </a>
+                <a href="{% url 'reports' %}"
+                   class="sidebar-link {% if request.resolver_match.url_name == 'reports' %}active{% endif %}"
+                   {% if request.resolver_match.url_name == 'reports' %}aria-current="page"{% endif %}>
+                    Reports
+                </a>
+                <a href="{% url 'audit_logs' %}"
                    class="sidebar-link {% if request.resolver_match.url_name == 'audit_logs' %}active{% endif %}"
                    {% if request.resolver_match.url_name == 'audit_logs' %}aria-current="page"{% endif %}>
                     Audit Logs

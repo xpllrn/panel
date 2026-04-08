@@ -1,5 +1,5 @@
 {% extends 'admin/base.html' %}
-{% load static %}
+{% load static currency_filters %}
 
 {% block title %}Loans - Admin Portal{% endblock %}
 
@@ -13,8 +13,8 @@
     <div class="header-stats">
         <span class="stat-item">Total: <strong>{{ total_loans }}</strong></span>
         <span class="stat-item">Active: <strong>{{ active_loans }}</strong></span>
-        <span class="stat-item">Disbursed: <strong>{{ total_disbursed|floatformat:0 }}</strong></span>
-        <span class="stat-item">Outstanding: <strong>{{ total_outstanding|floatformat:0 }}</strong></span>
+        <span class="stat-item">Disbursed: <strong>{{ total_disbursed|inr }}</strong></span>
+        <span class="stat-item">Outstanding: <strong>{{ total_outstanding|inr }}</strong></span>
     </div>
     <form class="search-form" method="get" action="">
         <input type="text" name="q" placeholder="Search by loan no, member name..."
@@ -83,9 +83,9 @@
                 <td>
                     <span class="loan-type-badge type-{{ loan.loan_type }}">{{ loan.get_loan_type_display }}</span>
                 </td>
-                <td class="loan-amount">{{ loan.principal_amount|floatformat:0 }}</td>
-                <td class="loan-amount">{{ loan.emi_amount|floatformat:0 }}</td>
-                <td class="loan-amount">{{ loan.outstanding_balance|floatformat:0 }}</td>
+                <td class="loan-amount">{{ loan.principal_amount|inr }}</td>
+                <td class="loan-amount">{{ loan.emi_amount|inr }}</td>
+                <td class="loan-amount">{{ loan.outstanding_balance|inr }}</td>
                 <td>
                     <span class="status-badge status-{{ loan.status }}">{{ loan.get_status_display }}</span>
                 </td>

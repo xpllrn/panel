@@ -3,6 +3,7 @@ from datetime import date
 from django.contrib.auth.models import AbstractUser
 from django.core.validators import RegexValidator
 from django.db import models
+from django.db.models import Sum
 
 # Validators for Indian identity documents
 pan_validator = RegexValidator(
@@ -201,8 +202,6 @@ class User(AbstractUser):
 
     # 13. Legacy fields (keeping for compatibility)
     role = models.CharField(max_length=20, default="member", db_index=True)
-    phone = models.CharField(max_length=20, blank=True, null=True)  # Deprecated, use mobile_primary
-    avatar = models.ImageField(upload_to="avatars/", blank=True, null=True)  # Deprecated, use photograph
 
     @property
     def display_name(self):
@@ -499,6 +498,12 @@ class Loan(models.Model):
         verbose_name="Disbursement Account",
     )
 
+    # Processing fee
+    processing_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Processing Fee")
+
+    # NPA classification
+    npa_date = models.DateField(blank=True, null=True, verbose_name="NPA Classification Date")
+
     # Internal tracking
     purpose = models.TextField(blank=True, null=True, verbose_name="Loan Purpose")
     remarks = models.TextField(blank=True, null=True)
@@ -530,6 +535,50 @@ class Loan(models.Model):
         if self.total_emis > 0:
             return round((self.emis_paid / self.total_emis) * 100, 1)
         return 0
+
+    @property
+    def is_npa(self):
+        """Check if loan is NPA (Non-Performing Asset) per RBI 90-day norm."""
+        if self.status not in ("active", "defaulted"):
+            return False
+        overdue_repayments = self.repayments.filter(payment_status="overdue", due_date__lt=date.today())
+        if overdue_repayments.exists():
+            oldest_overdue = overdue_repayments.order_by("due_date").first()
+            days_overdue = (date.today() - oldest_overdue.due_date).days
+            return days_overdue >= 90
+        return False
+
+    @property
+    def npa_category(self):
+        """Classify NPA category per RBI norms."""
+        if not self.is_npa:
+            return None
+        overdue_repayments = self.repayments.filter(payment_status="overdue", due_date__lt=date.today())
+        oldest_overdue = overdue_repayments.order_by("due_date").first()
+        days_overdue = (date.today() - oldest_overdue.due_date).days
+        if days_overdue >= 1095:  # 3 years
+            return "loss"
+        elif days_overdue >= 365:  # 1 year
+            return "doubtful"
+        return "substandard"
+
+    @property
+    def days_overdue(self):
+        """Calculate days since oldest unpaid overdue EMI."""
+        overdue_repayments = self.repayments.filter(payment_status="overdue", due_date__lt=date.today())
+        if overdue_repayments.exists():
+            oldest = overdue_repayments.order_by("due_date").first()
+            return (date.today() - oldest.due_date).days
+        return 0
+
+    @property
+    def calculated_overdue_amount(self):
+        """Calculate total overdue amount from unpaid EMIs past due date."""
+        from decimal import Decimal
+
+        overdue = self.repayments.filter(payment_status="overdue", due_date__lt=date.today())
+        total = overdue.aggregate(total=Sum("amount_due"))["total"]
+        return total or Decimal("0.00")
 
     def calculate_emi(self):
         """Calculate EMI using reducing balance method."""
@@ -602,28 +651,6 @@ class LoanRepayment(models.Model):
         return f"{self.loan.loan_number} - EMI #{self.installment_number}"
 
 
-class BankAccount(models.Model):
-    """Bank account model - each user can have multiple accounts (external bank accounts for payouts)"""
-
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="bank_accounts")
-    account_name = models.CharField(max_length=200, verbose_name="Account Holder Name")
-    bank_name = models.CharField(max_length=200, verbose_name="Bank Name")
-    account_number = models.CharField(max_length=50, verbose_name="Account Number")
-    ifsc_code = models.CharField(
-        max_length=11, blank=True, null=True, verbose_name="IFSC Code", validators=[ifsc_validator]
-    )
-    branch = models.CharField(max_length=200, blank=True, null=True, verbose_name="Branch")
-    account_type = models.CharField(max_length=50, blank=True, null=True, verbose_name="Account Type")
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["-created_at"]
-
-    def __str__(self):
-        return f"{self.account_name} - {self.bank_name} ({self.account_number[-4:]})"
-
-
 class AuditLog(models.Model):
     """
     Audit log model for tracking all admin actions.
@@ -647,6 +674,7 @@ class AuditLog(models.Model):
         ("account", "Account"),
         ("receipt", "Receipt"),
         ("loan", "Loan"),
+        ("fund", "Fund"),
         ("system", "System"),
     ]
 
@@ -668,3 +696,147 @@ class AuditLog(models.Model):
     def __str__(self):
         user_display = self.user.display_name if self.user else "System"
         return f"{user_display} - {self.get_action_display()} {self.get_entity_type_display()}"
+
+
+class FundAccount(models.Model):
+    """
+    Fund account model for managing society funds.
+    Supports various fund types like welfare, library, education, emergency, etc.
+    """
+
+    FUND_TYPE_CHOICES = [
+        ("welfare", "Welfare Fund"),
+        ("library", "Library Fund"),
+        ("education", "Education Fund"),
+        ("emergency", "Emergency Fund"),
+        ("dividend", "Dividend Fund"),
+        ("statutory", "Statutory Fund"),
+        ("reserve", "Reserve Fund"),
+        ("other", "Other"),
+    ]
+
+    name = models.CharField(max_length=200, verbose_name="Fund Name")
+    fund_type = models.CharField(max_length=20, choices=FUND_TYPE_CHOICES, db_index=True)
+    account_number = models.CharField(max_length=20, unique=True, db_index=True)
+    balance = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    description = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="funds_created")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    # Soft-delete support
+    is_deleted = models.BooleanField(default=False, db_index=True)
+    deleted_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "Fund Account"
+        verbose_name_plural = "Fund Accounts"
+
+    def __str__(self):
+        return f"{self.account_number} - {self.name}"
+
+
+class FundTransaction(models.Model):
+    """
+    Fund transaction model for tracking all fund movements.
+    Records credits, debits, and auto-allocations from various trigger events.
+    """
+
+    TRANSACTION_TYPE_CHOICES = [
+        ("credit", "Credit"),
+        ("debit", "Debit"),
+    ]
+
+    PAYMENT_MODE_CHOICES = [
+        ("cash", "Cash"),
+        ("cheque", "Cheque"),
+        ("online", "Online Transfer"),
+        ("neft", "NEFT"),
+        ("rtgs", "RTGS"),
+        ("upi", "UPI"),
+        ("internal", "Internal Transfer"),
+    ]
+
+    fund = models.ForeignKey(FundAccount, on_delete=models.CASCADE, related_name="transactions")
+    transaction_type = models.CharField(max_length=20, choices=TRANSACTION_TYPE_CHOICES, db_index=True)
+    amount = models.DecimalField(max_digits=15, decimal_places=2)
+    description = models.TextField()
+    payment_mode = models.CharField(max_length=20, choices=PAYMENT_MODE_CHOICES, default="internal")
+    reference_number = models.CharField(max_length=100, blank=True, null=True)
+    balance_after = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    trigger_event = models.CharField(max_length=50, blank=True, null=True)
+    source_member = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="fund_transactions"
+    )
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="fund_transactions_created")
+    remarks = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Fund Transaction"
+        verbose_name_plural = "Fund Transactions"
+
+    def __str__(self):
+        return f"{self.fund.name} - {self.get_transaction_type_display()} - {self.amount}"
+
+
+class FundAllocationRule(models.Model):
+    """
+    Fund allocation rule model for automatic fund allocations.
+    Defines rules for allocating amounts to funds based on trigger events.
+    """
+
+    TRIGGER_EVENT_CHOICES = [
+        ("member_registration", "Member Registration"),
+        ("loan_interest", "Loan Interest"),
+        ("loan_penalty", "Loan Penalty"),
+        ("account_interest", "Account Interest"),
+        ("annual_profit", "Annual Profit"),
+        ("manual", "Manual"),
+    ]
+
+    ALLOCATION_TYPE_CHOICES = [
+        ("fixed", "Fixed Amount"),
+        ("percentage", "Percentage"),
+    ]
+
+    trigger_event = models.CharField(max_length=50, choices=TRIGGER_EVENT_CHOICES, db_index=True)
+    fund = models.ForeignKey(FundAccount, on_delete=models.CASCADE, related_name="allocation_rules")
+    allocation_type = models.CharField(max_length=20, choices=ALLOCATION_TYPE_CHOICES)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    percentage = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    description = models.TextField(blank=True, null=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="allocation_rules_created")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["trigger_event", "fund"]
+        verbose_name = "Fund Allocation Rule"
+        verbose_name_plural = "Fund Allocation Rules"
+
+    def __str__(self):
+        return f"{self.get_trigger_event_display()} → {self.fund.name} ({self.get_allocation_type_display()})"
+
+
+class InterestPayout(models.Model):
+    """Records interest paid to members on their deposit accounts."""
+
+    account = models.ForeignKey(MemberAccount, on_delete=models.CASCADE, related_name="interest_payouts")
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    period_start = models.DateField()
+    period_end = models.DateField()
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="interest_payouts_created")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Interest Payout"
+        verbose_name_plural = "Interest Payouts"
+
+    def __str__(self):
+        return f"{self.account.account_number} - ₹{self.amount} ({self.period_start} to {self.period_end})"

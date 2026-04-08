@@ -1,12 +1,15 @@
 import functools
+import io
+from datetime import date, timedelta
 
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.http import HttpResponseForbidden
+from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 
 from accounts.models import Loan, LoanRepayment, MemberAccount, Receipt
+from accounts.utils import log_action
 
 # ========================================
 # Decorator
@@ -50,6 +53,14 @@ def member_dashboard_view(request):
     active_loans = Loan.objects.filter(user=user, status__in=["active", "approved"])
     total_outstanding = sum(loan.outstanding_balance for loan in active_loans)
 
+    # Share capital info
+    share_capital = user.share_capital_amount
+    number_of_shares = user.number_of_shares
+    dividend_payable = user.dividend_payable_balance
+
+    # Dividend transactions
+    dividend_transactions = Receipt.objects.filter(user=user, transaction_type="dividend").order_by("-created_at")[:5]
+
     context = {
         "total_accounts": active_accounts.count(),
         "total_balance": total_balance,
@@ -58,6 +69,10 @@ def member_dashboard_view(request):
         "recent_transactions": recent_transactions,
         "active_loans": active_loans[:5],
         "accounts": active_accounts[:5],
+        "share_capital": share_capital,
+        "number_of_shares": number_of_shares,
+        "dividend_payable": dividend_payable,
+        "dividend_transactions": dividend_transactions,
     }
     return render(request, "member/dashboard.html", context)
 
@@ -229,6 +244,7 @@ def member_profile_view(request):
             user.set_password(new_password)
             user.save()
             update_session_auth_hash(request, user)
+            log_action(request, "update", "member", user.id, f"Member changed password: {user.display_name}")
             password_changed = True
 
     context = {
@@ -237,3 +253,148 @@ def member_profile_view(request):
         "password_error": password_error,
     }
     return render(request, "member/profile.html", context)
+
+
+# ========================================
+# Account Statement PDF Download
+# ========================================
+
+
+@member_required
+def member_account_statement_view(request, account_id):
+    """Generate and download a PDF account statement."""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    account = get_object_or_404(MemberAccount, id=account_id, user=request.user, is_deleted=False)
+
+    # Date range: default last 3 months
+    months = int(request.GET.get("months", 3))
+    end_date = date.today()
+    start_date = end_date - timedelta(days=months * 30)
+
+    transactions = Receipt.objects.filter(
+        member_account=account,
+        created_at__date__gte=start_date,
+        created_at__date__lte=end_date,
+    ).order_by("created_at")
+
+    # Build PDF
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=20 * mm, bottomMargin=20 * mm)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    # Header
+    header_style = ParagraphStyle("Header", parent=styles["Title"], fontSize=16, spaceAfter=6)
+    elements.append(Paragraph("Account Statement", header_style))
+
+    sub_style = ParagraphStyle("Sub", parent=styles["Normal"], fontSize=10, textColor=colors.grey)
+    elements.append(Paragraph(f"Generated on {end_date.strftime('%d %b %Y')}", sub_style))
+    elements.append(Spacer(1, 10 * mm))
+
+    # Account info table
+    info_data = [
+        ["Account Number", account.account_number, "Account Type", account.get_account_type_display()],
+        ["Member", request.user.display_name, "Member ID", request.user.member_id or "N/A"],
+        ["Balance", f"Rs. {account.balance:,.2f}", "Interest Rate", f"{account.interest_rate}%"],
+        [
+            "Period",
+            f"{start_date.strftime('%d %b %Y')} to {end_date.strftime('%d %b %Y')}",
+            "Status",
+            account.get_status_display(),
+        ],
+    ]
+    info_table = Table(info_data, colWidths=[80, 140, 80, 140])
+    info_table.setStyle(
+        TableStyle(
+            [
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
+                ("TEXTCOLOR", (0, 0), (0, -1), colors.grey),
+                ("TEXTCOLOR", (2, 0), (2, -1), colors.grey),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+    )
+    elements.append(info_table)
+    elements.append(Spacer(1, 8 * mm))
+
+    # Transactions table
+    elements.append(Paragraph("Transaction History", ParagraphStyle("SH", parent=styles["Heading3"], fontSize=12)))
+    elements.append(Spacer(1, 3 * mm))
+
+    txn_data = [["Date", "Receipt #", "Type", "Description", "Amount", "Balance"]]
+    for txn in transactions:
+        sign = "+" if txn.transaction_type in ("credit", "interest", "dividend", "share_capital") else "-"
+        txn_data.append(
+            [
+                txn.created_at.strftime("%d %b %Y"),
+                txn.receipt_number,
+                txn.get_transaction_type_display(),
+                (txn.description or "")[:30],
+                f"{sign} Rs. {txn.amount:,.2f}",
+                f"Rs. {txn.balance_after:,.2f}",
+            ]
+        )
+
+    if len(txn_data) == 1:
+        txn_data.append(["", "", "", "No transactions in this period", "", ""])
+
+    txn_table = Table(txn_data, colWidths=[60, 70, 55, 110, 75, 75])
+    txn_table.setStyle(
+        TableStyle(
+            [
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.Color(0.93, 0.93, 0.93)),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.Color(0.85, 0.85, 0.85)),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("ALIGN", (4, 0), (5, -1), "RIGHT"),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.Color(0.97, 0.97, 0.97)]),
+            ]
+        )
+    )
+    elements.append(txn_table)
+
+    # Summary
+    elements.append(Spacer(1, 6 * mm))
+    total_credits = sum(
+        t.amount for t in transactions if t.transaction_type in ("credit", "interest", "dividend", "share_capital")
+    )
+    total_debits = sum(
+        t.amount for t in transactions if t.transaction_type not in ("credit", "interest", "dividend", "share_capital")
+    )
+
+    summary_data = [
+        ["Total Credits", f"Rs. {total_credits:,.2f}"],
+        ["Total Debits", f"Rs. {total_debits:,.2f}"],
+        ["Closing Balance", f"Rs. {account.balance:,.2f}"],
+    ]
+    summary_table = Table(summary_data, colWidths=[120, 120])
+    summary_table.setStyle(
+        TableStyle(
+            [
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+                ("LINEABOVE", (0, 2), (-1, 2), 1, colors.black),
+                ("FONTNAME", (0, 2), (-1, 2), "Helvetica-Bold"),
+            ]
+        )
+    )
+    elements.append(summary_table)
+
+    doc.build(elements)
+    buffer.seek(0)
+
+    response = HttpResponse(buffer, content_type="application/pdf")
+    response["Content-Disposition"] = (
+        f'attachment; filename="statement_{account.account_number}_{end_date.strftime("%Y%m%d")}.pdf"'
+    )
+    return response

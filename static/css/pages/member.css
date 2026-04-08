@@ -1,42 +1,12 @@
 /* ========================================
-   Member Portal Theme Overrides
-   Differentiates member portal from admin portal
-   with a distinct accent color and subtle tweaks.
+   Member Portal Layout & Components
+   Shares the same design tokens as admin panel.
    ======================================== */
 
-/* Member portal accent: teal/cyan instead of admin's default */
-.member-portal .sidebar {
-    background: linear-gradient(180deg, #0d1b2a 0%, #1b2838 100%);
-}
-
-.member-portal .sidebar-brand h1 {
-    color: #4dd0e1;
-    font-size: 1.2rem;
-    letter-spacing: 0.5px;
-}
-
-.member-portal .sidebar-link.active,
-.member-portal .sidebar-link:hover {
-    background-color: rgba(77, 208, 225, 0.12);
-    color: #4dd0e1;
-    border-left-color: #4dd0e1;
-}
-
-/* Stats cards with member color scheme */
+/* Stats cards — plain white cards matching admin portal */
 .member-portal .stat-card {
-    border-left: 4px solid #4dd0e1;
-}
-
-.member-portal .stat-card-success {
-    border-left-color: #66bb6a;
-}
-
-.member-portal .stat-card-warning {
-    border-left-color: #ffa726;
-}
-
-.member-portal .stat-card-danger {
-    border-left-color: #ef5350;
+    background: var(--color-white);
+    box-shadow: var(--shadow-sm);
 }
 
 /* Dashboard grid */
@@ -74,23 +44,24 @@
 }
 
 .stat-card {
-    background: var(--card-bg, #1e293b);
-    border-radius: 8px;
-    padding: 1.25rem;
+    background: var(--color-white);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-xl);
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
+    box-shadow: var(--shadow-sm);
 }
 
 .stat-value {
-    font-size: 1.5rem;
+    font-size: var(--font-size-xl);
     font-weight: 700;
-    color: var(--text-primary, #f1f5f9);
+    color: var(--color-gray-800);
 }
 
 .stat-label {
-    font-size: 0.85rem;
-    color: var(--text-secondary, #94a3b8);
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-500);
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -125,15 +96,15 @@
 }
 
 .detail-label {
-    font-size: 0.8rem;
-    color: var(--text-secondary, #94a3b8);
+    font-size: var(--font-size-xs);
+    color: var(--color-gray-500);
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
 .detail-value {
-    font-size: 0.95rem;
-    color: var(--text-primary, #f1f5f9);
+    font-size: var(--font-size-base);
+    color: var(--color-gray-800);
     font-weight: 500;
 }
 
@@ -141,7 +112,7 @@
 .progress-bar-mini {
     width: 80px;
     height: 6px;
-    background: var(--bg-tertiary, #334155);
+    background: var(--color-gray-200);
     border-radius: 3px;
     overflow: hidden;
     display: inline-block;
@@ -151,21 +122,21 @@
 .progress-bar-large {
     width: 100%;
     height: 10px;
-    background: var(--bg-tertiary, #334155);
+    background: var(--color-gray-200);
     border-radius: 5px;
     overflow: hidden;
 }
 
 .progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, #4dd0e1, #26c6da);
+    background: var(--color-primary);
     border-radius: inherit;
     transition: width 0.3s ease;
 }
 
 .progress-text {
-    font-size: 0.75rem;
-    color: var(--text-secondary, #94a3b8);
+    font-size: var(--font-size-xs);
+    color: var(--color-gray-500);
     margin-left: 0.5rem;
 }
 
@@ -173,8 +144,8 @@
     display: block;
     text-align: center;
     margin-top: 0.5rem;
-    font-size: 0.85rem;
-    color: var(--text-secondary, #94a3b8);
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-500);
 }
 
 /* Filters bar */
@@ -238,19 +209,19 @@
     gap: 1rem;
     margin-top: 1.5rem;
     padding-top: 1rem;
-    border-top: 1px solid var(--border-color, #334155);
+    border-top: 1px solid var(--color-gray-200);
 }
 
 .pagination-info {
-    font-size: 0.85rem;
-    color: var(--text-secondary, #94a3b8);
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-500);
 }
 
 /* Empty state */
 .empty-state {
     text-align: center;
     padding: 2rem;
-    color: var(--text-secondary, #94a3b8);
+    color: var(--color-gray-500);
     font-style: italic;
 }
 
@@ -282,8 +253,8 @@
 /* Loan progress section */
 .loan-progress {
     padding: 1rem;
-    background: var(--bg-secondary, #1e293b);
-    border-radius: 8px;
+    background: var(--color-gray-100);
+    border-radius: var(--radius-md);
 }
 
 /* Table responsive wrapper */

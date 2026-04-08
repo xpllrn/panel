@@ -1,4 +1,5 @@
 {% extends "member/base.html" %}
+{% load currency_filters %}
 
 {% block title %}My Loans - Member Portal{% endblock %}
 
@@ -48,9 +49,9 @@
                     <tr>
                         <td><strong>{{ loan.loan_number }}</strong></td>
                         <td>{{ loan.get_loan_type_display }}</td>
-                        <td>₹{{ loan.principal_amount|floatformat:2 }}</td>
-                        <td>₹{{ loan.emi_amount|floatformat:2 }}</td>
-                        <td>₹{{ loan.outstanding_balance|floatformat:2 }}</td>
+                        <td>₹{{ loan.principal_amount|inr }}</td>
+                        <td>₹{{ loan.emi_amount|inr }}</td>
+                        <td>₹{{ loan.outstanding_balance|inr }}</td>
                         <td>
                             <div class="progress-bar-mini">
                                 <div class="progress-fill" style="width: {{ loan.completion_percentage }}%"></div>

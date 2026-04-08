@@ -4,14 +4,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Admin Panel</title>
+    <title>Login</title>
     {% load static %}
     <link rel="stylesheet" href="{% static 'css/auth.css' %}">
 </head>
 
 <body class="auth-page">
     <div class="auth-container">
-        <h2>Admin Login</h2>
+        <h2>Login</h2>
 
         {% if messages %}
         {% for message in messages %}
@@ -47,9 +47,6 @@
             <button type="submit">Sign In</button>
         </form>
 
-        <div class="auth-link">
-            Don't have an account? <a href="/signup/">Sign Up</a>
-        </div>
     </div>
 </body>
 

@@ -1,4 +1,5 @@
 {% extends "member/base.html" %}
+{% load currency_filters %}
 
 {% block title %}Loan {{ loan.loan_number }} - Member Portal{% endblock %}
 
@@ -28,7 +29,7 @@
             </div>
             <div class="detail-item">
                 <span class="detail-label">Principal Amount</span>
-                <span class="detail-value">₹{{ loan.principal_amount|floatformat:2 }}</span>
+                <span class="detail-value">₹{{ loan.principal_amount|inr }}</span>
             </div>
             <div class="detail-item">
                 <span class="detail-label">Interest Rate</span>
@@ -40,19 +41,19 @@
             </div>
             <div class="detail-item">
                 <span class="detail-label">Monthly EMI</span>
-                <span class="detail-value">₹{{ loan.emi_amount|floatformat:2 }}</span>
+                <span class="detail-value">₹{{ loan.emi_amount|inr }}</span>
             </div>
             <div class="detail-item">
                 <span class="detail-label">Total Payable</span>
-                <span class="detail-value">₹{{ loan.total_payable|floatformat:2 }}</span>
+                <span class="detail-value">₹{{ loan.total_payable|inr }}</span>
             </div>
             <div class="detail-item">
                 <span class="detail-label">Total Paid</span>
-                <span class="detail-value">₹{{ loan.total_paid|floatformat:2 }}</span>
+                <span class="detail-value">₹{{ loan.total_paid|inr }}</span>
             </div>
             <div class="detail-item">
                 <span class="detail-label">Outstanding Balance</span>
-                <span class="detail-value">₹{{ loan.outstanding_balance|floatformat:2 }}</span>
+                <span class="detail-value">₹{{ loan.outstanding_balance|inr }}</span>
             </div>
             <div class="detail-item">
                 <span class="detail-label">EMIs Paid</span>
@@ -61,7 +62,7 @@
             {% if loan.overdue_amount > 0 %}
             <div class="detail-item">
                 <span class="detail-label">Overdue Amount</span>
-                <span class="detail-value text-danger">₹{{ loan.overdue_amount|floatformat:2 }}</span>
+                <span class="detail-value text-danger">₹{{ loan.overdue_amount|inr }}</span>
             </div>
             {% endif %}
             <div class="detail-item">
@@ -125,10 +126,10 @@
                         class="{% if emi.payment_status == 'overdue' %}row-overdue{% elif emi.payment_status == 'paid' %}row-paid{% endif %}">
                         <td>{{ emi.installment_number }}</td>
                         <td>{{ emi.due_date|date:"d M Y" }}</td>
-                        <td>₹{{ emi.amount_due|floatformat:2 }}</td>
-                        <td>₹{{ emi.principal_component|floatformat:2 }}</td>
-                        <td>₹{{ emi.interest_component|floatformat:2 }}</td>
-                        <td>{% if emi.amount_paid > 0 %}₹{{ emi.amount_paid|floatformat:2 }}{% else %}—{% endif %}</td>
+                        <td>₹{{ emi.amount_due|inr }}</td>
+                        <td>₹{{ emi.principal_component|inr }}</td>
+                        <td>₹{{ emi.interest_component|inr }}</td>
+                        <td>{% if emi.amount_paid > 0 %}₹{{ emi.amount_paid|inr }}{% else %}—{% endif %}</td>
                         <td>{{ emi.paid_date|date:"d M Y"|default:"—" }}</td>
                         <td>
                             <span class="badge badge-{{ emi.payment_status }}">

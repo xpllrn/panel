@@ -1,5 +1,5 @@
 {% extends 'admin/base.html' %}
-{% load static %}
+{% load static currency_filters %}
 
 {% block title %}Receipts - Admin Portal{% endblock %}
 
@@ -84,7 +84,7 @@
                 <td>
                     <span class="transaction-type-badge type-{{ receipt.transaction_type }}">{{ receipt.get_transaction_type_display }}</span>
                 </td>
-                <td class="amount">{{ receipt.amount|floatformat:2 }}</td>
+                <td class="amount">{{ receipt.amount|inr }}</td>
                 <td>{{ receipt.get_payment_mode_display }}</td>
                 <td>{{ receipt.created_at|date:"M d, Y" }}</td>
                 <td class="actions-cell" onclick="event.stopPropagation();">
