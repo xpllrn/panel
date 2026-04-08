@@ -655,8 +655,65 @@
      * View account details (redirect to accounts page or show modal)
      */
     function viewAccountDetails(accountId) {
-        // TODO: Implement account details modal with full account information
-        alert('Account details view coming soon.\n\nAccount ID: ' + accountId + '\n\nThis will show:\n- Account number\n- Opening date\n- Maturity date\n- Interest rate\n- Transaction history');
+        fetch('/accounts/' + accountId + '/get/')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.success) {
+                    alert('Error: ' + (data.error || 'Could not load account'));
+                    return;
+                }
+                var acc = data.account;
+                var html = '<div style="padding: 1rem;">';
+                html += '<h3 style="margin: 0 0 1rem; font-size: 1.1rem;">' + escapeHTML(acc.account_type_display) + ' - ' + escapeHTML(acc.account_number) + '</h3>';
+                html += '<table style="width: 100%; font-size: 0.85rem; border-collapse: collapse;">';
+                html += '<tr><td style="padding: 0.4rem 0; color: #6b7280;">Member</td><td style="padding: 0.4rem 0; font-weight: 600;">' + escapeHTML(acc.user_name) + ' (' + escapeHTML(acc.member_id) + ')</td></tr>';
+                html += '<tr><td style="padding: 0.4rem 0; color: #6b7280;">Status</td><td style="padding: 0.4rem 0;">' + escapeHTML(acc.status_display) + '</td></tr>';
+                html += '<tr><td style="padding: 0.4rem 0; color: #6b7280;">Balance</td><td style="padding: 0.4rem 0; font-weight: 700; color: #047857;">₹' + formatINR(parseFloat(acc.balance)) + '</td></tr>';
+                html += '<tr><td style="padding: 0.4rem 0; color: #6b7280;">Interest Rate</td><td style="padding: 0.4rem 0;">' + acc.interest_rate + '%</td></tr>';
+                if (acc.principal_amount && acc.principal_amount !== '0.00') {
+                    html += '<tr><td style="padding: 0.4rem 0; color: #6b7280;">Principal</td><td style="padding: 0.4rem 0;">₹' + formatINR(parseFloat(acc.principal_amount)) + '</td></tr>';
+                }
+                if (acc.opening_date) {
+                    html += '<tr><td style="padding: 0.4rem 0; color: #6b7280;">Opening Date</td><td style="padding: 0.4rem 0;">' + acc.opening_date + '</td></tr>';
+                }
+                if (acc.maturity_date) {
+                    html += '<tr><td style="padding: 0.4rem 0; color: #6b7280;">Maturity Date</td><td style="padding: 0.4rem 0;">' + acc.maturity_date + '</td></tr>';
+                }
+                if (acc.tenure_months) {
+                    html += '<tr><td style="padding: 0.4rem 0; color: #6b7280;">Tenure</td><td style="padding: 0.4rem 0;">' + acc.tenure_months + ' months</td></tr>';
+                }
+                if (acc.nominee_name) {
+                    html += '<tr><td style="padding: 0.4rem 0; color: #6b7280;">Nominee</td><td style="padding: 0.4rem 0;">' + escapeHTML(acc.nominee_name) + '</td></tr>';
+                }
+                html += '</table>';
+                html += '<div style="margin-top: 1rem; text-align: right;">';
+                html += '<a href="/accounts/' + acc.id + '/get/" style="font-size: 0.85rem; color: #2563eb;">View Full Details</a>';
+                html += '</div></div>';
+
+                // Show in a simple overlay
+                var overlay = document.createElement('div');
+                overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+                var modal = document.createElement('div');
+                modal.style.cssText = 'background:white;border-radius:12px;max-width:450px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);';
+                modal.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;padding:1rem 1rem 0;"><span style="font-weight:600;font-size:0.9rem;color:#6b7280;">Account Details</span><button onclick="this.closest(\'div[style*=fixed]\').remove()" style="border:none;background:none;font-size:1.2rem;cursor:pointer;color:#9ca3af;">&times;</button></div>' + html;
+                overlay.appendChild(modal);
+                overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+                document.body.appendChild(overlay);
+            })
+            .catch(function() {
+                alert('Error loading account details');
+            });
+    }
+
+    function formatINR(num) {
+        return num.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+    }
+
+    function escapeHTML(str) {
+        if (!str) return '';
+        var div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
     }
 
     // Initialize when DOM is ready

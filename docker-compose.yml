@@ -23,6 +23,7 @@ services:
       - DATABASE_URL=postgresql://admin:admin123@db:5432/adminpanel
       - DEBUG=True
       - SECRET_KEY=django-insecure-change-this-in-production
+      - ALLOWED_HOSTS=localhost,127.0.0.1,10.0.2.2,0.0.0.0
     depends_on:
       - db
     restart: on-failure

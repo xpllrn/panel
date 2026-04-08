@@ -2,6 +2,7 @@ import functools
 import io
 from datetime import date, timedelta
 
+from django.conf import settings
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
@@ -397,4 +398,14 @@ def member_account_statement_view(request, account_id):
     response["Content-Disposition"] = (
         f'attachment; filename="statement_{account.account_number}_{end_date.strftime("%Y%m%d")}.pdf"'
     )
+    return response
+
+
+def service_worker_view(request):
+    """Serve service worker from /member/ scope so it can control member portal pages."""
+    sw_path = settings.BASE_DIR / "static" / "service-worker.js"
+    with open(sw_path) as f:
+        content = f.read()
+    response = HttpResponse(content, content_type="application/javascript")
+    response["Service-Worker-Allowed"] = "/member/"
     return response

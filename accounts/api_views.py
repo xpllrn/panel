@@ -14,6 +14,7 @@ from accounts.models import (
     FundAccount,
     FundAllocationRule,
     FundTransaction,
+    InterestPayout,
     Loan,
     LoanRepayment,
     MemberAccount,
@@ -1235,3 +1236,163 @@ def member_transactions_list(request):
     paginator = PageNumberPagination()
     page = paginator.paginate_queryset(qs, request)
     return paginator.get_paginated_response(ReceiptSerializer(page, many=True).data)
+
+
+# ========================================
+# Admin: Interest Posting
+# ========================================
+
+
+@api_view(["POST"])
+@permission_classes([IsAdmin])
+def admin_post_interest(request):
+    """Calculate and post accrued interest to all eligible deposit accounts."""
+    today = date.today()
+
+    accounts = (
+        MemberAccount.objects.filter(is_deleted=False, status="active", interest_rate__gt=0)
+        .exclude(account_type__in=["share", "od"])
+        .select_related("user")
+    )
+
+    total_posted = Decimal("0.00")
+    accounts_updated = 0
+
+    with transaction.atomic():
+        for account in accounts:
+            if account.last_interest_calc_date and account.last_interest_calc_date >= today:
+                continue
+
+            calc_start = account.last_interest_calc_date or account.opening_date
+            if calc_start >= today:
+                continue
+
+            days = (today - calc_start).days
+            if days <= 0:
+                continue
+
+            interest_amount = (
+                account.balance * account.interest_rate * Decimal(str(days)) / Decimal("36500")
+            ).quantize(Decimal("0.01"))
+
+            if interest_amount <= 0:
+                continue
+
+            MemberAccount.objects.filter(id=account.id).update(
+                accrued_interest=F("accrued_interest") + interest_amount,
+                balance=F("balance") + interest_amount,
+                last_interest_calc_date=today,
+                last_transaction_date=today,
+            )
+
+            InterestPayout.objects.create(
+                account=account,
+                amount=interest_amount,
+                period_start=calc_start,
+                period_end=today,
+                created_by=request.user,
+            )
+
+            # Create receipt
+            last_receipt = Receipt.objects.order_by("-id").first()
+            if last_receipt and last_receipt.receipt_number:
+                try:
+                    last_num = int(last_receipt.receipt_number.replace("RCT", ""))
+                    new_receipt_number = f"RCT{last_num + 1:06d}"
+                except (ValueError, IndexError):
+                    new_receipt_number = f"RCT{Receipt.objects.count() + 1:06d}"
+            else:
+                new_receipt_number = "RCT000001"
+
+            Receipt.objects.create(
+                user=account.user,
+                member_account=account,
+                receipt_number=new_receipt_number,
+                transaction_type="interest",
+                amount=interest_amount,
+                description=f"Interest credit {calc_start.strftime('%b %d')} - {today.strftime('%b %d, %Y')} @ {account.interest_rate}%",
+                payment_mode="internal",
+                balance_after=account.balance + interest_amount,
+                created_by=request.user,
+            )
+
+            total_posted += interest_amount
+            accounts_updated += 1
+
+    return Response(
+        {
+            "success": True,
+            "message": f"Posted ₹{total_posted} interest to {accounts_updated} accounts.",
+            "total_posted": str(total_posted),
+            "accounts_updated": accounts_updated,
+        }
+    )
+
+
+# ========================================
+# Admin: Dividend Distribution
+# ========================================
+
+
+@api_view(["POST"])
+@permission_classes([IsAdmin])
+def admin_distribute_dividend(request):
+    """Calculate and distribute dividends to eligible members based on share capital."""
+    year = int(request.data.get("year", date.today().year))
+    dividend_rate = request.data.get("dividend_rate")
+
+    if not dividend_rate:
+        return Response({"error": "dividend_rate is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    dividend_rate = Decimal(str(dividend_rate))
+    if dividend_rate <= 0 or dividend_rate > 100:
+        return Response({"error": "dividend_rate must be between 0.01 and 100"}, status=status.HTTP_400_BAD_REQUEST)
+
+    eligible_members = User.objects.filter(
+        is_deleted=False, status="active", eligible_for_dividend=True, share_capital_amount__gt=0
+    )
+
+    if not eligible_members.exists():
+        return Response({"error": "No eligible members with share capital"}, status=status.HTTP_400_BAD_REQUEST)
+
+    total_distributed = Decimal("0.00")
+    member_count = 0
+
+    with transaction.atomic():
+        for member in eligible_members:
+            dividend_amount = (member.share_capital_amount * dividend_rate / Decimal("100")).quantize(Decimal("0.01"))
+            if dividend_amount <= 0:
+                continue
+
+            User.objects.filter(id=member.id).update(
+                dividend_payable_balance=F("dividend_payable_balance") + dividend_amount,
+                last_dividend_paid_date=date.today(),
+            )
+
+            total_distributed += dividend_amount
+            member_count += 1
+
+        # Deduct from Dividend Fund
+        dividend_fund = FundAccount.objects.filter(fund_type="dividend", is_deleted=False, is_active=True).first()
+        if dividend_fund:
+            new_balance = dividend_fund.balance - total_distributed
+            FundAccount.objects.filter(id=dividend_fund.id).update(balance=F("balance") - total_distributed)
+            FundTransaction.objects.create(
+                fund=dividend_fund,
+                transaction_type="debit",
+                amount=total_distributed,
+                description=f"Dividend distribution FY {year}-{year + 1} @ {dividend_rate}%",
+                payment_mode="internal",
+                balance_after=new_balance,
+                trigger_event="manual",
+                created_by=request.user,
+            )
+
+    return Response(
+        {
+            "success": True,
+            "message": f"Distributed ₹{total_distributed} @ {dividend_rate}% to {member_count} members.",
+            "total_distributed": str(total_distributed),
+            "member_count": member_count,
+        }
+    )

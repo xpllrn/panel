@@ -407,6 +407,68 @@ Content-Type: application/json
 
 This applies all `annual_profit` allocation rules and distributes the calculated net profit to the configured funds.
 
+### Interest Posting & Dividends
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v1/admin/interest/post/` | Calculate and post accrued interest to all deposit accounts |
+| `POST` | `/api/v1/admin/dividend/distribute/` | Distribute dividends to eligible members |
+
+**Post Interest:**
+```
+POST /api/v1/admin/interest/post/
+```
+
+Calculates daily interest on all active deposit accounts (FD, RD, CD, Sukanya, Suputra) from each account's `last_interest_calc_date` to today. Creates `InterestPayout` records and interest receipts, and credits the interest to each account balance.
+
+**Response:**
+```json
+{
+    "success": true,
+    "message": "Posted ₹12,450 interest to 35 accounts.",
+    "total_posted": "12450.00",
+    "accounts_updated": 35
+}
+```
+
+**Distribute Dividend:**
+```
+POST /api/v1/admin/dividend/distribute/
+Content-Type: application/json
+
+{
+    "year": 2025,
+    "dividend_rate": 10
+}
+```
+
+Calculates dividend for each eligible member as `share_capital * rate / 100`, updates their `dividend_payable_balance`, and debits from the Dividend Fund (if configured).
+
+**Response:**
+```json
+{
+    "success": true,
+    "message": "Distributed ₹50,000 @ 10% to 25 members.",
+    "total_distributed": "50000.00",
+    "member_count": 25
+}
+```
+
+### Health Check
+
+```
+GET /health/
+```
+
+Returns database connectivity status. No authentication required.
+
+```json
+{
+    "status": "ok",
+    "database": "connected"
+}
+```
+
 ### Audit Logs
 
 | Method | Endpoint | Description |

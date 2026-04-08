@@ -17,6 +17,7 @@ from accounts.models import (
     FundAccount,
     FundAllocationRule,
     FundTransaction,
+    InterestPayout,
     Loan,
     LoanRepayment,
     MemberAccount,
@@ -1876,6 +1877,30 @@ def reports_view(request):
         npa_summary[cat]["count"] += 1
         npa_summary[cat]["amount"] += loan.outstanding_balance
 
+    # Maturity alerts - accounts maturing in next 30/60/90 days
+    today = date.today()
+    maturing_30 = (
+        MemberAccount.objects.filter(
+            is_deleted=False, status="active", maturity_date__range=(today, today + timedelta(days=30))
+        )
+        .select_related("user")
+        .order_by("maturity_date")
+    )
+    maturing_60 = MemberAccount.objects.filter(
+        is_deleted=False, status="active", maturity_date__range=(today + timedelta(days=31), today + timedelta(days=60))
+    ).select_related("user")
+    maturing_90 = MemberAccount.objects.filter(
+        is_deleted=False, status="active", maturity_date__range=(today + timedelta(days=61), today + timedelta(days=90))
+    ).select_related("user")
+
+    # Dividend summary
+    total_share_capital = User.objects.filter(is_deleted=False, status="active", share_capital_amount__gt=0).aggregate(
+        total=Sum("share_capital_amount")
+    )["total"] or Decimal("0.00")
+    eligible_dividend_members = User.objects.filter(
+        is_deleted=False, status="active", eligible_for_dividend=True, share_capital_amount__gt=0
+    ).count()
+
     context = {
         "summary": summary,
         "monthly_data_json": json.dumps(monthly_data),
@@ -1887,6 +1912,11 @@ def reports_view(request):
         "start_date": start_date,
         "end_date": end_date,
         "current_year": date.today().year,
+        "maturing_30": maturing_30,
+        "maturing_60_count": maturing_60.count(),
+        "maturing_90_count": maturing_90.count(),
+        "total_share_capital": total_share_capital,
+        "eligible_dividend_members": eligible_dividend_members,
     }
     return render(request, "admin/reports.html", context)
 
@@ -1949,6 +1979,313 @@ def distribute_profit_view(request):
             return JsonResponse({"success": False, "error": str(e)})
 
     return JsonResponse({"success": False, "error": "Invalid request method"})
+
+
+@login_required
+@admin_required
+def distribute_dividend_view(request):
+    """Calculate and distribute dividends to eligible members based on share capital."""
+    if request.method == "POST":
+        try:
+            year = int(request.POST.get("year", date.today().year))
+            dividend_rate = request.POST.get("dividend_rate")
+
+            if not dividend_rate:
+                return JsonResponse({"success": False, "error": "Dividend rate is required"})
+
+            dividend_rate = Decimal(dividend_rate)
+            if dividend_rate <= 0 or dividend_rate > 100:
+                return JsonResponse({"success": False, "error": "Dividend rate must be between 0.01 and 100"})
+
+            # Get eligible members with share capital
+            eligible_members = User.objects.filter(
+                is_deleted=False,
+                status="active",
+                eligible_for_dividend=True,
+                share_capital_amount__gt=0,
+            )
+
+            if not eligible_members.exists():
+                return JsonResponse({"success": False, "error": "No eligible members with share capital found"})
+
+            total_distributed = Decimal("0.00")
+            member_count = 0
+
+            with transaction.atomic():
+                for member in eligible_members:
+                    # Dividend = share_capital * rate / 100
+                    dividend_amount = (member.share_capital_amount * dividend_rate / Decimal("100")).quantize(
+                        Decimal("0.01")
+                    )
+
+                    if dividend_amount <= 0:
+                        continue
+
+                    # Update member's dividend payable
+                    User.objects.filter(id=member.id).update(
+                        dividend_payable_balance=F("dividend_payable_balance") + dividend_amount,
+                        last_dividend_paid_date=date.today(),
+                    )
+
+                    total_distributed += dividend_amount
+                    member_count += 1
+
+                # Deduct from Dividend Fund if it exists
+                dividend_fund = FundAccount.objects.filter(
+                    fund_type="dividend", is_deleted=False, is_active=True
+                ).first()
+
+                if dividend_fund:
+                    new_balance = dividend_fund.balance - total_distributed
+                    FundAccount.objects.filter(id=dividend_fund.id).update(balance=F("balance") - total_distributed)
+                    FundTransaction.objects.create(
+                        fund=dividend_fund,
+                        transaction_type="debit",
+                        amount=total_distributed,
+                        description=f"Dividend distribution FY {year}-{year + 1} @ {dividend_rate}%",
+                        payment_mode="internal",
+                        balance_after=new_balance,
+                        trigger_event="manual",
+                        created_by=request.user,
+                    )
+
+                log_action(
+                    request,
+                    "create",
+                    "fund",
+                    None,
+                    f"Distributed dividend @ {dividend_rate}% for FY {year}-{year + 1}. "
+                    f"₹{total_distributed} to {member_count} members.",
+                )
+
+            return JsonResponse(
+                {
+                    "success": True,
+                    "message": f"Distributed ₹{total_distributed} as dividend @ {dividend_rate}% to {member_count} members.",
+                }
+            )
+        except Exception as e:
+            return JsonResponse({"success": False, "error": str(e)})
+
+    return JsonResponse({"success": False, "error": "Invalid request method"})
+
+
+@login_required
+@admin_required
+def post_interest_view(request):
+    """Calculate and post accrued interest to eligible deposit accounts."""
+    if request.method == "POST":
+        try:
+            period_end = date.today()
+
+            # Get all active deposit accounts (not share, not OD)
+            accounts = (
+                MemberAccount.objects.filter(
+                    is_deleted=False,
+                    status="active",
+                    interest_rate__gt=0,
+                )
+                .exclude(account_type__in=["share", "od"])
+                .select_related("user")
+            )
+
+            total_posted = Decimal("0.00")
+            accounts_updated = 0
+
+            with transaction.atomic():
+                for account in accounts:
+                    # Skip if interest was already calculated for this period
+                    if account.last_interest_calc_date and account.last_interest_calc_date >= period_end:
+                        continue
+
+                    # Calculate interest for the period
+                    calc_start = account.last_interest_calc_date or account.opening_date
+                    if calc_start >= period_end:
+                        continue
+
+                    days = (period_end - calc_start).days
+                    if days <= 0:
+                        continue
+
+                    # Daily interest = balance * rate / 100 / 365
+                    interest_amount = (
+                        account.balance * account.interest_rate * Decimal(str(days)) / Decimal("36500")
+                    ).quantize(Decimal("0.01"))
+
+                    if interest_amount <= 0:
+                        continue
+
+                    # Update accrued interest on account
+                    MemberAccount.objects.filter(id=account.id).update(
+                        accrued_interest=F("accrued_interest") + interest_amount,
+                        last_interest_calc_date=period_end,
+                    )
+
+                    # Create InterestPayout record
+                    InterestPayout.objects.create(
+                        account=account,
+                        amount=interest_amount,
+                        period_start=calc_start,
+                        period_end=period_end,
+                        created_by=request.user,
+                    )
+
+                    # Create a receipt for the interest credit
+                    last_receipt = Receipt.objects.order_by("-id").first()
+                    if last_receipt and last_receipt.receipt_number:
+                        try:
+                            last_num = int(last_receipt.receipt_number.replace("RCT", ""))
+                            new_receipt_number = f"RCT{last_num + 1:06d}"
+                        except (ValueError, IndexError):
+                            new_receipt_number = f"RCT{Receipt.objects.count() + 1:06d}"
+                    else:
+                        new_receipt_number = "RCT000001"
+
+                    new_balance = account.balance + interest_amount
+                    Receipt.objects.create(
+                        user=account.user,
+                        member_account=account,
+                        receipt_number=new_receipt_number,
+                        transaction_type="interest",
+                        amount=interest_amount,
+                        description=f"Interest credit for {calc_start.strftime('%b %d')} - {period_end.strftime('%b %d, %Y')} @ {account.interest_rate}%",
+                        payment_mode="internal",
+                        balance_after=new_balance,
+                        created_by=request.user,
+                    )
+
+                    # Update account balance
+                    MemberAccount.objects.filter(id=account.id).update(
+                        balance=F("balance") + interest_amount,
+                        last_transaction_date=period_end,
+                    )
+
+                    total_posted += interest_amount
+                    accounts_updated += 1
+
+            log_action(
+                request,
+                "create",
+                "account",
+                None,
+                f"Posted interest for period ending {period_end}. "
+                f"₹{total_posted} across {accounts_updated} accounts.",
+            )
+
+            return JsonResponse(
+                {
+                    "success": True,
+                    "message": f"Posted ₹{total_posted} interest to {accounts_updated} accounts.",
+                }
+            )
+        except Exception as e:
+            return JsonResponse({"success": False, "error": str(e)})
+
+    return JsonResponse({"success": False, "error": "Invalid request method"})
+
+
+@login_required
+@admin_required
+def export_report_view(request):
+    """Export financial report data as CSV."""
+    import calendar
+    import csv
+
+    from accounts.utils import get_financial_summary
+
+    period = request.GET.get("period", "year")
+    year = int(request.GET.get("year", date.today().year))
+
+    if period == "month":
+        month = int(request.GET.get("month", date.today().month))
+        start_date = date(year, month, 1)
+        last_day = calendar.monthrange(year, month)[1]
+        end_date = date(year, month, last_day)
+        filename = f"financial_report_{year}_{month:02d}.csv"
+    elif period == "quarter":
+        quarter = int(request.GET.get("quarter", (date.today().month - 1) // 3 + 1))
+        start_month = (quarter - 1) * 3 + 1
+        end_month = start_month + 2
+        start_date = date(year, start_month, 1)
+        last_day = calendar.monthrange(year, end_month)[1]
+        end_date = date(year, end_month, last_day)
+        filename = f"financial_report_{year}_Q{quarter}.csv"
+    else:
+        start_date = date(year, 4, 1)
+        end_date = date(year + 1, 3, 31)
+        filename = f"financial_report_FY{year}_{year + 1}.csv"
+
+    summary = get_financial_summary(start_date, end_date)
+
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    writer = csv.writer(response)
+
+    # Header
+    writer.writerow(["Financial Report"])
+    writer.writerow(["Period", f"{start_date.strftime('%d %b %Y')} to {end_date.strftime('%d %b %Y')}"])
+    writer.writerow([])
+
+    # Revenue
+    writer.writerow(["REVENUE"])
+    writer.writerow(["Loan Interest Income", float(summary["loan_interest_income"])])
+    writer.writerow(["Penalty Income", float(summary["penalty_income"])])
+    writer.writerow(["Processing Fees", float(summary["processing_fees"])])
+    writer.writerow(["Gross Revenue", float(summary["gross_revenue"])])
+    writer.writerow([])
+
+    # Expenses
+    writer.writerow(["EXPENSES"])
+    writer.writerow(["Deposit Interest Expense", float(summary["deposit_interest_expense"])])
+    writer.writerow(["Monthly Interest Liability", float(summary["monthly_interest_liability"])])
+    writer.writerow(["Total Expenses", float(summary["total_expenses"])])
+    writer.writerow([])
+
+    # Profit
+    writer.writerow(["NET PROFIT", float(summary["net_profit"])])
+    writer.writerow([])
+
+    # Loan Portfolio
+    writer.writerow(["LOAN PORTFOLIO"])
+    writer.writerow(["Active Loans", summary["active_loans_count"]])
+    writer.writerow(["Total Disbursed (Period)", float(summary["total_disbursed"])])
+    writer.writerow(["Total Outstanding", float(summary["total_loans_outstanding"])])
+    writer.writerow(["Total Overdue", float(summary["total_overdue"])])
+    writer.writerow(["NPA Count", summary["npa_count"]])
+    writer.writerow(["Recovery Rate (%)", summary["recovery_rate"]])
+    writer.writerow([])
+
+    # Deposit Portfolio
+    writer.writerow(["DEPOSIT PORTFOLIO"])
+    writer.writerow(["Account Type", "Balance", "Avg Rate (%)", "Count"])
+    for type_name, data in summary["deposit_by_type"].items():
+        writer.writerow([type_name, float(data["balance"]), float(data["avg_rate"]), data["count"]])
+    writer.writerow([])
+
+    # Monthly Breakdown
+    writer.writerow(["MONTHLY BREAKDOWN"])
+    writer.writerow(["Month", "Revenue", "Expense", "Net Profit"])
+    current = start_date
+    while current <= end_date:
+        month_start = current.replace(day=1)
+        last_day = calendar.monthrange(current.year, current.month)[1]
+        month_end = current.replace(day=last_day)
+        month_summary = get_financial_summary(month_start, month_end)
+        writer.writerow(
+            [
+                current.strftime("%b %Y"),
+                float(month_summary["gross_revenue"]),
+                float(month_summary["total_expenses"]),
+                float(month_summary["net_profit"]),
+            ]
+        )
+        if current.month == 12:
+            current = current.replace(year=current.year + 1, month=1, day=1)
+        else:
+            current = current.replace(month=current.month + 1, day=1)
+
+    log_action(request, "export", "system", None, f"Exported financial report for {start_date} to {end_date}")
+    return response
 
 
 @login_required

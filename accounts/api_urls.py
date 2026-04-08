@@ -68,6 +68,9 @@ urlpatterns = [
         api_views.admin_reports_distribute_profit,
         name="admin_reports_distribute_profit",
     ),
+    # Admin: Interest & Dividends
+    path("admin/interest/post/", api_views.admin_post_interest, name="admin_post_interest"),
+    path("admin/dividend/distribute/", api_views.admin_distribute_dividend, name="admin_distribute_dividend"),
     # Admin: Audit Logs
     path("admin/audit-logs/", api_views.admin_audit_logs_list, name="admin_audit_logs_list"),
     # Member: Dashboard

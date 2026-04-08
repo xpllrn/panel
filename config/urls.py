@@ -18,8 +18,21 @@ def root_redirect(request):
     return redirect("/login/")
 
 
+def health_check(request):
+    """Health check endpoint for uptime monitoring and load balancers."""
+    from django.db import connection
+    from django.http import JsonResponse
+
+    try:
+        connection.ensure_connection()
+        return JsonResponse({"status": "ok", "database": "connected"})
+    except Exception:
+        return JsonResponse({"status": "error", "database": "disconnected"}, status=503)
+
+
 urlpatterns = [
     path("", root_redirect, name="root"),
+    path("health/", health_check, name="health_check"),
     # API v1
     path("api/v1/", include("accounts.api_urls")),
     path("api/v1/schema/", SpectacularAPIView.as_view(), name="schema"),
@@ -78,6 +91,9 @@ urlpatterns = [
     ),
     path("reports/", admin_views.reports_view, name="reports"),
     path("reports/distribute-profit/", admin_views.distribute_profit_view, name="distribute_profit"),
+    path("reports/distribute-dividend/", admin_views.distribute_dividend_view, name="distribute_dividend"),
+    path("reports/post-interest/", admin_views.post_interest_view, name="post_interest"),
+    path("reports/export/", admin_views.export_report_view, name="export_report"),
     path("calculator/", admin_views.calculator_view, name="calculator"),
     path("export/members/", admin_views.export_members_view, name="export_members"),
     path("export/accounts/", admin_views.export_accounts_view, name="export_accounts"),

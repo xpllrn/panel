@@ -13,4 +13,5 @@ urlpatterns = [
     path("loans/<int:loan_id>/", views.member_loan_detail_view, name="loan_detail"),
     path("transactions/", views.member_transactions_view, name="transactions"),
     path("profile/", views.member_profile_view, name="profile"),
+    path("service-worker.js", views.service_worker_view, name="service_worker"),
 ]

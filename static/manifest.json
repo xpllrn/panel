@@ -1,0 +1,25 @@
+{
+    "name": "Cooperative Society Member Portal",
+    "short_name": "Member Portal",
+    "description": "Member self-service portal for cooperative society banking",
+    "start_url": "/member/",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#1e293b",
+    "orientation": "portrait-primary",
+    "scope": "/member/",
+    "icons": [
+        {
+            "src": "/static/icons/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/static/icons/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ]
+}

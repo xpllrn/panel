@@ -6,92 +6,87 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/pages/accounts.css' %}">
 <style>
+.account-book-wrapper {
+    background: var(--color-white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow-x: auto;
+    margin-bottom: var(--spacing-xl);
+}
 .account-book-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 14px;
-    background: white;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    border-radius: 8px;
-    overflow: hidden;
+    font-size: var(--font-size-sm);
 }
-
 .account-book-table th {
-    background: #2c3e50;
-    color: white;
-    padding: 12px 8px;
-    text-align: left;
+    background: var(--color-gray-50);
     font-weight: 600;
+    font-size: var(--font-size-xs);
+    color: var(--color-gray-600);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: var(--spacing-md) var(--spacing-lg);
+    text-align: left;
+    border-bottom: 1px solid var(--color-gray-200);
+    white-space: nowrap;
     position: sticky;
     top: 0;
     z-index: 10;
 }
-
-.account-book-table th:first-child {
-    min-width: 150px;
-}
-
 .account-book-table th.account-col {
     text-align: right;
-    min-width: 120px;
 }
-
 .account-book-table td {
-    padding: 10px 8px;
-    border-bottom: 1px solid #e0e0e0;
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-bottom: 1px solid var(--color-gray-100);
+    color: var(--color-gray-700);
 }
-
+.account-book-table tbody tr:nth-child(even) {
+    background: var(--color-gray-50, #f9fafb);
+}
 .account-book-table tbody tr:hover {
-    background: #f8f9fa;
+    background: var(--color-gray-100, #f3f4f6);
 }
-
 .account-book-table .member-cell {
     font-weight: 500;
+    color: var(--color-gray-800);
 }
-
 .account-book-table .member-id {
-    color: #666;
-    font-size: 12px;
+    color: var(--color-gray-500);
+    font-size: var(--font-size-xs);
     display: block;
 }
-
 .account-book-table .balance-cell {
     text-align: right;
-    font-family: 'Courier New', monospace;
+    font-family: monospace;
+    font-weight: 500;
+    white-space: nowrap;
 }
-
 .account-book-table .balance-cell.zero {
-    color: #999;
+    color: var(--color-gray-400);
 }
-
 .account-book-table .balance-cell.positive {
-    color: #27ae60;
+    color: var(--color-gray-800);
 }
-
 .account-book-table .total-row {
-    background: #ecf0f1;
-    font-weight: 600;
+    background: var(--color-gray-50) !important;
 }
-
 .account-book-table .total-row td {
-    border-top: 2px solid #2c3e50;
-    padding: 14px 8px;
+    border-top: 2px solid var(--color-gray-300);
+    padding: var(--spacing-lg) var(--spacing-lg);
+    font-weight: 600;
+    color: var(--color-gray-800);
 }
-
-.account-book-table .grand-total {
-    background: #2c3e50;
-    color: white;
-    font-size: 16px;
+.account-book-table .grand-total-cell {
+    color: var(--color-primary);
+    font-size: var(--font-size-base);
 }
-
-.table-container {
-    overflow-x: auto;
-    margin-top: 20px;
-}
-
 .account-type-header {
-    font-size: 11px;
-    text-transform: uppercase;
+    font-size: var(--font-size-xs);
+    font-weight: 400;
+    color: var(--color-gray-400);
+    text-transform: none;
+    letter-spacing: 0;
 }
 </style>
 {% endblock %}
@@ -116,27 +111,27 @@
 </div>
 {% endif %}
 
-<div class="table-container">
+<div class="account-book-wrapper">
     <table class="account-book-table">
         <thead>
             <tr>
                 <th>Member</th>
                 {% for account_type, account_label in account_types %}
                 <th class="account-col">
-                    <div>{{ account_label }}</div>
-                    <div class="account-type-header">({{ account_type|upper }})</div>
+                    {{ account_label }}
+                    <div class="account-type-header">{{ account_type|upper }}</div>
                 </th>
                 {% endfor %}
-                <th class="account-col">Total Balance</th>
+                <th class="account-col">Total</th>
             </tr>
         </thead>
         <tbody>
             {% for member in account_book %}
             <tr>
                 <td class="member-cell">
-                    <div>{{ member.name }}</div>
+                    {{ member.name }}
                     {% if member.member_id != '-' %}
-                    <span class="member-id">ID: {{ member.member_id }}</span>
+                    <span class="member-id">{{ member.member_id }}</span>
                     {% endif %}
                 </td>
                 {% for balance_data in member.account_balances %}
@@ -154,10 +149,10 @@
             </tr>
             {% empty %}
             <tr>
-                <td colspan="{{ account_types|length|add:2 }}" class="empty-state">No members found</td>
+                <td colspan="{{ account_types|length|add:2 }}" style="text-align: center; padding: var(--spacing-2xl); color: var(--color-gray-400);">No members found</td>
             </tr>
             {% endfor %}
-            
+
             {% if account_book %}
             <tr class="total-row">
                 <td><strong>TOTAL</strong></td>
@@ -166,7 +161,7 @@
                     <strong>₹{{ total|inr }}</strong>
                 </td>
                 {% endfor %}
-                <td class="balance-cell grand-total">
+                <td class="balance-cell grand-total-cell">
                     <strong>₹{{ grand_total|inr }}</strong>
                 </td>
             </tr>
@@ -201,36 +196,4 @@
 
 {% block extra_js %}
 <script src="{% static 'js/utils.js' %}"></script>
-<script>
-(function() {
-    'use strict';
-    
-    // Format all currency amounts in Indian numbering system
-    document.addEventListener('DOMContentLoaded', function() {
-        var balanceCells = document.querySelectorAll('.balance-cell');
-        balanceCells.forEach(function(cell) {
-            var text = cell.textContent.trim();
-            
-            // Skip if it's a dash or empty
-            if (text === '-' || text === '') return;
-            
-            // Extract number from text (remove ₹ and commas)
-            var match = text.match(/₹?([\d,]+\.?\d*)/);
-            if (match) {
-                var number = parseFloat(match[1].replace(/,/g, ''));
-                if (!isNaN(number)) {
-                    var formatted = formatCurrency(number);
-                    
-                    // Preserve the <strong> tag if it exists
-                    if (cell.querySelector('strong')) {
-                        cell.querySelector('strong').textContent = formatted;
-                    } else {
-                        cell.textContent = formatted;
-                    }
-                }
-            }
-        });
-    });
-})();
-</script>
 {% endblock %}
