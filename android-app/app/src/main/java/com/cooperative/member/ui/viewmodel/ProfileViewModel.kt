@@ -101,6 +101,11 @@ class ProfileViewModel(app: Application) : AndroidViewModel(app) {
         _emailChangeMessage.value = null
     }
 
+    fun resetEmailChangeFlow() {
+        _emailChangeChallenge.value = null
+        _emailChangeMessage.value = null
+    }
+
     fun updatePersonalInfo(phone: String?, birthDate: String?) {
         _isUpdatingPersonal.value = true
         viewModelScope.launch {

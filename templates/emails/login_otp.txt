@@ -1,0 +1,13 @@
+Subject: Your login OTP - {{ society_name }}
+
+Hello {{ user.display_name }},
+
+Use this one-time password to complete your sign in:
+
+OTP: {{ otp_code }}
+
+This OTP is valid for {{ expires_minutes }} minutes.
+If you did not request this login, please ignore this email.
+
+Best regards,
+{{ society_name }} Team

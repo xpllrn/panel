@@ -1,0 +1,15 @@
+Subject: Payment Reminder - ₹{{ due_amount }}
+
+Hello {{ user.display_name }},
+
+This is a reminder for your upcoming payment.
+
+Details:
+- Type: {{ payment_type }}
+- Due Amount: ₹{{ due_amount }}
+- Due Date: {{ due_date }}
+
+Please make the payment on or before the due date.
+
+Regards,
+{{ society_name }} Team
