@@ -1,11 +1,13 @@
 package com.cooperative.member.ui.navigation
 
-import android.app.Application
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.background
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.MaterialTheme
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -26,14 +28,15 @@ fun AppNavigation() {
     val isLoggedIn by app.session.isLoggedIn.collectAsState(initial = false)
 
     val loginVm: LoginViewModel = viewModel()
-    val accountsVm: AccountsViewModel = viewModel()
-    val loansVm: LoansViewModel = viewModel()
-
     key(isLoggedIn) {
         val navController = rememberNavController()
         val start = if (isLoggedIn) "main" else "login"
 
-        NavHost(navController = navController, startDestination = start) {
+        NavHost(
+            navController = navController,
+            startDestination = start,
+            modifier = Modifier.background(MaterialTheme.colorScheme.background)
+        ) {
             composable("login") {
                 LoginScreen(loginVm)
             }
@@ -53,6 +56,7 @@ fun AppNavigation() {
                 "account_detail/{id}",
                 arguments = listOf(navArgument("id") { type = NavType.IntType })
             ) { entry ->
+                val accountsVm: AccountsViewModel = viewModel()
                 val id = entry.arguments?.getInt("id") ?: return@composable
                 AccountDetailScreen(
                     accountId = id,
@@ -65,6 +69,7 @@ fun AppNavigation() {
                 "loan_detail/{id}",
                 arguments = listOf(navArgument("id") { type = NavType.IntType })
             ) { entry ->
+                val loansVm: LoansViewModel = viewModel()
                 val id = entry.arguments?.getInt("id") ?: return@composable
                 LoanDetailScreen(
                     loanId = id,

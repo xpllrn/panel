@@ -4,6 +4,7 @@ import android.app.Application
 import com.cooperative.member.data.ApiClient
 import com.cooperative.member.data.MemberRepository
 import com.cooperative.member.data.SessionManager
+import kotlinx.coroutines.runBlocking
 
 class CooperativeApp : Application() {
 
@@ -16,6 +17,9 @@ class CooperativeApp : Application() {
     override fun onCreate() {
         super.onCreate()
         session = SessionManager(this)
+        runBlocking {
+            session.syncCacheFromStorage()
+        }
         val api = ApiClient.create(session)
         repository = MemberRepository(api, session)
     }

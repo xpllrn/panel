@@ -10,7 +10,15 @@ from django.urls import reverse
 
 from rest_framework.test import APIClient
 
-from accounts.models import LoginOTPChallenge, UserDevice, aadhar_validator, ifsc_validator, pan_validator, phone_validator, pincode_validator
+from accounts.models import (
+    LoginOTPChallenge,
+    UserDevice,
+    aadhar_validator,
+    ifsc_validator,
+    pan_validator,
+    phone_validator,
+    pincode_validator,
+)
 from accounts.utils import combine_name, split_full_name, validate_password_strength
 
 User = get_user_model()

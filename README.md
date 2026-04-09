@@ -1,6 +1,19 @@
-# Django Admin Panel
+# Cooperative panel (monorepo)
 
-A modern admin panel built with Django, Django REST Framework, and PostgreSQL, fully containerized with Docker.
+Django backend with a REST API, server-rendered **admin** and **member** web portals, a **static public marketing site** (served separately, for example via GitHub Pages), and an **Android** member app.
+
+## Repository layout
+
+| Path | What it is |
+|------|------------|
+| Repo root (`manage.py`, `config/`, `accounts/`, …) | Django project: PostgreSQL models, `api/v1/` REST API, auth, business logic |
+| `admin_portal/` | Admin-only HTML views and routes (dashboard, members, loans, funds, …) |
+| `member_portal/` | Logged-in member web UI (`/member/…`) |
+| `templates/`, `static/` | Django templates and static assets for both portals |
+| `docs/` | **Static public website** (plain HTML/CSS/JS). Intended for GitHub Pages: in the repo’s **Settings → Pages**, set source to the **`/docs`** folder on your default branch. Add a **`docs/.nojekyll`** file (already present) so GitHub does not run Jekyll on these files. |
+| `android-app/` | Kotlin / Jetpack Compose **member** mobile app (talks to the same API) |
+
+The Django app is **not** the marketing site: `/` still redirects staff or members into the panel. The cooperative’s brochure-style pages live only under `docs/` for static hosting.
 
 ## Features
 
@@ -123,19 +136,22 @@ python manage.py createsuperuser
 python manage.py runserver
 ```
 
-## Project Structure
+## Project structure (detailed)
 
 ```
 .
-├── config/              # Django settings and configuration
-├── accounts/            # User authentication and profile app
-├── admin_portal/        # Admin portal app
-├── templates/           # HTML templates
-├── static/              # Static files (CSS, JS, images)
-├── media/               # User uploaded files
-├── docker-compose.yml   # Docker compose configuration
-├── Dockerfile           # Docker image configuration
-└── requirements.txt     # Python dependencies
+├── config/              # Django settings, root URLconf
+├── accounts/            # Models, API, auth, forms
+├── admin_portal/        # Admin UI views
+├── member_portal/       # Member web portal views
+├── templates/           # Django templates (accounts, admin, member, emails)
+├── static/              # Panel static files (CSS, JS)
+├── docs/                # Public static website (GitHub Pages)
+├── android-app/         # Member Android app
+├── docker-compose.yml
+├── Dockerfile
+├── manage.py
+└── requirements.txt
 ```
 
 ## Available Pages

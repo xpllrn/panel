@@ -18,13 +18,14 @@ class SessionManager(private val context: Context) {
     private val accessKey = stringPreferencesKey("access_token")
     private val refreshKey = stringPreferencesKey("refresh_token")
     private val themeKey = stringPreferencesKey("theme_mode")
+    private val deviceTokenKey = stringPreferencesKey("device_token")
 
     val isLoggedIn: Flow<Boolean> = store.data.map { prefs ->
         !prefs[accessKey].isNullOrEmpty()
     }
 
     val themeMode: Flow<String> = store.data.map { prefs ->
-        prefs[themeKey] ?: "dark"
+        prefs[themeKey] ?: "light"
     }
 
     suspend fun syncCacheFromStorage() {
@@ -53,5 +54,21 @@ class SessionManager(private val context: Context) {
 
     suspend fun getRefreshToken(): String? {
         return store.data.map { it[refreshKey] }.first()
+    }
+
+    suspend fun getAccessToken(): String? {
+        return store.data.map { it[accessKey] }.first()
+    }
+
+    suspend fun saveDeviceToken(token: String) {
+        store.edit { it[deviceTokenKey] = token }
+    }
+
+    suspend fun getDeviceToken(): String? {
+        return store.data.map { it[deviceTokenKey] }.first()
+    }
+
+    suspend fun clearDeviceToken() {
+        store.edit { it.remove(deviceTokenKey) }
     }
 }

@@ -85,7 +85,7 @@ class Command(BaseCommand):
                     # Generate user details
                     first_name = random.choice(first_names)
                     last_name = random.choice(last_names)
-                    username = f"{first_name.lower()}{last_name.lower()}{i+1}"
+                    username = f"{first_name.lower()}{last_name.lower()}{i + 1}"
                     email = f"{username}@example.com"
                     dob = date(random.randint(1970, 2000), random.randint(1, 12), random.randint(1, 28))
                     mobile = f"9{random.randint(100000000, 999999999)}"

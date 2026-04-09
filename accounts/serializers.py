@@ -195,6 +195,7 @@ class MemberProfileSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "email",
+            "email_verified",
             "member_type",
             "status",
             "date_of_joining",

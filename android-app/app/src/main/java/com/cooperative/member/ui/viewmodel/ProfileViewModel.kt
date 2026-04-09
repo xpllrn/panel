@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+data class UiMessage(val text: String, val isError: Boolean)
+
 sealed interface ProfileState {
     data object Loading : ProfileState
     data class Ready(val profile: MemberProfile) : ProfileState
@@ -23,6 +25,18 @@ class ProfileViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _state = MutableStateFlow<ProfileState>(ProfileState.Loading)
     val state: StateFlow<ProfileState> = _state.asStateFlow()
+    private val _emailChangeChallenge = MutableStateFlow<String?>(null)
+    val emailChangeChallenge: StateFlow<String?> = _emailChangeChallenge.asStateFlow()
+    private val _emailChangeMessage = MutableStateFlow<UiMessage?>(null)
+    val emailChangeMessage: StateFlow<UiMessage?> = _emailChangeMessage.asStateFlow()
+    private val _personalMessage = MutableStateFlow<UiMessage?>(null)
+    val personalMessage: StateFlow<UiMessage?> = _personalMessage.asStateFlow()
+    private val _isUpdatingPersonal = MutableStateFlow(false)
+    val isUpdatingPersonal: StateFlow<Boolean> = _isUpdatingPersonal.asStateFlow()
+    private val _isRequestingEmailOtp = MutableStateFlow(false)
+    val isRequestingEmailOtp: StateFlow<Boolean> = _isRequestingEmailOtp.asStateFlow()
+    private val _isVerifyingEmailOtp = MutableStateFlow(false)
+    val isVerifyingEmailOtp: StateFlow<Boolean> = _isVerifyingEmailOtp.asStateFlow()
 
     val themeMode = session.themeMode
 
@@ -41,6 +55,70 @@ class ProfileViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setTheme(mode: String) {
         viewModelScope.launch { repo.setTheme(mode) }
+    }
+
+    fun requestEmailChange(newEmail: String) {
+        if (newEmail.isBlank()) {
+            _emailChangeMessage.value = UiMessage("Please enter a new email address.", true)
+            return
+        }
+        _isRequestingEmailOtp.value = true
+        viewModelScope.launch {
+            repo.requestEmailChange(newEmail.trim())
+                .onSuccess {
+                    _emailChangeChallenge.value = it.challenge_token
+                    _emailChangeMessage.value = UiMessage(it.message ?: "OTP sent to new email.", false)
+                }
+                .onFailure { _emailChangeMessage.value = UiMessage(it.message ?: "Failed to request email change.", true) }
+            _isRequestingEmailOtp.value = false
+        }
+    }
+
+    fun confirmEmailChange(otp: String) {
+        val challenge = _emailChangeChallenge.value
+        if (challenge.isNullOrBlank()) {
+            _emailChangeMessage.value = UiMessage("Start email change request again.", true)
+            return
+        }
+        if (otp.length != 6) {
+            _emailChangeMessage.value = UiMessage("Enter 6-digit OTP.", true)
+            return
+        }
+        _isVerifyingEmailOtp.value = true
+        viewModelScope.launch {
+            repo.confirmEmailChange(challenge, otp.trim())
+                .onSuccess {
+                    _emailChangeChallenge.value = null
+                    _emailChangeMessage.value = UiMessage(it.message ?: "Email updated successfully.", false)
+                    loadProfile()
+                }
+                .onFailure { _emailChangeMessage.value = UiMessage(it.message ?: "Failed to verify OTP.", true) }
+            _isVerifyingEmailOtp.value = false
+        }
+    }
+
+    fun clearEmailChangeMessage() {
+        _emailChangeMessage.value = null
+    }
+
+    fun updatePersonalInfo(phone: String?, birthDate: String?) {
+        _isUpdatingPersonal.value = true
+        viewModelScope.launch {
+            repo.updateProfile(
+                mobilePrimary = phone?.trim()?.ifBlank { null },
+                dateOfBirth = birthDate?.trim()?.ifBlank { null }
+            ).onSuccess {
+                _personalMessage.value = UiMessage(it.message ?: "Profile updated.", false)
+                loadProfile()
+            }.onFailure {
+                _personalMessage.value = UiMessage(it.message ?: "Failed to update profile.", true)
+            }
+            _isUpdatingPersonal.value = false
+        }
+    }
+
+    fun clearPersonalMessage() {
+        _personalMessage.value = null
     }
 
     fun logout() {

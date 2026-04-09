@@ -4,8 +4,42 @@ package com.cooperative.member.data
 
 data class LoginRequest(val username: String, val password: String)
 data class LoginResponse(val access: String, val refresh: String)
+data class LoginStartResponse(
+    val success: Boolean = false,
+    val message: String = "",
+    val challenge_token: String = "",
+    val expires_in_seconds: Int = 0
+)
+data class LoginVerifyRequest(val challenge_token: String, val otp: String)
+data class LoginResendRequest(val challenge_token: String)
 data class RefreshRequest(val refresh: String)
 data class RefreshResponse(val access: String)
+data class GenericSuccessResponse(
+    val success: Boolean = false,
+    val message: String? = null,
+    val error: String? = null
+)
+data class DeviceTokenRequest(val token: String, val platform: String = "android")
+data class EmailChangeRequest(val new_email: String)
+data class EmailChangeConfirmRequest(val challenge_token: String, val otp: String)
+data class EmailChangeResponse(
+    val success: Boolean = false,
+    val message: String? = null,
+    val challenge_token: String? = null,
+    val expires_in_seconds: Int? = null,
+    val email: String? = null,
+    val error: String? = null
+)
+data class ProfileUpdateRequest(
+    val mobile_primary: String? = null,
+    val date_of_birth: String? = null
+)
+data class ProfileUpdateResponse(
+    val success: Boolean = false,
+    val message: String? = null,
+    val profile: MemberProfile? = null,
+    val error: String? = null
+)
 
 // ── Profile ──
 
@@ -17,6 +51,7 @@ data class MemberProfile(
     val first_name: String = "",
     val last_name: String = "",
     val email: String = "",
+    val email_verified: Boolean = false,
     val member_type: String = "",
     val status: String = "",
     val date_of_joining: String? = null,

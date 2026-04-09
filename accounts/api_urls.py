@@ -16,6 +16,7 @@ urlpatterns = [
     path("auth/login/password/", TokenObtainPairView.as_view(), name="token_obtain_password"),
     path("auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("auth/profile/", api_views.auth_profile_view, name="auth_profile"),
+    path("auth/profile/update/", api_views.auth_profile_update_view, name="auth_profile_update"),
     # Admin: Members
     path("admin/members/", api_views.admin_members_list, name="admin_members_list"),
     path("admin/members/create/", api_views.admin_members_create, name="admin_members_create"),
@@ -104,4 +105,6 @@ urlpatterns = [
     path("email/preferences/", api_views.email_preferences_view, name="email_preferences"),
     path("email/send-verification/", api_views.send_verification_email_view, name="send_verification_email"),
     path("email/verify/", api_views.verify_email_view, name="verify_email"),
+    path("email/change/request/", api_views.request_email_change_view, name="request_email_change"),
+    path("email/change/confirm/", api_views.confirm_email_change_view, name="confirm_email_change"),
 ]

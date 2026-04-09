@@ -7,9 +7,7 @@ from .models import InterestPayout, User
 @admin.register(User)
 class CustomUserAdmin(UserAdmin):
     list_display = ["username", "email", "first_name", "last_name", "is_staff"]
-    fieldsets = UserAdmin.fieldsets + (
-        ("Additional Info", {"fields": ("role",)}),
-    )
+    fieldsets = UserAdmin.fieldsets + (("Additional Info", {"fields": ("role",)}),)
 
 
 @admin.register(InterestPayout)

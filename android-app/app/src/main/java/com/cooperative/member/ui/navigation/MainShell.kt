@@ -30,9 +30,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.cooperative.member.ui.screens.AccountsScreen
+import com.cooperative.member.ui.screens.AboutScreen
+import com.cooperative.member.ui.screens.EditProfileScreen
 import com.cooperative.member.ui.screens.HomeScreen
+import com.cooperative.member.ui.screens.LoadingBox
 import com.cooperative.member.ui.screens.LoansScreen
 import com.cooperative.member.ui.screens.ProfileScreen
+import com.cooperative.member.ui.viewmodel.ProfileState
 import com.cooperative.member.ui.viewmodel.AccountsViewModel
 import com.cooperative.member.ui.viewmodel.HomeViewModel
 import com.cooperative.member.ui.viewmodel.LoansViewModel
@@ -74,7 +78,12 @@ fun MainShell(
                 tonalElevation = 0.dp
             ) {
                 tabs.forEach { tab ->
-                    val selected = currentDestination?.hierarchy?.any { it.route == tab.route } == true
+                    val selected = currentDestination?.hierarchy?.any {
+                        when (tab.route) {
+                            "profile" -> it.route in setOf("profile", "profile_edit", "about")
+                            else -> it.route == tab.route
+                        }
+                    } == true
                     NavigationBarItem(
                         selected = selected,
                         onClick = {
@@ -113,7 +122,28 @@ fun MainShell(
             composable("home") { HomeScreen(homeVm, onAccountClick, onLoanClick) }
             composable("accounts") { AccountsScreen(accountsVm, onAccountClick) }
             composable("loans") { LoansScreen(loansVm, onLoanClick) }
-            composable("profile") { ProfileScreen(profileVm) }
+            composable("profile") {
+                ProfileScreen(
+                    vm = profileVm,
+                    onAboutClick = { navController.navigate("about") },
+                    onEditProfileClick = { navController.navigate("profile_edit") }
+                )
+            }
+            composable("profile_edit") {
+                val current = profileVm.state.value
+                if (current is ProfileState.Ready) {
+                    EditProfileScreen(
+                        profile = current.profile,
+                        vm = profileVm,
+                        onBack = { navController.popBackStack() }
+                    )
+                } else {
+                    LoadingBox()
+                }
+            }
+            composable("about") {
+                AboutScreen(onBack = { navController.popBackStack() })
+            }
         }
     }
 }

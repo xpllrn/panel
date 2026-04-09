@@ -1,7 +1,6 @@
 package com.cooperative.member.ui.screens
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -34,8 +33,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.tooling.preview.Preview
 import com.cooperative.member.data.Loan
 import com.cooperative.member.ui.theme.CashGreen
+import com.cooperative.member.ui.theme.CooperativeTheme
 import com.cooperative.member.ui.theme.Red400
 import com.cooperative.member.ui.viewmodel.LoansListState
 import com.cooperative.member.ui.viewmodel.LoansViewModel
@@ -170,7 +171,7 @@ private fun LoanRow(loan: Loan, onClick: () -> Unit) {
                 if (progress != null) {
                     Spacer(Modifier.height(6.dp))
                     LinearProgressIndicator(
-                        progress = { progress },
+                        progress = progress,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(4.dp)
@@ -195,6 +196,34 @@ private fun LoanRow(loan: Loan, onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun LoansScreenPreview() {
+    CooperativeTheme {
+        Surface {
+            val mockLoans = listOf(
+                Loan(
+                    id = 1,
+                    loan_type = "personal_loan",
+                    loan_number = "L-12345",
+                    outstanding_balance = "50000",
+                    emi_amount = "2500",
+                    completion_percentage = 45.0
+                ),
+                Loan(
+                    id = 2,
+                    loan_type = "vehicle_loan",
+                    loan_number = "L-67890",
+                    outstanding_balance = "150000",
+                    emi_amount = "5500",
+                    completion_percentage = 15.0
+                )
+            )
+            LoansList(loans = mockLoans, onLoanClick = {})
         }
     }
 }

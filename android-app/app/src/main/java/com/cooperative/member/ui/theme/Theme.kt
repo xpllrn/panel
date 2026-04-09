@@ -2,59 +2,62 @@ package com.cooperative.member.ui.theme
 
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 
 private val LightColors = lightColorScheme(
-    primary = CashGreen,
-    onPrimary = White,
-    primaryContainer = CashGreenLight,
-    onPrimaryContainer = CashGreenDark,
-    secondary = Gray700,
-    onSecondary = White,
-    background = White,
-    onBackground = Gray900,
-    surface = White,
-    onSurface = Gray900,
-    surfaceVariant = Gray100,
-    onSurfaceVariant = Gray500,
+    primary = Forest,
+    onPrimary = PureWhite,
+    primaryContainer = LeafSoft,
+    onPrimaryContainer = ForestHover,
+    secondary = Sage,
+    onSecondary = PureWhite,
+    tertiary = Moss,
+    onTertiary = Stone900,
+    background = Cream,
+    onBackground = Stone900,
+    surface = PureWhite,
+    onSurface = Stone900,
+    surfaceVariant = CreamDark,
+    onSurfaceVariant = Stone600,
     error = Red500,
-    onError = White,
-    errorContainer = Color(0xFFFEE2E2),
+    onError = PureWhite,
+    errorContainer = CreamDark,
     onErrorContainer = Red600,
-    outline = Gray300,
-    outlineVariant = Gray200
+    outline = Stone200,
+    outlineVariant = Stone200
 )
 
 private val DarkColors = darkColorScheme(
-    primary = DarkGreen,
-    onPrimary = Black,
-    primaryContainer = Color(0xFF003D0F),
-    onPrimaryContainer = DarkGreen,
-    secondary = Gray400,
-    onSecondary = Black,
-    background = DarkBg,
-    onBackground = Gray100,
-    surface = DarkSurface,
-    onSurface = Gray100,
-    surfaceVariant = DarkCard,
-    onSurfaceVariant = Gray400,
+    primary = DarkForest,
+    onPrimary = BtnPrimaryText,
+    primaryContainer = DarkLeafSoft,
+    onPrimaryContainer = DarkForestHover,
+    secondary = DarkSage,
+    onSecondary = BtnPrimaryText,
+    tertiary = DarkMoss,
+    onTertiary = BtnPrimaryText,
+    background = DarkCream,
+    onBackground = DarkStone900,
+    surface = DarkCreamDark,
+    onSurface = DarkStone900,
+    surfaceVariant = DarkWhite,
+    onSurfaceVariant = DarkStone600,
     error = Red400,
-    onError = Black,
-    errorContainer = Color(0xFF3B1111),
+    onError = BtnPrimaryText,
+    errorContainer = DarkLeafSoft,
     onErrorContainer = Red400,
-    outline = Gray600,
-    outlineVariant = Gray700
+    outline = DarkStone200,
+    outlineVariant = DarkStone200
 )
 
 private val AppShapes = Shapes(
@@ -67,7 +70,7 @@ private val AppShapes = Shapes(
 
 @Composable
 fun CooperativeTheme(
-    themeMode: String = "dark",
+    themeMode: String = "light",
     content: @Composable () -> Unit
 ) {
     val systemDark = isSystemInDarkTheme()

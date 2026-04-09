@@ -6,11 +6,12 @@ Handles email notifications and verification.
 import base64
 import json
 import secrets
-import requests
 
 from django.conf import settings
 from django.template.loader import render_to_string
 from django.utils import timezone
+
+import requests
 
 
 def generate_verification_token():
@@ -115,6 +116,34 @@ def send_login_otp_email(user, otp_code, expires_minutes=15):
         return _send_via_brevo_api(subject, message, html_message, user.email, user.display_name)
     except Exception as e:
         print(f"Failed to send OTP email to {user.email}: {str(e)}")
+        return False
+
+
+def send_email_change_otp_email(user, new_email, otp_code, expires_minutes=10):
+    """Send email change OTP to the new email address."""
+    if not new_email:
+        return False
+
+    society_name = getattr(settings, "SOCIETY_NAME", "Cooperative Society")
+    subject = f"Verify your new email - {society_name}"
+    message = (
+        f"Hello {user.display_name},\n\n"
+        f"Use this OTP to verify your new email address:\n\n"
+        f"{otp_code}\n\n"
+        f"This OTP expires in {expires_minutes} minutes.\n"
+        "If you did not request this change, ignore this email."
+    )
+    html_message = (
+        f"<p>Hello {user.display_name},</p>"
+        "<p>Use this OTP to verify your new email address:</p>"
+        f"<h2 style='letter-spacing:3px'>{otp_code}</h2>"
+        f"<p>This OTP expires in {expires_minutes} minutes.</p>"
+        "<p>If you did not request this change, ignore this email.</p>"
+    )
+
+    try:
+        return _send_via_brevo_api(subject, message, html_message, new_email, user.display_name)
+    except Exception:
         return False
 
 

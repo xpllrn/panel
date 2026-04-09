@@ -1,12 +1,13 @@
 import secrets
-from datetime import timedelta
-from datetime import date
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.cache import cache
-from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.db import transaction
 from django.db.models import F, Sum
 from django.utils import timezone
@@ -15,17 +16,19 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.api_permissions import IsAdmin, IsMember
+from accounts.email_utils import send_email_change_otp_email, send_login_otp_email
 from accounts.models import (
     AuditLog,
     FundAccount,
     FundAllocationRule,
     FundTransaction,
     InterestPayout,
-    LoginOTPChallenge,
     Loan,
     LoanRepayment,
+    LoginOTPChallenge,
     MemberAccount,
     Notification,
     Receipt,
@@ -33,7 +36,6 @@ from accounts.models import (
     UserDevice,
 )
 from accounts.notification_service import dispatch_user_notification
-from accounts.email_utils import send_login_otp_email
 from accounts.serializers import (
     AuditLogSerializer,
     FundAccountSerializer,
@@ -54,7 +56,6 @@ from accounts.serializers import (
     UserListSerializer,
 )
 from accounts.utils import apply_fund_allocations, log_action
-from rest_framework_simplejwt.tokens import RefreshToken
 
 # ========================================
 # Auth Endpoints
@@ -103,6 +104,45 @@ def auth_profile_view(request):
     return Response(serializer.data)
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def auth_profile_update_view(request):
+    """Update editable profile fields for authenticated user."""
+    mobile_primary = request.data.get("mobile_primary")
+    date_of_birth = request.data.get("date_of_birth")
+
+    updated_fields = []
+
+    if mobile_primary is not None:
+        mobile_primary = str(mobile_primary).strip() or None
+        request.user.mobile_primary = mobile_primary
+        updated_fields.append("mobile_primary")
+
+    if date_of_birth is not None:
+        raw_dob = str(date_of_birth).strip()
+        if raw_dob:
+            try:
+                parsed = datetime.strptime(raw_dob, "%Y-%m-%d").date()
+            except ValueError:
+                return Response({"success": False, "error": "date_of_birth must be in YYYY-MM-DD format."}, status=400)
+            request.user.date_of_birth = parsed
+        else:
+            request.user.date_of_birth = None
+        updated_fields.append("date_of_birth")
+
+    if not updated_fields:
+        return Response({"success": False, "error": "No valid fields provided."}, status=400)
+
+    try:
+        request.user.full_clean()
+        request.user.save(update_fields=updated_fields)
+    except Exception as e:
+        return Response({"success": False, "error": str(e)}, status=400)
+
+    serializer = MemberProfileSerializer(request.user)
+    return Response({"success": True, "message": "Profile updated successfully.", "profile": serializer.data})
+
+
 def _build_rate_limit_key(username, request):
     ip_address = request.META.get("REMOTE_ADDR", "")
     return f"otp_login_start:{username.lower()}:{ip_address}"
@@ -120,6 +160,27 @@ def _check_rate_limit(username, request):
 
 def _generate_numeric_otp():
     return str(secrets.randbelow(900000) + 100000)
+
+
+def _email_change_cache_key(user_id):
+    """One pending email-change challenge per user (new request replaces old)."""
+    return f"email_change:user:{user_id}"
+
+
+def _email_change_rate_limit_key(user_id):
+    return f"email_change:rate:{user_id}"
+
+
+def _normalize_and_validate_email(raw):
+    """Return normalized email or None with error message tuple (None, err_msg)."""
+    email = (raw or "").strip().lower()
+    if not email:
+        return None, "new_email is required."
+    try:
+        validate_email(email)
+    except ValidationError:
+        return None, "Enter a valid email address."
+    return email, None
 
 
 @api_view(["POST"])
@@ -1806,3 +1867,139 @@ def verify_email_view(request):
 
     except User.DoesNotExist:
         return Response({"success": False, "error": "Invalid verification token."}, status=400)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def request_email_change_view(request):
+    """Request email change by sending OTP to the new email.
+
+    One pending challenge per user; a new request replaces any previous pending OTP.
+    Rate limited to reduce abuse.
+    """
+    raw = request.data.get("new_email", "")
+    new_email, err = _normalize_and_validate_email(raw)
+    if err:
+        return Response({"success": False, "error": err}, status=400)
+
+    current = (request.user.email or "").strip().lower()
+    if new_email == current:
+        return Response({"success": False, "error": "New email is same as current email."}, status=400)
+
+    if User.objects.filter(email__iexact=new_email).exclude(id=request.user.id).exists():
+        return Response({"success": False, "error": "This email is already in use."}, status=400)
+
+    rate_key = _email_change_rate_limit_key(request.user.id)
+    send_count = cache.get(rate_key, 0)
+    if send_count >= 5:
+        return Response(
+            {"success": False, "error": "Too many email change requests. Please try again in an hour."},
+            status=429,
+        )
+
+    otp_code = _generate_numeric_otp()
+    challenge_token = secrets.token_urlsafe(32)
+    expires_minutes = 10
+    expires_at = timezone.now() + timedelta(minutes=expires_minutes)
+    cache_key = _email_change_cache_key(request.user.id)
+    cache_payload = {
+        "challenge_token": challenge_token,
+        "new_email": new_email,
+        "otp_hash": make_password(otp_code),
+        "expires_at": expires_at.isoformat(),
+        "otp_attempts": 0,
+    }
+    cache.set(cache_key, cache_payload, timeout=expires_minutes * 60)
+    cache.set(rate_key, send_count + 1, timeout=3600)
+
+    sent = send_email_change_otp_email(request.user, new_email, otp_code, expires_minutes=expires_minutes)
+    if not sent:
+        cache.delete(cache_key)
+        return Response({"success": False, "error": "Failed to send OTP to new email."}, status=500)
+
+    return Response(
+        {
+            "success": True,
+            "message": "Verification OTP sent to new email.",
+            "challenge_token": challenge_token,
+            "expires_in_seconds": expires_minutes * 60,
+        }
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def confirm_email_change_view(request):
+    """Confirm email change with OTP sent to new email."""
+    challenge_token = request.data.get("challenge_token", "").strip()
+    otp = request.data.get("otp", "").strip()
+    if not challenge_token or not otp:
+        return Response({"success": False, "error": "challenge_token and otp are required."}, status=400)
+
+    cache_key = _email_change_cache_key(request.user.id)
+    payload = cache.get(cache_key)
+    if not payload:
+        return Response({"success": False, "error": "Invalid or expired email change challenge."}, status=400)
+
+    if payload.get("challenge_token") != challenge_token:
+        return Response({"success": False, "error": "Invalid challenge token."}, status=400)
+
+    expires_at_raw = payload.get("expires_at")
+    try:
+        expires_at = timezone.datetime.fromisoformat(expires_at_raw)
+        if timezone.is_naive(expires_at):
+            expires_at = timezone.make_aware(expires_at, timezone.get_current_timezone())
+    except Exception:
+        cache.delete(cache_key)
+        return Response({"success": False, "error": "Invalid email change challenge."}, status=400)
+
+    if expires_at <= timezone.now():
+        cache.delete(cache_key)
+        return Response({"success": False, "error": "OTP expired. Request email change again."}, status=400)
+
+    max_attempts = 5
+    attempts = int(payload.get("otp_attempts") or 0)
+    otp_hash = payload.get("otp_hash", "")
+    if not check_password(otp, otp_hash):
+        attempts += 1
+        if attempts >= max_attempts:
+            cache.delete(cache_key)
+            return Response(
+                {"success": False, "error": "Too many invalid OTP attempts. Request a new code."},
+                status=400,
+            )
+        payload["otp_attempts"] = attempts
+        cache.set(cache_key, payload, timeout=int((expires_at - timezone.now()).total_seconds()) or 60)
+        return Response(
+            {"success": False, "error": "Invalid OTP.", "attempts_remaining": max_attempts - attempts},
+            status=400,
+        )
+
+    new_email = payload.get("new_email", "").strip().lower()
+    if not new_email:
+        cache.delete(cache_key)
+        return Response({"success": False, "error": "Invalid email change payload."}, status=400)
+
+    if User.objects.filter(email__iexact=new_email).exclude(id=request.user.id).exists():
+        cache.delete(cache_key)
+        return Response({"success": False, "error": "This email is already in use."}, status=400)
+
+    old_email = request.user.email
+    with transaction.atomic():
+        request.user.email = new_email
+        request.user.email_verified = True
+        request.user.email_verification_token = None
+        request.user.email_verification_sent_at = None
+        request.user.save(
+            update_fields=["email", "email_verified", "email_verification_token", "email_verification_sent_at"]
+        )
+
+    cache.delete(cache_key)
+    log_action(
+        request,
+        "update",
+        "member",
+        request.user.id,
+        f"Email changed from {old_email} to {new_email}",
+    )
+    return Response({"success": True, "message": "Email updated successfully.", "email": request.user.email})

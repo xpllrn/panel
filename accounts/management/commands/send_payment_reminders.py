@@ -2,8 +2,8 @@ from datetime import date, timedelta
 
 from django.core.management.base import BaseCommand
 
-from accounts.notification_service import dispatch_user_notification
 from accounts.models import LoanRepayment
+from accounts.notification_service import dispatch_user_notification
 
 
 class Command(BaseCommand):

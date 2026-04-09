@@ -8,5 +8,9 @@ staticfiles/
 .DS_Store
 venv/
 
+# Android / Gradle (member app)
+android-app/**/build/
+android-app/.gradle/
+
 # Code review graph
 .code-review-graph/

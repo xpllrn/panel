@@ -2168,8 +2168,7 @@ def post_interest_view(request):
                 "create",
                 "account",
                 None,
-                f"Posted interest for period ending {period_end}. "
-                f"₹{total_posted} across {accounts_updated} accounts.",
+                f"Posted interest for period ending {period_end}. ₹{total_posted} across {accounts_updated} accounts.",
             )
 
             return JsonResponse(
@@ -2657,7 +2656,7 @@ def approve_loan_view(request, loan_id):
                 "approve",
                 "loan",
                 loan.id,
-                f"Approved loan {loan.loan_number} - \u20b9{loan.principal_amount} " f"for {loan.user.display_name}",
+                f"Approved loan {loan.loan_number} - \u20b9{loan.principal_amount} for {loan.user.display_name}",
             )
             return JsonResponse({"success": True})
         except Loan.DoesNotExist:
@@ -2807,7 +2806,7 @@ def record_emi_payment_view(request, loan_id):
                         "update",
                         "loan",
                         loan_id,
-                        f"Recorded EMI #{installment_number} payment of " f"\u20b9{amount} for loan {loan.loan_number}",
+                        f"Recorded EMI #{installment_number} payment of \u20b9{amount} for loan {loan.loan_number}",
                     )
                     return JsonResponse({"success": True})
                 except IntegrityError:

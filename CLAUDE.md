@@ -15,6 +15,8 @@ This is the single source of truth for AI coding agents working in this Django c
 
 This is an admin panel for managing members, accounts (FD, CD, RD, OD, Share, Sukanya, Suputra), loans, receipts, funds, and audit logs for a cooperative society/credit union.
 
+The same repo also ships a **static public marketing site** under `docs/` (suitable for GitHub Pages) and a **member Android app** under `android-app/` that consumes the REST API.
+
 ---
 
 ## Build & Run Commands
@@ -304,6 +306,7 @@ Views use manual pagination with `Paginator` from `django.core.paginator`.
 ├── static/
 │   ├── css/             # base.css, layout.css, components.css, pages/
 │   └── js/              # utils.js, members.js, accounts.js, loans.js, etc.
+├── docs/                # Static public site (e.g. GitHub Pages from /docs)
 ├── android-app/         # Android mobile app (Kotlin/Jetpack Compose)
 ├── .kiro/               # Kiro hooks
 ├── docker-compose.yml   # PostgreSQL + Django services

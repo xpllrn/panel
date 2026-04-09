@@ -177,3 +177,15 @@ DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="noreply@cooperative.c
 # Custom Settings
 SOCIETY_NAME = config("SOCIETY_NAME", default="Cooperative Society")
 FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:8000")
+
+# OTP Authentication
+LOGIN_OTP_EXPIRY_MINUTES = config("LOGIN_OTP_EXPIRY_MINUTES", cast=int, default=15)
+LOGIN_OTP_MAX_ATTEMPTS = config("LOGIN_OTP_MAX_ATTEMPTS", cast=int, default=5)
+
+# Brevo HTTP API
+BREVO_API_KEY = config("BREVO_API_KEY", default="")
+MCP_BREVO = config("MCP_BREVO", default="")
+
+# Firebase Cloud Messaging
+FCM_ENABLED = config("FCM_ENABLED", cast=bool, default=False)
+FCM_CREDENTIALS_PATH = config("FCM_CREDENTIALS_PATH", default="")
