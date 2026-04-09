@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "CooperativeMember"
+rootProject.name = "Panels"
 include(":app")

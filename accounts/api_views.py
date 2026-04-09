@@ -68,7 +68,7 @@ def api_info(request):
     """API information and available endpoints."""
     return Response(
         {
-            "name": "Cooperative Society API",
+            "name": "Panels API",
             "version": "1.0.0",
             "auth": {
                 "login_start": "/api/v1/auth/login/",

@@ -1,7 +1,7 @@
 {
-    "name": "Cooperative Society Member Portal",
-    "short_name": "Member Portal",
-    "description": "Member self-service portal for cooperative society banking",
+    "name": "Panels Member",
+    "short_name": "Panels",
+    "description": "Member self-service for Panels banking",
     "start_url": "/member/",
     "display": "standalone",
     "background_color": "#ffffff",

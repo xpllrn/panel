@@ -36,7 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
 import com.cooperative.member.data.Loan
 import com.cooperative.member.ui.theme.CashGreen
-import com.cooperative.member.ui.theme.CooperativeTheme
+import com.cooperative.member.ui.theme.PanelsTheme
 import com.cooperative.member.ui.theme.Red400
 import com.cooperative.member.ui.viewmodel.LoansListState
 import com.cooperative.member.ui.viewmodel.LoansViewModel
@@ -203,7 +203,7 @@ private fun LoanRow(loan: Loan, onClick: () -> Unit) {
 @Preview(showBackground = true)
 @Composable
 fun LoansScreenPreview() {
-    CooperativeTheme {
+    PanelsTheme {
         Surface {
             val mockLoans = listOf(
                 Loan(

@@ -3,6 +3,7 @@ import json
 from datetime import date, timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
@@ -1160,6 +1161,7 @@ def receipts_view(request):
             "page_obj": receipts_page,
             "total_receipts": total_receipts,
             "today_receipts": today_receipts,
+            "society_name": getattr(settings, "SOCIETY_NAME", "Panels"),
         },
     )
 

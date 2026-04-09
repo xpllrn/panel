@@ -155,8 +155,8 @@ SIMPLE_JWT = {
 }
 
 SPECTACULAR_SETTINGS = {
-    "TITLE": "Cooperative Society API",
-    "DESCRIPTION": "REST API for the Cooperative Society Banking System",
+    "TITLE": "Panels API",
+    "DESCRIPTION": "REST API for the Panels member and admin banking system",
     "VERSION": "1.0.0",
 }
 
@@ -172,10 +172,10 @@ EMAIL_PORT = config("EMAIL_PORT", cast=int, default=587)
 EMAIL_USE_TLS = config("EMAIL_USE_TLS", cast=bool, default=True)
 EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
-DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="noreply@cooperative.com")
+DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="noreply@panels.app")
 
 # Custom Settings
-SOCIETY_NAME = config("SOCIETY_NAME", default="Cooperative Society")
+SOCIETY_NAME = config("SOCIETY_NAME", default="Panels")
 FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:8000")
 
 # OTP Authentication

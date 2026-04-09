@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://delhiaamnagrik.coop/sitemap.xml
+Sitemap: https://xpllrn.github.io/panel/sitemap.xml

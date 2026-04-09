@@ -69,7 +69,7 @@ private val AppShapes = Shapes(
 )
 
 @Composable
-fun CooperativeTheme(
+fun PanelsTheme(
     themeMode: String = "light",
     content: @Composable () -> Unit
 ) {

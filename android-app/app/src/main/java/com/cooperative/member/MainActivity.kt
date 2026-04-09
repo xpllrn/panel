@@ -7,7 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.cooperative.member.ui.navigation.AppNavigation
-import com.cooperative.member.ui.theme.CooperativeTheme
+import com.cooperative.member.ui.theme.PanelsTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -19,7 +19,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val theme by app.session.themeMode.collectAsState(initial = "light")
-            CooperativeTheme(themeMode = theme) {
+            PanelsTheme(themeMode = theme) {
                 AppNavigation()
             }
         }
