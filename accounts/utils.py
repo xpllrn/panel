@@ -73,6 +73,31 @@ def combine_name(first_name, last_name):
     return f"{first} {last}".strip()
 
 
+def mask_email_for_display(email):
+    """
+    Mask an email for UI hints (e.g. login OTP screen).
+
+    Uses first local character + *** + second-to-last local character so
+    short addresses stay readable (e.g. xpllrn@icloud.com -> x***r@icloud.com).
+    """
+    raw = (email or "").strip()
+    if not raw or "@" not in raw:
+        return "your email"
+    local, _, domain = raw.partition("@")
+    local = local.strip()
+    domain = domain.strip()
+    if not local or not domain:
+        return "your email"
+    n = len(local)
+    if n == 1:
+        masked_local = local[0] + "***"
+    elif n == 2:
+        masked_local = local[0] + "***" + local[1]
+    else:
+        masked_local = local[0] + "***" + local[-2]
+    return f"{masked_local}@{domain}"
+
+
 def validate_password_strength(password, user=None):
     """
     Validate password against Django's password validators.

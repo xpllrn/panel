@@ -31,8 +31,15 @@
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" align="center" style="max-width:600px;width:100%;margin:0 auto;background-color:#ffffff;border-radius:16px;border:1px solid #e7e5e4;overflow:hidden;box-shadow:0 2px 8px rgba(45,74,50,0.08);">
                     <tr>
                         <td align="center" style="padding:28px 24px 22px;text-align:center;border-bottom:1px solid #e8f0e9;background-color:#ffffff;">
-                            <img src="{{ logo_mark_url }}" alt="{{ society_name }}" width="56" height="56" style="display:block;margin:0 auto;border:0;outline:none;text-decoration:none;">
-                            <p style="margin:16px 0 0;font-family:'DM Sans',Arial,sans-serif;font-size:clamp(16px,3.8vw,20px);font-weight:700;color:#2d4a32;line-height:1.35;text-align:center;max-width:32em;margin-left:auto;margin-right:auto;">{{ society_name }}</p>
+                            <!-- Pale logo mark on plain white disappears; sit it on the same soft green plate as the app. -->
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;">
+                                <tr>
+                                    <td align="center" bgcolor="#e8f0e9" style="background-color:#e8f0e9;border-radius:18px;padding:16px 28px;border:1px solid #d4e4d6;">
+                                        <img src="{{ logo_mark_url }}" alt="{{ society_name }}" width="96" height="96" style="display:block;margin:0 auto;border:0;outline:none;text-decoration:none;width:96px;height:96px;">
+                                    </td>
+                                </tr>
+                            </table>
+                            <p style="margin:16px 0 0;font-family:'DM Sans',Arial,sans-serif;font-size:clamp(14px,3.2vw,18px);font-weight:700;color:#2d4a32;line-height:1.4;text-align:center;max-width:36em;margin-left:auto;margin-right:auto;">{{ society_name }}</p>
                             <p style="margin:8px 0 0;font-family:'DM Sans',Arial,sans-serif;font-size:13px;color:#57534e;line-height:1.5;text-align:center;max-width:28em;margin-left:auto;margin-right:auto;">{{ society_tagline }}</p>
                         </td>
                     </tr>

@@ -171,7 +171,7 @@ private fun LoanRow(loan: Loan, onClick: () -> Unit) {
                 if (progress != null) {
                     Spacer(Modifier.height(6.dp))
                     LinearProgressIndicator(
-                        progress = progress,
+                        progress = { progress },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(4.dp)

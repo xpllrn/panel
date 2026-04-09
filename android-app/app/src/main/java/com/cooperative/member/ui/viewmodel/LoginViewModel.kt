@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
 sealed interface LoginState {
     data object Idle : LoginState
     data object LoadingCredentials : LoginState
-    data class OtpRequired(val challengeToken: String, val secondsLeft: Int) : LoginState
+    data class OtpRequired(val challengeToken: String, val secondsLeft: Int, val maskedEmail: String) : LoginState
     data object VerifyingOtp : LoginState
     data class Success(val profile: MemberProfile) : LoginState
     data class Error(val message: String) : LoginState
@@ -37,8 +37,10 @@ class LoginViewModel(app: Application) : AndroidViewModel(app) {
             repo.startLogin(username.trim(), password)
                 .onSuccess {
                     val token = it.challenge_token
-                    _state.value = LoginState.OtpRequired(token, 900)
-                    startOtpTimer(token)
+                    val masked = it.email_masked?.takeIf { m -> m.isNotBlank() } ?: "your email"
+                    val ttl = it.expires_in_seconds.takeIf { s -> s > 0 } ?: 900
+                    _state.value = LoginState.OtpRequired(token, ttl, masked)
+                    startOtpTimer(token, ttl)
                 }
                 .onFailure { _state.value = LoginState.Error(it.message ?: "Login failed") }
         }
@@ -54,13 +56,16 @@ class LoginViewModel(app: Application) : AndroidViewModel(app) {
             _state.value = LoginState.Error("Enter 6-digit OTP.")
             return
         }
+        val savedSeconds = current.secondsLeft
+        val masked = current.maskedEmail
+        val token = current.challengeToken
         _state.value = LoginState.VerifyingOtp
         viewModelScope.launch {
-            repo.verifyLoginOtp(current.challengeToken, otp)
+            repo.verifyLoginOtp(token, otp)
                 .onSuccess { _state.value = LoginState.Success(it) }
                 .onFailure {
-                    _state.value = LoginState.Error(it.message ?: "OTP verification failed")
-                    _state.value = LoginState.OtpRequired(current.challengeToken, current.secondsLeft)
+                    _state.value = LoginState.OtpRequired(token, savedSeconds, masked)
+                    startOtpTimer(token, savedSeconds)
                 }
         }
     }
@@ -70,17 +75,19 @@ class LoginViewModel(app: Application) : AndroidViewModel(app) {
         if (current !is LoginState.OtpRequired) return
         viewModelScope.launch {
             repo.resendLoginOtp(current.challengeToken)
-                .onSuccess {
-                    _state.value = LoginState.OtpRequired(current.challengeToken, 900)
-                    startOtpTimer(current.challengeToken)
+                .onSuccess { body ->
+                    val masked = body.email_masked?.takeIf { it.isNotBlank() } ?: current.maskedEmail
+                    val ttl = body.expires_in_seconds?.takeIf { it > 0 } ?: 900
+                    _state.value = LoginState.OtpRequired(current.challengeToken, ttl, masked)
+                    startOtpTimer(current.challengeToken, ttl)
                 }
                 .onFailure { _state.value = LoginState.Error(it.message ?: "Failed to resend OTP") }
         }
     }
 
-    private fun startOtpTimer(challengeToken: String) {
+    private fun startOtpTimer(challengeToken: String, initialSeconds: Int) {
         viewModelScope.launch {
-            var remaining = 900
+            var remaining = initialSeconds.coerceAtLeast(0)
             while (remaining > 0) {
                 delay(1000)
                 remaining -= 1

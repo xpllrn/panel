@@ -175,8 +175,13 @@ EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="noreply@panels.app")
 
 # Custom Settings
-# Full registered-style name (override in .env if it differs on your certificate).
-SOCIETY_NAME = config("SOCIETY_NAME", default="Delhi Aam Nagrik Co-operative Credit Society Ltd.")
+# Registered legal name: used for transactional email copy, subjects, and sender display name.
+SOCIETY_LEGAL_NAME = config(
+    "SOCIETY_LEGAL_NAME",
+    default="Delhi Aam Nagrik Co-operative Credit Society Ltd.",
+)
+# Optional shorter label (navbar, receipts, etc.). Defaults to the legal name if unset.
+SOCIETY_NAME = config("SOCIETY_NAME", default=SOCIETY_LEGAL_NAME)
 SOCIETY_TAGLINE = config("SOCIETY_TAGLINE", default="Member services · Delhi, India")
 FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:8000")
 # Public site origin for email logos (/assets/logo-mark.png). Use your live member site.
@@ -187,6 +192,8 @@ SUPPORT_CONTACT_PHONE = config("SUPPORT_CONTACT_PHONE", default="+91-9305050596"
 # OTP Authentication
 LOGIN_OTP_EXPIRY_MINUTES = config("LOGIN_OTP_EXPIRY_MINUTES", cast=int, default=15)
 LOGIN_OTP_MAX_ATTEMPTS = config("LOGIN_OTP_MAX_ATTEMPTS", cast=int, default=5)
+# Dev only: log login OTP codes to Django logs (e.g. docker-compose logs -f web). Never enable in production.
+LOGIN_OTP_LOG_PLAINTEXT = config("LOGIN_OTP_LOG_PLAINTEXT", cast=bool, default=False)
 
 # Brevo HTTP API
 BREVO_API_KEY = config("BREVO_API_KEY", default="")

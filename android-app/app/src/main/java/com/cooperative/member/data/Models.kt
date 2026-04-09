@@ -8,7 +8,8 @@ data class LoginStartResponse(
     val success: Boolean = false,
     val message: String = "",
     val challenge_token: String = "",
-    val expires_in_seconds: Int = 0
+    val expires_in_seconds: Int = 0,
+    val email_masked: String? = null
 )
 data class LoginVerifyRequest(val challenge_token: String, val otp: String)
 data class LoginResendRequest(val challenge_token: String)
@@ -17,7 +18,9 @@ data class RefreshResponse(val access: String)
 data class GenericSuccessResponse(
     val success: Boolean = false,
     val message: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    val email_masked: String? = null,
+    val expires_in_seconds: Int? = null
 )
 data class DeviceTokenRequest(val token: String, val platform: String = "android")
 data class EmailChangeRequest(val new_email: String)

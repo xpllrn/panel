@@ -4,9 +4,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,11 +62,11 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cooperative.member.R
 import com.cooperative.member.ui.viewmodel.LoginState
-import com.cooperative.member.R
 import com.cooperative.member.ui.viewmodel.LoginViewModel
 
 @Composable
@@ -89,14 +89,32 @@ fun LoginScreen(vm: LoginViewModel) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Image(
-            painter = painterResource(R.drawable.logo_login),
-            contentDescription = stringResource(R.string.society_legal_name),
+        // Logo has pale cream areas that match screen background; sit it on a contrasting plate.
+        val logoPlateColor =
+            if (MaterialTheme.colorScheme.background.luminance() > 0.5f) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surface
+            }
+        Surface(
             modifier = Modifier
-                .height(96.dp)
-                .fillMaxWidth(0.55f),
-            contentScale = ContentScale.Fit
-        )
+                .fillMaxWidth(0.72f)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp)),
+            shape = RoundedCornerShape(24.dp),
+            color = logoPlateColor,
+            tonalElevation = 1.dp,
+            shadowElevation = 2.dp
+        ) {
+            Image(
+                painter = painterResource(R.drawable.logo_login),
+                contentDescription = stringResource(R.string.society_legal_name),
+                modifier = Modifier
+                    .padding(horizontal = 20.dp, vertical = 14.dp)
+                    .height(108.dp)
+                    .fillMaxWidth(),
+                contentScale = ContentScale.Fit
+            )
+        }
 
         Spacer(Modifier.height(24.dp))
 

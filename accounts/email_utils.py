@@ -4,6 +4,7 @@ Handles email notifications and verification.
 """
 
 import base64
+import logging
 import json
 import secrets
 
@@ -12,6 +13,15 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 
 import requests
+
+logger = logging.getLogger(__name__)
+
+_DEFAULT_LEGAL = "Delhi Aam Nagrik Co-operative Credit Society Ltd."
+
+
+def _society_legal_name():
+    """Name shown in email bodies, subjects, and From display (full legal name)."""
+    return getattr(settings, "SOCIETY_LEGAL_NAME", getattr(settings, "SOCIETY_NAME", _DEFAULT_LEGAL))
 
 
 def generate_verification_token():
@@ -25,9 +35,7 @@ def get_email_branding_context():
     phone = getattr(settings, "SUPPORT_CONTACT_PHONE", "+91-9305050596")
     phone_tel = "".join(c for c in phone if c.isdigit() or c == "+") or phone
     return {
-        "society_name": getattr(
-            settings, "SOCIETY_NAME", "Delhi Aam Nagrik Co-operative Credit Society Ltd."
-        ),
+        "society_name": _society_legal_name(),
         "society_tagline": getattr(settings, "SOCIETY_TAGLINE", "Member services · Delhi, India"),
         "site_url": origin,
         "logo_mark_url": f"{origin}/assets/logo-mark.png",
@@ -70,7 +78,7 @@ def _send_via_brevo_api(subject, text_message, html_message, recipient_email, re
         return False
 
     from_email = settings.DEFAULT_FROM_EMAIL
-    from_name = getattr(settings, "SOCIETY_NAME", "Delhi Aam Nagrik Co-operative Credit Society Ltd.")
+    from_name = _society_legal_name()
 
     payload = {
         "sender": {"name": from_name, "email": from_email},
@@ -88,8 +96,22 @@ def _send_via_brevo_api(subject, text_message, html_message, recipient_email, re
 
     try:
         response = requests.post("https://api.brevo.com/v3/smtp/email", headers=headers, json=payload, timeout=20)
-        return response.status_code in [200, 201, 202]
-    except Exception:
+        if response.status_code in [200, 201, 202]:
+            try:
+                mid = response.json().get("messageId")
+                logger.info("Brevo accepted email messageId=%s to=%s subject=%s", mid, recipient_email, subject)
+            except Exception:
+                logger.info("Brevo accepted email to=%s subject=%s", recipient_email, subject)
+            return True
+        logger.error(
+            "Brevo SMTP API rejected send status=%s to=%s body=%s",
+            response.status_code,
+            recipient_email,
+            (response.text or "")[:800],
+        )
+        return False
+    except Exception as exc:
+        logger.exception("Brevo SMTP API request failed for %s: %s", recipient_email, exc)
         return False
 
 
@@ -115,7 +137,7 @@ def send_verification_email(user):
     user.save(update_fields=["email_verification_token", "email_verification_sent_at"])
 
     verification_url = f"{settings.FRONTEND_URL}/verify-email/{user.email_verification_token}/"
-    society = getattr(settings, "SOCIETY_NAME", "Delhi Aam Nagrik Co-operative Credit Society Ltd.")
+    society = _society_legal_name()
     subject = f"Verify your email — {society}"
     ctx = {
         "user": user,
@@ -129,7 +151,15 @@ def send_login_otp_email(user, otp_code, expires_minutes=15):
     if not user.email:
         return False
 
-    society = getattr(settings, "SOCIETY_NAME", "Delhi Aam Nagrik Co-operative Credit Society Ltd.")
+    if getattr(settings, "LOGIN_OTP_LOG_PLAINTEXT", False):
+        logger.warning(
+            "LOGIN_OTP_LOG_PLAINTEXT: username=%s email=%s otp=%s (disable in production)",
+            user.username,
+            user.email,
+            otp_code,
+        )
+
+    society = _society_legal_name()
     subject = f"Your sign-in code — {society}"
     ctx = {
         "user": user,
@@ -144,7 +174,7 @@ def send_email_change_otp_email(user, new_email, otp_code, expires_minutes=10):
     if not new_email:
         return False
 
-    society = getattr(settings, "SOCIETY_NAME", "Delhi Aam Nagrik Co-operative Credit Society Ltd.")
+    society = _society_legal_name()
     subject = f"Confirm your new email — {society}"
     ctx = {
         "user": user,
@@ -175,7 +205,7 @@ def send_password_change_alert(user):
     if not user.email:
         return False
 
-    society = getattr(settings, "SOCIETY_NAME", "Delhi Aam Nagrik Co-operative Credit Society Ltd.")
+    society = _society_legal_name()
     subject = f"Password updated — {society}"
     ctx = {
         "user": user,
@@ -189,7 +219,7 @@ def send_login_alert(user, ip_address=None):
     if not user.email:
         return False
 
-    society = getattr(settings, "SOCIETY_NAME", "Delhi Aam Nagrik Co-operative Credit Society Ltd.")
+    society = _society_legal_name()
     subject = f"New sign-in — {society}"
     ctx = {
         "user": user,
@@ -204,7 +234,7 @@ def send_email_moved_security_notice(old_email, display_name, new_email):
     if not old_email or not str(old_email).strip():
         return False
 
-    society = getattr(settings, "SOCIETY_NAME", "Delhi Aam Nagrik Co-operative Credit Society Ltd.")
+    society = _society_legal_name()
     subject = f"Your sign-in email was changed — {society}"
     ctx = {
         "display_name": display_name or "Member",
@@ -218,7 +248,7 @@ def send_email_change_confirmed(user):
     if not user.email:
         return False
 
-    society = getattr(settings, "SOCIETY_NAME", "Delhi Aam Nagrik Co-operative Credit Society Ltd.")
+    society = _society_legal_name()
     subject = f"Email confirmed — {society}"
     ctx = {"user": user}
     return _render_and_send(subject, "email_change_confirmed", user.email, user.display_name, ctx)
@@ -229,7 +259,7 @@ def send_phone_changed_alert(user, old_mobile, new_mobile):
     if not user.email:
         return False
 
-    society = getattr(settings, "SOCIETY_NAME", "Delhi Aam Nagrik Co-operative Credit Society Ltd.")
+    society = _society_legal_name()
     subject = f"Phone number updated — {society}"
     ctx = {
         "user": user,

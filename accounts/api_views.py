@@ -62,7 +62,7 @@ from accounts.serializers import (
     UserDetailSerializer,
     UserListSerializer,
 )
-from accounts.utils import apply_fund_allocations, log_action, validate_password_strength
+from accounts.utils import apply_fund_allocations, log_action, mask_email_for_display, validate_password_strength
 
 # ========================================
 # Auth Endpoints
@@ -278,6 +278,7 @@ def auth_login_start_view(request):
             "message": "OTP sent to your email address.",
             "challenge_token": challenge.challenge_token,
             "expires_in_seconds": otp_expiry_minutes * 60,
+            "email_masked": mask_email_for_display(user.email),
         }
     )
 
@@ -314,7 +315,12 @@ def auth_resend_otp_view(request):
         return Response({"success": False, "error": "Failed to resend OTP."}, status=500)
 
     return Response(
-        {"success": True, "message": "OTP resent successfully.", "expires_in_seconds": otp_expiry_minutes * 60}
+        {
+            "success": True,
+            "message": "OTP resent successfully.",
+            "expires_in_seconds": otp_expiry_minutes * 60,
+            "email_masked": mask_email_for_display(challenge.user.email),
+        }
     )
 
 
