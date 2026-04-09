@@ -2,6 +2,8 @@
 __pycache__/
 db.sqlite3
 .env
+firebase-service-account.json
+*-firebase-adminsdk-*.json
 *.log
 media/
 staticfiles/

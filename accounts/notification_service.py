@@ -18,6 +18,9 @@ def _send_push_notification(user, title, message, metadata=None):
     if metadata is None:
         metadata = {}
 
+    if not getattr(user, "push_notifications_enabled", True):
+        return {"success": False, "reason": "push_disabled"}
+
     if not getattr(settings, "FCM_ENABLED", False):
         return {"success": False, "reason": "fcm_disabled"}
 
@@ -63,6 +66,18 @@ def _send_push_notification(user, title, message, metadata=None):
         UserDevice.objects.filter(token__in=invalid_tokens).update(is_active=False, last_seen=timezone.now())
 
     return {"success": delivered > 0, "delivered": delivered}
+
+
+def send_member_test_push(user):
+    """Send a single demo push for settings/testing (no extra in-app row)."""
+    if not getattr(user, "push_notifications_enabled", True):
+        return {"success": False, "reason": "push_disabled"}
+    return _send_push_notification(
+        user,
+        "Panels — demo",
+        "This is a test notification from your settings.",
+        {"type": "demo", "source": "member_test"},
+    )
 
 
 def dispatch_user_notification(user, title, message, notification_type="system", metadata=None, email_template=None):

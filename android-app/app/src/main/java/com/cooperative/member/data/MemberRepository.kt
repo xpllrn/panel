@@ -1,5 +1,7 @@
 package com.cooperative.member.data
 
+import com.google.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.tasks.await
 import org.json.JSONObject
 
 class MemberRepository(
@@ -18,10 +20,7 @@ class MemberRepository(
         if (!resp.isSuccessful) throw ApiException(resp.code(), parseError(resp))
         val tokens = resp.body()!!
         session.saveTokens(tokens.access, tokens.refresh)
-        val cachedDeviceToken = session.getDeviceToken()
-        if (!cachedDeviceToken.isNullOrBlank()) {
-            runCatching { api.registerDevice(DeviceTokenRequest(token = cachedDeviceToken, platform = "android")) }
-        }
+        syncFcmTokenToServer()
 
         val profile = api.getProfile()
         if (!profile.isSuccessful) throw ApiException(profile.code(), "Failed to fetch profile")
@@ -77,6 +76,36 @@ class MemberRepository(
         runCatching {
             api.registerDevice(DeviceTokenRequest(token = token, platform = "android"))
         }
+    }
+
+    /**
+     * Fetch current FCM token and register with API. Call only when the user is authenticated
+     * (e.g. after OTP login or when restoring a logged-in session).
+     */
+    suspend fun syncFcmTokenToServer() {
+        runCatching {
+            val token = FirebaseMessaging.getInstance().token.await()
+            if (!token.isNullOrBlank()) {
+                registerDeviceToken(token)
+            }
+        }
+    }
+
+    suspend fun updatePushPreferences(enabled: Boolean): Result<Unit> = runCatching {
+        val resp = api.updatePushPreferences(PushPreferencesRequest(enabled))
+        if (!resp.isSuccessful) throw ApiException(resp.code(), parseError(resp))
+        val body = resp.body()
+        if (body == null || !body.success) {
+            throw ApiException(resp.code(), body?.error ?: "Could not update push preference.")
+        }
+    }
+
+    suspend fun sendTestPushNotification(): Result<String> = runCatching {
+        val resp = api.testPushNotification()
+        if (!resp.isSuccessful) throw ApiException(resp.code(), parseError(resp))
+        val body = resp.body() ?: throw ApiException(0, "Empty response")
+        if (!body.success) throw ApiException(0, body.error ?: "Test push failed.")
+        body.message ?: "Test notification sent."
     }
 
     suspend fun requestEmailChange(newEmail: String): Result<EmailChangeResponse> = runCatching {

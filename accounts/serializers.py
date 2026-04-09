@@ -208,6 +208,7 @@ class MemberProfileSerializer(serializers.ModelSerializer):
             "share_capital_amount",
             "number_of_shares",
             "dividend_payable_balance",
+            "push_notifications_enabled",
         ]
         read_only_fields = fields
 

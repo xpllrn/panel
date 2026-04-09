@@ -25,18 +25,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -73,6 +77,10 @@ private fun ProfileContent(
     onAboutClick: () -> Unit,
     onEditProfileClick: () -> Unit
 ) {
+    val pushSaving by vm.pushSaving.collectAsState()
+    val testPushLoading by vm.testPushLoading.collectAsState()
+    val pushUiMessage by vm.pushUiMessage.collectAsState()
+
     val initials = buildString {
         if (p.first_name.isNotBlank()) append(p.first_name.first().uppercase())
         if (p.last_name.isNotBlank()) append(p.last_name.first().uppercase())
@@ -177,6 +185,81 @@ private fun ProfileContent(
                     )
                     Spacer(Modifier.height(14.dp))
                     ThemeSelectorAnimated(theme = theme, onThemeSelected = { vm.setTheme(it) })
+                }
+            }
+        }
+
+        item {
+            Spacer(Modifier.height(16.dp))
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 1.dp
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Outlined.Notifications,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            "Notifications",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Push notifications",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                "Server-delivered alerts on this device",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = p.push_notifications_enabled,
+                            onCheckedChange = { vm.setPushNotifications(it) },
+                            enabled = !pushSaving
+                        )
+                    }
+                    TextButton(
+                        onClick = { vm.sendDemoPushNotification() },
+                        enabled = p.push_notifications_enabled && !testPushLoading && !pushSaving,
+                        modifier = Modifier.padding(top = 4.dp)
+                    ) {
+                        if (testPushLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text("Send test notification")
+                        }
+                    }
+                    pushUiMessage?.let { msg ->
+                        Text(
+                            text = msg.text,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (msg.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
                 }
             }
         }

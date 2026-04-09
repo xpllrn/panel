@@ -99,6 +99,12 @@ urlpatterns = [
         api_views.member_notifications_mark_all_read,
         name="member_notifications_mark_all_read",
     ),
+    path("member/push/preferences/", api_views.member_push_preferences_view, name="member_push_preferences"),
+    path(
+        "member/notifications/test-push/",
+        api_views.member_notifications_test_push_view,
+        name="member_notifications_test_push",
+    ),
     path("member/devices/register/", api_views.register_device_token_view, name="register_device_token"),
     path("member/devices/unregister/", api_views.unregister_device_token_view, name="unregister_device_token"),
     # Email & Notifications

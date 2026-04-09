@@ -59,6 +59,12 @@ interface ApiService {
     @POST("member/devices/unregister/")
     suspend fun unregisterDevice(@Body body: DeviceTokenRequest): Response<GenericSuccessResponse>
 
+    @POST("member/push/preferences/")
+    suspend fun updatePushPreferences(@Body body: PushPreferencesRequest): Response<PushPreferencesUpdateResponse>
+
+    @POST("member/notifications/test-push/")
+    suspend fun testPushNotification(): Response<TestPushResponse>
+
     @POST("email/change/request/")
     suspend fun requestEmailChange(@Body body: EmailChangeRequest): Response<EmailChangeResponse>
 

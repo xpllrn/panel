@@ -38,6 +38,13 @@ class ProfileViewModel(app: Application) : AndroidViewModel(app) {
     private val _isVerifyingEmailOtp = MutableStateFlow(false)
     val isVerifyingEmailOtp: StateFlow<Boolean> = _isVerifyingEmailOtp.asStateFlow()
 
+    private val _pushSaving = MutableStateFlow(false)
+    val pushSaving: StateFlow<Boolean> = _pushSaving.asStateFlow()
+    private val _testPushLoading = MutableStateFlow(false)
+    val testPushLoading: StateFlow<Boolean> = _testPushLoading.asStateFlow()
+    private val _pushUiMessage = MutableStateFlow<UiMessage?>(null)
+    val pushUiMessage: StateFlow<UiMessage?> = _pushUiMessage.asStateFlow()
+
     val themeMode = session.themeMode
 
     init {
@@ -55,6 +62,40 @@ class ProfileViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setTheme(mode: String) {
         viewModelScope.launch { repo.setTheme(mode) }
+    }
+
+    fun setPushNotifications(enabled: Boolean) {
+        _pushSaving.value = true
+        _pushUiMessage.value = null
+        viewModelScope.launch {
+            repo.updatePushPreferences(enabled)
+                .onSuccess {
+                    loadProfile()
+                    _pushUiMessage.value = UiMessage(
+                        if (enabled) "Push notifications on." else "Push notifications off.",
+                        false
+                    )
+                }
+                .onFailure {
+                    _pushUiMessage.value = UiMessage(it.message ?: "Could not update notifications.", true)
+                }
+            _pushSaving.value = false
+        }
+    }
+
+    fun sendDemoPushNotification() {
+        _testPushLoading.value = true
+        _pushUiMessage.value = null
+        viewModelScope.launch {
+            repo.sendTestPushNotification()
+                .onSuccess { _pushUiMessage.value = UiMessage(it, false) }
+                .onFailure { _pushUiMessage.value = UiMessage(it.message ?: "Test failed.", true) }
+            _testPushLoading.value = false
+        }
+    }
+
+    fun clearPushUiMessage() {
+        _pushUiMessage.value = null
     }
 
     fun requestEmailChange(newEmail: String) {

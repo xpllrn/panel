@@ -35,7 +35,7 @@ from accounts.models import (
     User,
     UserDevice,
 )
-from accounts.notification_service import dispatch_user_notification
+from accounts.notification_service import dispatch_user_notification, send_member_test_push
 from accounts.serializers import (
     AuditLogSerializer,
     FundAccountSerializer,
@@ -1573,6 +1573,71 @@ def member_notifications_mark_all_read(request):
     """Mark all member notifications as read."""
     Notification.objects.filter(user=request.user, is_read=False).update(is_read=True, read_at=timezone.now())
     return Response({"success": True})
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsMember])
+def member_push_preferences_view(request):
+    """Get or update push notification preference for the member."""
+    if request.method == "GET":
+        return Response({"push_notifications_enabled": request.user.push_notifications_enabled})
+
+    enabled = request.data.get("push_notifications_enabled")
+    if enabled is None:
+        return Response({"success": False, "error": "push_notifications_enabled is required."}, status=400)
+
+    request.user.push_notifications_enabled = bool(enabled)
+    request.user.save(update_fields=["push_notifications_enabled"])
+    return Response(
+        {
+            "success": True,
+            "push_notifications_enabled": request.user.push_notifications_enabled,
+        }
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsMember])
+def member_notifications_test_push_view(request):
+    """Send one demo FCM message (rate-limited)."""
+    if not request.user.push_notifications_enabled:
+        return Response({"success": False, "error": "Turn on push notifications first."}, status=400)
+
+    rate_key = f"member_push_test:{request.user.id}"
+    sent_count = cache.get(rate_key, 0)
+    if sent_count >= 5:
+        return Response(
+            {"success": False, "error": "Too many test notifications. Try again in an hour."},
+            status=429,
+        )
+    cache.set(rate_key, sent_count + 1, timeout=3600)
+
+    result = send_member_test_push(request.user)
+    if not result.get("success"):
+        reason = result.get("reason", "unknown")
+        if reason == "push_disabled":
+            return Response({"success": False, "error": "Push is disabled for your account."}, status=400)
+        if reason == "fcm_disabled":
+            return Response({"success": False, "error": "Push service is not configured on the server."}, status=503)
+        if reason == "no_devices":
+            return Response(
+                {
+                    "success": False,
+                    "error": "No device registered. Open the app while logged in to register this phone.",
+                },
+                status=400,
+            )
+        if reason == "sdk_missing":
+            return Response({"success": False, "error": "Push SDK missing on server."}, status=503)
+        return Response({"success": False, "error": "Could not send test notification."}, status=500)
+
+    return Response(
+        {
+            "success": True,
+            "message": "Test notification sent.",
+            "delivered": result.get("delivered", 0),
+        }
+    )
 
 
 @api_view(["POST"])

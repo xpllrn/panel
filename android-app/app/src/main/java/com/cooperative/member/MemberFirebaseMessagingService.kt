@@ -34,7 +34,7 @@ class MemberFirebaseMessagingService : FirebaseMessagingService() {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Cooperative Notifications",
+            "Panels alerts",
             NotificationManager.IMPORTANCE_HIGH
         )
         manager.createNotificationChannel(channel)

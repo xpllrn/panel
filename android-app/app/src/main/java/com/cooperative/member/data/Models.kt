@@ -63,7 +63,23 @@ data class MemberProfile(
     val current_state: String? = null,
     val share_capital_amount: String = "0.00",
     val number_of_shares: Int = 0,
-    val dividend_payable_balance: String = "0.00"
+    val dividend_payable_balance: String = "0.00",
+    val push_notifications_enabled: Boolean = true
+)
+
+data class PushPreferencesRequest(val push_notifications_enabled: Boolean)
+
+data class PushPreferencesUpdateResponse(
+    val success: Boolean = false,
+    val push_notifications_enabled: Boolean? = null,
+    val error: String? = null
+)
+
+data class TestPushResponse(
+    val success: Boolean = false,
+    val message: String? = null,
+    val delivered: Int? = null,
+    val error: String? = null
 )
 
 // ── Dashboard ──

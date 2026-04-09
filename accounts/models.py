@@ -258,6 +258,11 @@ class User(AbstractUser):
     # 14. Notification & Verification Settings
     email_notifications = models.BooleanField(default=True, verbose_name="Email Notifications")
     sms_notifications = models.BooleanField(default=False, verbose_name="SMS Notifications")
+    push_notifications_enabled = models.BooleanField(
+        default=True,
+        verbose_name="Push Notifications",
+        help_text="When off, the server will not send FCM messages to this member's devices.",
+    )
 
     # Email verification
     email_verified = models.BooleanField(default=False, verbose_name="Email Verified")
