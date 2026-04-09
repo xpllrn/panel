@@ -135,7 +135,7 @@ private fun ProfileContent(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                "Edit profile & email",
+                                "Email settings",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 fontWeight = FontWeight.SemiBold,

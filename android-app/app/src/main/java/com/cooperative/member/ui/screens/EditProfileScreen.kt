@@ -36,7 +36,9 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,16 +62,16 @@ import com.cooperative.member.ui.viewmodel.UiMessage
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditProfileScreen(profile: MemberProfile, vm: ProfileViewModel, onBack: () -> Unit) {
-    var phone by remember(profile.mobile_primary) { mutableStateOf(profile.mobile_primary ?: "") }
-    var birthDate by remember(profile.date_of_birth) { mutableStateOf(profile.date_of_birth ?: "") }
     var newEmail by remember { mutableStateOf("") }
     var otp by remember { mutableStateOf("") }
     val emailChallenge by vm.emailChangeChallenge.collectAsState()
     val emailMessage by vm.emailChangeMessage.collectAsState()
-    val personalMessage by vm.personalMessage.collectAsState()
-    val isUpdatingPersonal by vm.isUpdatingPersonal.collectAsState()
     val isRequestingEmailOtp by vm.isRequestingEmailOtp.collectAsState()
     val isVerifyingEmailOtp by vm.isVerifyingEmailOtp.collectAsState()
+
+    LaunchedEffect(Unit) {
+        vm.resetEmailChangeFlow()
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -77,7 +79,7 @@ fun EditProfileScreen(profile: MemberProfile, vm: ProfileViewModel, onBack: () -
             CenterAlignedTopAppBar(
                 title = {
                     Text(
-                        "Edit profile",
+                        "Email settings",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -99,7 +101,7 @@ fun EditProfileScreen(profile: MemberProfile, vm: ProfileViewModel, onBack: () -
         ) {
             item {
                 Text(
-                    "Update your details. Email changes require a code sent to the new address.",
+                    "Phone and birth date are read-only. Email changes require a code sent to the new address.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -116,53 +118,13 @@ fun EditProfileScreen(profile: MemberProfile, vm: ProfileViewModel, onBack: () -
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
-                            "Personal",
+                            "Personal details",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.primary
                         )
-                        OutlinedTextField(
-                            value = phone,
-                            onValueChange = {
-                                phone = it
-                                vm.clearPersonalMessage()
-                            },
-                            label = { Text("Phone number") },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = OutlinedTextFieldDefaults.colors(),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        OutlinedTextField(
-                            value = birthDate,
-                            onValueChange = {
-                                birthDate = it
-                                vm.clearPersonalMessage()
-                            },
-                            label = { Text("Birth date (YYYY-MM-DD)") },
-                            singleLine = true,
-                            shape = RoundedCornerShape(14.dp),
-                            colors = OutlinedTextFieldDefaults.colors(),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Button(
-                            onClick = { vm.updatePersonalInfo(phone, birthDate) },
-                            enabled = !isUpdatingPersonal,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp)
-                        ) {
-                            if (isUpdatingPersonal) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.width(18.dp).height(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.onPrimary
-                                )
-                            } else {
-                                Text("Save personal details")
-                            }
-                        }
-                        InlineMessage(personalMessage)
+                        ReadOnlyField("Phone number", profile.mobile_primary ?: "-")
+                        ReadOnlyField("Birth date", profile.date_of_birth ?: "-")
                     }
                 }
             }
@@ -196,40 +158,57 @@ fun EditProfileScreen(profile: MemberProfile, vm: ProfileViewModel, onBack: () -
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        OutlinedTextField(
-                            value = newEmail,
-                            onValueChange = {
-                                newEmail = it
-                                vm.clearEmailChangeMessage()
-                            },
-                            label = { Text("New email") },
-                            singleLine = true,
-                            shape = RoundedCornerShape(14.dp),
-                            colors = OutlinedTextFieldDefaults.colors(),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Button(
-                            onClick = { vm.requestEmailChange(newEmail) },
-                            enabled = !isRequestingEmailOtp && !isVerifyingEmailOtp,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp)
+                        AnimatedVisibility(
+                            visible = emailChallenge.isNullOrBlank(),
+                            enter = fadeIn() + expandVertically(),
+                            exit = fadeOut() + shrinkVertically()
                         ) {
-                            if (isRequestingEmailOtp) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.width(18.dp).height(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.onPrimary
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                OutlinedTextField(
+                                    value = newEmail,
+                                    onValueChange = {
+                                        newEmail = it
+                                        vm.clearEmailChangeMessage()
+                                    },
+                                    label = { Text("New email") },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(),
+                                    modifier = Modifier.fillMaxWidth()
                                 )
-                            } else {
-                                Text("Send verification code")
+                                Button(
+                                    onClick = {
+                                        otp = ""
+                                        vm.requestEmailChange(newEmail)
+                                    },
+                                    enabled = !isRequestingEmailOtp && !isVerifyingEmailOtp,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(14.dp)
+                                ) {
+                                    if (isRequestingEmailOtp) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.width(18.dp).height(18.dp),
+                                            strokeWidth = 2.dp,
+                                            color = MaterialTheme.colorScheme.onPrimary
+                                        )
+                                    } else {
+                                        Text("Send verification code")
+                                    }
+                                }
                             }
                         }
+
                         AnimatedVisibility(
                             visible = !emailChallenge.isNullOrBlank(),
                             enter = fadeIn() + expandVertically(),
                             exit = fadeOut() + shrinkVertically()
                         ) {
                             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text(
+                                    "Enter the 6-digit code sent to $newEmail",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                                 OtpBoxesField(
                                     value = otp,
                                     onValueChange = {
@@ -254,21 +233,27 @@ fun EditProfileScreen(profile: MemberProfile, vm: ProfileViewModel, onBack: () -
                                         Text("Verify and update email")
                                     }
                                 }
+                                TextButton(
+                                    onClick = {
+                                        otp = ""
+                                        vm.requestEmailChange(newEmail)
+                                    },
+                                    enabled = !isRequestingEmailOtp && !isVerifyingEmailOtp
+                                ) {
+                                    Text("Resend code")
+                                }
+                                TextButton(
+                                    onClick = {
+                                        otp = ""
+                                        vm.resetEmailChangeFlow()
+                                    },
+                                    enabled = !isRequestingEmailOtp && !isVerifyingEmailOtp
+                                ) {
+                                    Text("Change new email")
+                                }
                             }
                         }
-                        if (!emailChallenge.isNullOrBlank() && !isRequestingEmailOtp) {
-                            Button(
-                                onClick = {
-                                    otp = ""
-                                    vm.requestEmailChange(newEmail)
-                                },
-                                enabled = !isVerifyingEmailOtp,
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(14.dp)
-                            ) {
-                                Text("Resend code")
-                            }
-                        }
+
                         InlineMessage(emailMessage)
                     }
                 }
@@ -284,6 +269,20 @@ private fun InlineMessage(message: UiMessage?) {
         text = message.text,
         style = MaterialTheme.typography.bodySmall,
         color = if (message.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    )
+}
+
+@Composable
+private fun ReadOnlyField(label: String, value: String) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = {},
+        label = { Text(label) },
+        enabled = false,
+        singleLine = true,
+        shape = RoundedCornerShape(14.dp),
+        colors = OutlinedTextFieldDefaults.colors(),
+        modifier = Modifier.fillMaxWidth()
     )
 }
 
