@@ -1,18 +1,59 @@
+# Python
 *.pyc
+*.pyo
 __pycache__/
+*.egg
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+venv/
+.venv/
+env/
+
+# Django
 db.sqlite3
-.env
-firebase-service-account.json
-*-firebase-adminsdk-*.json
 *.log
 media/
 staticfiles/
-.DS_Store
-venv/
 
-# Android / Gradle (member app)
+# Secrets & local config
+.env
+.env.*
+!.env.example
+firebase-service-account.json
+*-firebase-adminsdk-*.json
+*.pem
+
+# OS & editors
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE noise (root — keep modules.xml etc. if team uses shared IntelliJ config)
+.idea/caches/
+
+# Docker / local overrides
+docker-compose.override.yml
+
+# Android / Gradle (member app) — never commit outputs
 android-app/**/build/
 android-app/.gradle/
+android-app/**/.cxx/
+android-app/**/captures/
+android-app/**/*.apk
+android-app/**/*.aab
+android-app/**/*.ap_
+android-app/**/release/
+android-app/**/outputs/
 
-# Code review graph
+# Code review tooling
 .code-review-graph/
