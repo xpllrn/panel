@@ -1,6 +1,12 @@
+import secrets
+from datetime import timedelta
 from datetime import date
 from decimal import Decimal
 
+from django.contrib.auth import authenticate
+from django.contrib.auth.hashers import check_password, make_password
+from django.core.cache import cache
+from django.conf import settings
 from django.db import transaction
 from django.db.models import F, Sum
 from django.utils import timezone
@@ -17,13 +23,17 @@ from accounts.models import (
     FundAllocationRule,
     FundTransaction,
     InterestPayout,
+    LoginOTPChallenge,
     Loan,
     LoanRepayment,
     MemberAccount,
     Notification,
     Receipt,
     User,
+    UserDevice,
 )
+from accounts.notification_service import dispatch_user_notification
+from accounts.email_utils import send_login_otp_email
 from accounts.serializers import (
     AuditLogSerializer,
     FundAccountSerializer,
@@ -43,7 +53,8 @@ from accounts.serializers import (
     UserDetailSerializer,
     UserListSerializer,
 )
-from accounts.utils import apply_fund_allocations, create_member_notification, log_action
+from accounts.utils import apply_fund_allocations, log_action
+from rest_framework_simplejwt.tokens import RefreshToken
 
 # ========================================
 # Auth Endpoints
@@ -59,7 +70,9 @@ def api_info(request):
             "name": "Cooperative Society API",
             "version": "1.0.0",
             "auth": {
-                "login": "/api/v1/auth/login/",
+                "login_start": "/api/v1/auth/login/",
+                "login_verify_otp": "/api/v1/auth/login/verify-otp/",
+                "login_resend_otp": "/api/v1/auth/login/resend-otp/",
                 "refresh": "/api/v1/auth/refresh/",
                 "profile": "/api/v1/auth/profile/",
             },
@@ -88,6 +101,173 @@ def auth_profile_view(request):
     """Get current authenticated user profile."""
     serializer = MemberProfileSerializer(request.user)
     return Response(serializer.data)
+
+
+def _build_rate_limit_key(username, request):
+    ip_address = request.META.get("REMOTE_ADDR", "")
+    return f"otp_login_start:{username.lower()}:{ip_address}"
+
+
+def _check_rate_limit(username, request):
+    limit_key = _build_rate_limit_key(username, request)
+    current = cache.get(limit_key, 0)
+    max_attempts = 5
+    if current >= max_attempts:
+        return False
+    cache.set(limit_key, current + 1, timeout=15 * 60)
+    return True
+
+
+def _generate_numeric_otp():
+    return str(secrets.randbelow(900000) + 100000)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def auth_login_start_view(request):
+    """Validate username/password and send email OTP."""
+    username = request.data.get("username", "").strip()
+    password = request.data.get("password", "")
+
+    if not username or not password:
+        return Response({"success": False, "error": "Username and password are required."}, status=400)
+
+    if not _check_rate_limit(username, request):
+        return Response({"success": False, "error": "Too many login requests. Please try again later."}, status=429)
+
+    user = authenticate(request, username=username, password=password)
+    if not user:
+        return Response({"success": False, "error": "Invalid username or password."}, status=401)
+
+    if not user.is_active or user.status != "active":
+        return Response({"success": False, "error": "No active account found with the given credentials."}, status=401)
+
+    if not user.email:
+        return Response({"success": False, "error": "No email configured for this account."}, status=400)
+
+    otp_code = _generate_numeric_otp()
+    challenge_token = secrets.token_urlsafe(32)
+    otp_expiry_minutes = getattr(settings, "LOGIN_OTP_EXPIRY_MINUTES", 15)
+    max_attempts = getattr(settings, "LOGIN_OTP_MAX_ATTEMPTS", 5)
+    expires_at = timezone.now() + timedelta(minutes=otp_expiry_minutes)
+
+    LoginOTPChallenge.objects.filter(user=user, consumed_at__isnull=True).update(consumed_at=timezone.now())
+    challenge = LoginOTPChallenge.objects.create(
+        user=user,
+        challenge_token=challenge_token,
+        otp_hash=make_password(otp_code),
+        expires_at=expires_at,
+        max_attempts=max_attempts,
+        request_ip=request.META.get("REMOTE_ADDR"),
+        user_agent=request.META.get("HTTP_USER_AGENT", "")[:255],
+    )
+
+    email_sent = send_login_otp_email(user, otp_code, expires_minutes=otp_expiry_minutes)
+    if not email_sent:
+        challenge.consumed_at = timezone.now()
+        challenge.save(update_fields=["consumed_at"])
+        return Response({"success": False, "error": "Failed to send OTP email. Try again later."}, status=500)
+
+    log_action(request, "login", "system", user.id, f"OTP sent for login: {user.username}")
+    return Response(
+        {
+            "success": True,
+            "message": "OTP sent to your email address.",
+            "challenge_token": challenge.challenge_token,
+            "expires_in_seconds": otp_expiry_minutes * 60,
+        }
+    )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def auth_resend_otp_view(request):
+    """Resend OTP for an active login challenge."""
+    challenge_token = request.data.get("challenge_token", "").strip()
+    if not challenge_token:
+        return Response({"success": False, "error": "challenge_token is required."}, status=400)
+
+    try:
+        challenge = LoginOTPChallenge.objects.select_related("user").get(
+            challenge_token=challenge_token,
+            consumed_at__isnull=True,
+        )
+    except LoginOTPChallenge.DoesNotExist:
+        return Response({"success": False, "error": "Invalid or expired login challenge."}, status=400)
+
+    if challenge.is_expired:
+        challenge.consumed_at = timezone.now()
+        challenge.save(update_fields=["consumed_at"])
+        return Response({"success": False, "error": "OTP challenge expired. Start login again."}, status=400)
+
+    otp_code = _generate_numeric_otp()
+    challenge.otp_hash = make_password(otp_code)
+    otp_expiry_minutes = getattr(settings, "LOGIN_OTP_EXPIRY_MINUTES", 15)
+    challenge.expires_at = timezone.now() + timedelta(minutes=otp_expiry_minutes)
+    challenge.attempt_count = 0
+    challenge.save(update_fields=["otp_hash", "expires_at", "attempt_count"])
+
+    if not send_login_otp_email(challenge.user, otp_code, expires_minutes=otp_expiry_minutes):
+        return Response({"success": False, "error": "Failed to resend OTP."}, status=500)
+
+    return Response(
+        {"success": True, "message": "OTP resent successfully.", "expires_in_seconds": otp_expiry_minutes * 60}
+    )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def auth_verify_otp_view(request):
+    """Verify login OTP and issue JWT tokens."""
+    challenge_token = request.data.get("challenge_token", "").strip()
+    otp = str(request.data.get("otp", "")).strip()
+    if not challenge_token or not otp:
+        return Response({"success": False, "error": "challenge_token and otp are required."}, status=400)
+
+    try:
+        challenge = LoginOTPChallenge.objects.select_related("user").get(
+            challenge_token=challenge_token,
+            consumed_at__isnull=True,
+        )
+    except LoginOTPChallenge.DoesNotExist:
+        return Response({"success": False, "error": "Invalid or expired login challenge."}, status=400)
+
+    if challenge.is_expired:
+        challenge.consumed_at = timezone.now()
+        challenge.save(update_fields=["consumed_at"])
+        return Response({"success": False, "error": "OTP expired. Please login again."}, status=400)
+
+    if challenge.attempt_count >= challenge.max_attempts:
+        challenge.consumed_at = timezone.now()
+        challenge.save(update_fields=["consumed_at"])
+        return Response({"success": False, "error": "Maximum OTP attempts exceeded."}, status=429)
+
+    if not check_password(otp, challenge.otp_hash):
+        LoginOTPChallenge.objects.filter(id=challenge.id).update(attempt_count=F("attempt_count") + 1)
+        challenge.refresh_from_db(fields=["attempt_count"])
+        return Response(
+            {
+                "success": False,
+                "error": "Invalid OTP.",
+                "attempts_left": max(challenge.max_attempts - challenge.attempt_count, 0),
+            },
+            status=400,
+        )
+
+    user = challenge.user
+    challenge.consumed_at = timezone.now()
+    challenge.save(update_fields=["consumed_at"])
+
+    refresh = RefreshToken.for_user(user)
+    log_action(request, "login", "system", user.id, f"User logged in with OTP: {user.username}")
+
+    return Response(
+        {
+            "success": True,
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+        }
+    )
 
 
 # ========================================
@@ -428,7 +608,7 @@ def admin_receipts_create(request):
                 f"Created receipt via API: {receipt.receipt_number} - {txn_type} ₹{amount}",
             )
 
-            create_member_notification(
+            dispatch_user_notification(
                 user=account.user,
                 title="Transaction Update",
                 message=f"{txn_type.title()} of ₹{amount} posted to account {account.account_number}.",
@@ -440,6 +620,7 @@ def admin_receipts_create(request):
                     "transaction_type": txn_type,
                     "amount": str(amount),
                 },
+                email_template="payment_success",
             )
 
         return Response(ReceiptSerializer(receipt).data, status=status.HTTP_201_CREATED)
@@ -674,12 +855,13 @@ def admin_loans_approve(request, loan_id):
     loan.save()
     LoanRepayment.objects.bulk_create(repayments)
 
-    create_member_notification(
+    dispatch_user_notification(
         user=loan.user,
         title="Loan Approved",
         message=f"Your loan {loan.loan_number} has been approved and is now active.",
         notification_type="loan",
         metadata={"loan_id": loan.id, "loan_number": loan.loan_number, "status": loan.status},
+        email_template="loan_approval",
     )
 
     log_action(request, "approve", "loan", loan.id, f"Approved loan via API: {loan.loan_number}")
@@ -806,7 +988,7 @@ def admin_loans_record_emi(request, loan_id):
                 f"Recorded EMI #{installment_number} via API: ₹{amount} for {loan.loan_number}",
             )
 
-            create_member_notification(
+            dispatch_user_notification(
                 user=loan.user,
                 title="EMI Payment Recorded",
                 message=f"EMI #{installment_number} of ₹{amount} recorded for {loan.loan_number}.",
@@ -818,6 +1000,7 @@ def admin_loans_record_emi(request, loan_id):
                     "amount_paid": str(amount),
                     "penalty": str(penalty),
                 },
+                email_template="payment_success",
             )
 
         return Response(
@@ -1331,6 +1514,42 @@ def member_notifications_mark_all_read(request):
     return Response({"success": True})
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def register_device_token_view(request):
+    """Register or update FCM device token for current user."""
+    token = request.data.get("token", "").strip()
+    platform = request.data.get("platform", "android").strip().lower()
+
+    if not token:
+        return Response({"success": False, "error": "token is required."}, status=400)
+
+    if platform not in ["android", "ios", "web"]:
+        return Response({"success": False, "error": "Invalid platform."}, status=400)
+
+    device, _ = UserDevice.objects.update_or_create(
+        token=token,
+        defaults={
+            "user": request.user,
+            "platform": platform,
+            "is_active": True,
+        },
+    )
+    return Response({"success": True, "device_id": device.id})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def unregister_device_token_view(request):
+    """Deactivate FCM device token for current user."""
+    token = request.data.get("token", "").strip()
+    if not token:
+        return Response({"success": False, "error": "token is required."}, status=400)
+
+    UserDevice.objects.filter(user=request.user, token=token).update(is_active=False, last_seen=timezone.now())
+    return Response({"success": True})
+
+
 # ========================================
 # Admin: Interest Posting
 # ========================================
@@ -1411,6 +1630,19 @@ def admin_post_interest(request):
                 payment_mode="internal",
                 balance_after=account.balance + interest_amount,
                 created_by=request.user,
+            )
+
+            dispatch_user_notification(
+                user=account.user,
+                title="Interest Credited",
+                message=f"₹{interest_amount} interest credited to account {account.account_number}.",
+                notification_type="transaction",
+                metadata={
+                    "account_id": account.id,
+                    "account_number": account.account_number,
+                    "interest_amount": str(interest_amount),
+                },
+                email_template="interest_credit",
             )
 
             total_posted += interest_amount

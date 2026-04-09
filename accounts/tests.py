@@ -6,8 +6,11 @@ Covers utility functions, model validators, and user model methods.
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.urls import reverse
 
-from accounts.models import aadhar_validator, ifsc_validator, pan_validator, phone_validator, pincode_validator
+from rest_framework.test import APIClient
+
+from accounts.models import LoginOTPChallenge, UserDevice, aadhar_validator, ifsc_validator, pan_validator, phone_validator, pincode_validator
 from accounts.utils import combine_name, split_full_name, validate_password_strength
 
 User = get_user_model()
@@ -278,3 +281,61 @@ class UserModelTests(TestCase):
         """New users should have 'member' role by default."""
         new_user = User.objects.create_user(username="newuser", email="new@example.com", password="NewPass123!")
         self.assertEqual(new_user.role, "member")
+
+
+class OtpLoginFlowTests(TestCase):
+    """Tests for OTP login endpoints and device registration."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="otpuser",
+            email="otp@example.com",
+            password="TestPass123!",
+            role="member",
+            status="active",
+            is_active=True,
+        )
+
+    def test_login_start_creates_challenge(self):
+        response = self.client.post(
+            reverse("api:auth_login_start"),
+            {"username": "otpuser", "password": "TestPass123!"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data.get("success"))
+        self.assertTrue(LoginOTPChallenge.objects.filter(user=self.user).exists())
+
+    def test_verify_otp_rejects_invalid_code(self):
+        start = self.client.post(
+            reverse("api:auth_login_start"),
+            {"username": "otpuser", "password": "TestPass123!"},
+            format="json",
+        )
+        challenge_token = start.data["challenge_token"]
+        verify = self.client.post(
+            reverse("api:auth_verify_otp"),
+            {"challenge_token": challenge_token, "otp": "000000"},
+            format="json",
+        )
+        self.assertEqual(verify.status_code, 400)
+        self.assertFalse(verify.data.get("success"))
+
+    def test_register_and_unregister_device(self):
+        self.client.force_authenticate(self.user)
+        register = self.client.post(
+            reverse("api:register_device_token"),
+            {"token": "test-device-token", "platform": "android"},
+            format="json",
+        )
+        self.assertEqual(register.status_code, 200)
+        self.assertTrue(UserDevice.objects.filter(user=self.user, token="test-device-token", is_active=True).exists())
+
+        unregister = self.client.post(
+            reverse("api:unregister_device_token"),
+            {"token": "test-device-token"},
+            format="json",
+        )
+        self.assertEqual(unregister.status_code, 200)
+        self.assertTrue(UserDevice.objects.filter(user=self.user, token="test-device-token", is_active=False).exists())

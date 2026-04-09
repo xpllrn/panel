@@ -10,7 +10,10 @@ urlpatterns = [
     # Root
     path("", api_views.api_info, name="api_info"),
     # Auth
-    path("auth/login/", TokenObtainPairView.as_view(), name="token_obtain"),
+    path("auth/login/", api_views.auth_login_start_view, name="auth_login_start"),
+    path("auth/login/verify-otp/", api_views.auth_verify_otp_view, name="auth_verify_otp"),
+    path("auth/login/resend-otp/", api_views.auth_resend_otp_view, name="auth_resend_otp"),
+    path("auth/login/password/", TokenObtainPairView.as_view(), name="token_obtain_password"),
     path("auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("auth/profile/", api_views.auth_profile_view, name="auth_profile"),
     # Admin: Members
@@ -95,6 +98,8 @@ urlpatterns = [
         api_views.member_notifications_mark_all_read,
         name="member_notifications_mark_all_read",
     ),
+    path("member/devices/register/", api_views.register_device_token_view, name="register_device_token"),
+    path("member/devices/unregister/", api_views.unregister_device_token_view, name="unregister_device_token"),
     # Email & Notifications
     path("email/preferences/", api_views.email_preferences_view, name="email_preferences"),
     path("email/send-verification/", api_views.send_verification_email_view, name="send_verification_email"),

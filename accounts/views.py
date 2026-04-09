@@ -5,6 +5,7 @@ from django.http import HttpResponseNotAllowed
 from django.shortcuts import redirect, render
 
 from .forms import LoginForm
+from .models import User
 from .utils import log_action
 
 
@@ -36,6 +37,46 @@ def login_view(request):
         form = LoginForm()
 
     return render(request, "accounts/login.html", {"form": form})
+
+
+def verify_email_link_view(request, token):
+    """Handle GET link from verification email (matches FRONTEND_URL/verify-email/<token>/)."""
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    try:
+        user = User.objects.get(email_verification_token=token)
+    except User.DoesNotExist:
+        return render(
+            request,
+            "accounts/verify_email.html",
+            {
+                "success": False,
+                "error_message": "This verification link is invalid or has already been used.",
+            },
+        )
+
+    if user.email_verified:
+        return render(
+            request,
+            "accounts/verify_email.html",
+            {
+                "success": False,
+                "error_message": "This email address is already verified.",
+            },
+        )
+
+    if user.verify_email(token):
+        return render(request, "accounts/verify_email.html", {"success": True})
+
+    return render(
+        request,
+        "accounts/verify_email.html",
+        {
+            "success": False,
+            "error_message": "Verification could not be completed. Request a new verification email from your profile.",
+        },
+    )
 
 
 @login_required

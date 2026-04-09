@@ -3,10 +3,12 @@ Email utilities for the cooperative society system.
 Handles email notifications and verification.
 """
 
+import base64
+import json
 import secrets
+import requests
 
 from django.conf import settings
-from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils import timezone
 
@@ -14,6 +16,53 @@ from django.utils import timezone
 def generate_verification_token():
     """Generate a secure random token for email verification."""
     return secrets.token_urlsafe(32)
+
+
+def _get_brevo_api_key():
+    """Resolve Brevo API key from direct env or MCP_BREVO encoded payload."""
+    if getattr(settings, "BREVO_API_KEY", ""):
+        return settings.BREVO_API_KEY
+
+    encoded = getattr(settings, "MCP_BREVO", "")
+    if not encoded:
+        return ""
+
+    try:
+        decoded = base64.b64decode(encoded).decode("utf-8")
+        data = json.loads(decoded)
+        return data.get("api_key", "")
+    except Exception:
+        return ""
+
+
+def _send_via_brevo_api(subject, text_message, html_message, recipient_email, recipient_name="User"):
+    """Send transactional email via Brevo HTTP API."""
+    api_key = _get_brevo_api_key()
+    if not api_key:
+        return False
+
+    from_email = settings.DEFAULT_FROM_EMAIL
+    from_name = getattr(settings, "SOCIETY_NAME", "Cooperative Society")
+
+    payload = {
+        "sender": {"name": from_name, "email": from_email},
+        "to": [{"email": recipient_email, "name": recipient_name or recipient_email}],
+        "subject": subject,
+        "htmlContent": html_message,
+        "textContent": text_message,
+    }
+
+    headers = {
+        "accept": "application/json",
+        "content-type": "application/json",
+        "api-key": api_key,
+    }
+
+    try:
+        response = requests.post("https://api.brevo.com/v3/smtp/email", headers=headers, json=payload, timeout=20)
+        return response.status_code in [200, 201, 202]
+    except Exception:
+        return False
 
 
 def send_verification_email(user):
@@ -41,17 +90,31 @@ def send_verification_email(user):
     html_message = render_to_string("emails/verify_email.html", context)
 
     try:
-        send_mail(
-            subject=subject,
-            message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
-            html_message=html_message,
-            fail_silently=False,
-        )
-        return True
+        return _send_via_brevo_api(subject, message, html_message, user.email, user.display_name)
     except Exception as e:
         print(f"Failed to send verification email to {user.email}: {str(e)}")
+        return False
+
+
+def send_login_otp_email(user, otp_code, expires_minutes=15):
+    """Send login OTP email."""
+    if not user.email:
+        return False
+
+    context = {
+        "user": user,
+        "otp_code": otp_code,
+        "expires_minutes": expires_minutes,
+        "society_name": getattr(settings, "SOCIETY_NAME", "Cooperative Society"),
+    }
+    subject = f"Your Login OTP - {context['society_name']}"
+    message = render_to_string("emails/login_otp.txt", context)
+    html_message = render_to_string("emails/login_otp.html", context)
+
+    try:
+        return _send_via_brevo_api(subject, message, html_message, user.email, user.display_name)
+    except Exception as e:
+        print(f"Failed to send OTP email to {user.email}: {str(e)}")
         return False
 
 
@@ -73,16 +136,7 @@ def send_notification_email(user, subject, template_name, context=None):
     try:
         message = render_to_string(f"emails/{template_name}.txt", context)
         html_message = render_to_string(f"emails/{template_name}.html", context)
-
-        send_mail(
-            subject=subject,
-            message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
-            html_message=html_message,
-            fail_silently=False,
-        )
-        return True
+        return _send_via_brevo_api(subject, message, html_message, user.email, user.display_name)
     except Exception as e:
         print(f"Failed to send notification email to {user.email}: {str(e)}")
         return False
@@ -155,4 +209,34 @@ def send_interest_credit_notification(user, account, amount):
     }
     return send_notification_email(
         user=user, subject=f"Interest Credited - ₹{amount}", template_name="interest_credit", context=context
+    )
+
+
+def send_payment_success_email(user, amount, reference, payment_type):
+    """Send successful payment email."""
+    context = {
+        "amount": amount,
+        "reference": reference,
+        "payment_type": payment_type,
+    }
+    return send_notification_email(
+        user=user,
+        subject=f"Payment Successful - ₹{amount}",
+        template_name="payment_success",
+        context=context,
+    )
+
+
+def send_payment_reminder_email(user, due_amount, due_date, payment_type):
+    """Send payment reminder email."""
+    context = {
+        "due_amount": due_amount,
+        "due_date": due_date,
+        "payment_type": payment_type,
+    }
+    return send_notification_email(
+        user=user,
+        subject=f"Payment Reminder - ₹{due_amount}",
+        template_name="payment_reminder",
+        context=context,
     )

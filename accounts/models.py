@@ -4,6 +4,7 @@ from django.contrib.auth.models import AbstractUser
 from django.core.validators import RegexValidator
 from django.db import models
 from django.db.models import Sum
+from django.utils import timezone
 
 # Validators for Indian identity documents
 pan_validator = RegexValidator(
@@ -306,6 +307,58 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"{self.user.display_name} - {self.title}"
+
+
+class LoginOTPChallenge(models.Model):
+    """Stores login OTP challenges for two-step authentication."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="login_otp_challenges")
+    challenge_token = models.CharField(max_length=64, unique=True, db_index=True)
+    otp_hash = models.CharField(max_length=255)
+    expires_at = models.DateTimeField(db_index=True)
+    attempt_count = models.IntegerField(default=0)
+    max_attempts = models.IntegerField(default=5)
+    consumed_at = models.DateTimeField(blank=True, null=True)
+    request_ip = models.GenericIPAddressField(blank=True, null=True)
+    user_agent = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Login OTP Challenge"
+        verbose_name_plural = "Login OTP Challenges"
+
+    def __str__(self):
+        return f"{self.user.username} - {self.challenge_token}"
+
+    @property
+    def is_expired(self):
+        return self.expires_at <= timezone.now()
+
+
+class UserDevice(models.Model):
+    """Device token registry for push notifications."""
+
+    PLATFORM_CHOICES = [
+        ("android", "Android"),
+        ("ios", "iOS"),
+        ("web", "Web"),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="devices")
+    token = models.CharField(max_length=255, unique=True, db_index=True)
+    platform = models.CharField(max_length=20, choices=PLATFORM_CHOICES, default="android")
+    is_active = models.BooleanField(default=True, db_index=True)
+    last_seen = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-last_seen"]
+        verbose_name = "User Device"
+        verbose_name_plural = "User Devices"
+
+    def __str__(self):
+        return f"{self.user.username} - {self.platform}"
 
 
 class MemberAccount(models.Model):
