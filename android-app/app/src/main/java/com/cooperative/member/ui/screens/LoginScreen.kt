@@ -46,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.focus.FocusDirection
@@ -65,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cooperative.member.R
 import com.cooperative.member.ui.viewmodel.LoginState
+import com.cooperative.member.R
 import com.cooperative.member.ui.viewmodel.LoginViewModel
 
 @Composable
@@ -89,7 +91,7 @@ fun LoginScreen(vm: LoginViewModel) {
     ) {
         Image(
             painter = painterResource(R.drawable.logo_login),
-            contentDescription = "Panels logo",
+            contentDescription = stringResource(R.string.society_legal_name),
             modifier = Modifier
                 .height(96.dp)
                 .fillMaxWidth(0.55f),
@@ -105,7 +107,11 @@ fun LoginScreen(vm: LoginViewModel) {
         )
 
         Text(
-            if (otpState == null) "Sign in to your Panels account" else "Enter the 6-digit code sent to your email",
+            if (otpState == null) {
+                stringResource(R.string.login_sign_in_subtitle)
+            } else {
+                stringResource(R.string.login_otp_subtitle)
+            },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp)

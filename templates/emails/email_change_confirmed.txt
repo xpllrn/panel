@@ -1,0 +1,11 @@
+Hello {{ user.display_name }},
+
+Your {{ society_name }} account email is now confirmed as:
+
+{{ user.email }}
+
+Sign-in codes and messages will be sent to this address.
+
+---
+{{ society_name }} · {{ support_email }} · {{ support_phone }}
+{{ site_url }}

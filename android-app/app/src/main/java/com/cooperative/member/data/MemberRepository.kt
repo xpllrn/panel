@@ -126,6 +126,14 @@ class MemberRepository(
         resp.body()!!
     }
 
+    suspend fun changePassword(currentPassword: String, newPassword: String): Result<GenericSuccessResponse> = runCatching {
+        val resp = api.changePassword(PasswordChangeRequest(currentPassword, newPassword))
+        if (!resp.isSuccessful) throw ApiException(resp.code(), parseError(resp))
+        val body = resp.body() ?: throw ApiException(0, "Empty response")
+        if (!body.success) throw ApiException(0, body.error ?: "Could not change password.")
+        body
+    }
+
     private suspend fun <T> apiCall(call: suspend () -> retrofit2.Response<T>): Result<T> =
         runCatching {
             val resp = call()

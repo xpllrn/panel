@@ -155,8 +155,8 @@ SIMPLE_JWT = {
 }
 
 SPECTACULAR_SETTINGS = {
-    "TITLE": "Panels API",
-    "DESCRIPTION": "REST API for the Panels member and admin banking system",
+    "TITLE": "Delhi Aam Nagrik API",
+    "DESCRIPTION": "REST API for the Delhi Aam Nagrik member and admin banking system",
     "VERSION": "1.0.0",
 }
 
@@ -175,8 +175,14 @@ EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="noreply@panels.app")
 
 # Custom Settings
-SOCIETY_NAME = config("SOCIETY_NAME", default="Panels")
+# Full registered-style name (override in .env if it differs on your certificate).
+SOCIETY_NAME = config("SOCIETY_NAME", default="Delhi Aam Nagrik Co-operative Credit Society Ltd.")
+SOCIETY_TAGLINE = config("SOCIETY_TAGLINE", default="Member services · Delhi, India")
 FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:8000")
+# Public site origin for email logos (/assets/logo-mark.png). Use your live member site.
+MARKETING_SITE_ORIGIN = config("MARKETING_SITE_ORIGIN", default="https://delhiaamnagrik.org")
+SUPPORT_CONTACT_EMAIL = config("SUPPORT_CONTACT_EMAIL", default="contact@delhiaamnagrik.org")
+SUPPORT_CONTACT_PHONE = config("SUPPORT_CONTACT_PHONE", default="+91-9305050596")
 
 # OTP Authentication
 LOGIN_OTP_EXPIRY_MINUTES = config("LOGIN_OTP_EXPIRY_MINUTES", cast=int, default=15)

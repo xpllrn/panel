@@ -73,4 +73,7 @@ interface ApiService {
 
     @POST("auth/profile/update/")
     suspend fun updateProfile(@Body body: ProfileUpdateRequest): Response<ProfileUpdateResponse>
+
+    @POST("auth/profile/password/")
+    suspend fun changePassword(@Body body: PasswordChangeRequest): Response<GenericSuccessResponse>
 }

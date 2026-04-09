@@ -30,8 +30,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.cooperative.member.BuildConfig
+import com.cooperative.member.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,7 +42,7 @@ fun AboutScreen(onBack: () -> Unit) {
         modifier = Modifier.fillMaxSize(),
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("About Panels", style = MaterialTheme.typography.titleLarge) },
+                title = { Text(stringResource(R.string.about_screen_title), style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -83,7 +85,8 @@ fun AboutScreen(onBack: () -> Unit) {
                             )
                         }
                         HorizontalDivider()
-                        InfoRow("App Name", "Panels")
+                        InfoRow("Society", stringResource(R.string.society_legal_name))
+                        InfoRow("App", stringResource(R.string.app_name))
                         InfoRow("Version", BuildConfig.VERSION_NAME)
                         InfoRow("Version Code", BuildConfig.VERSION_CODE.toString())
                         InfoRow("Build Type", BuildConfig.BUILD_TYPE)

@@ -17,6 +17,7 @@ urlpatterns = [
     path("auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("auth/profile/", api_views.auth_profile_view, name="auth_profile"),
     path("auth/profile/update/", api_views.auth_profile_update_view, name="auth_profile_update"),
+    path("auth/profile/password/", api_views.auth_password_change_view, name="auth_password_change"),
     # Admin: Members
     path("admin/members/", api_views.admin_members_list, name="admin_members_list"),
     path("admin/members/create/", api_views.admin_members_create, name="admin_members_create"),

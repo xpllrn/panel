@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>{% block email_title %}Message{% endblock %} · {{ society_name }}</title>
+    <!--[if mso]>
+    <noscript>
+        <xml>
+            <o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings>
+        </xml>
+    </noscript>
+    <![endif]-->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+    <style type="text/css">
+        .preheader { display: none !important; visibility: hidden; opacity: 0; color: transparent; height: 0; width: 0; max-height: 0; max-width: 0; overflow: hidden; mso-hide: all; }
+    </style>
+</head>
+<body style="margin:0;padding:0;background-color:#f7f5f0;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+    {% block preheader %}
+    <div class="preheader">{% block preheader_text %}{% endblock %}</div>
+    {% endblock %}
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f7f5f0;">
+        <tr>
+            <td align="center" valign="top" style="padding:32px 16px;">
+                <!--[if mso]>
+                <table role="presentation" align="center" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td>
+                <![endif]-->
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" align="center" style="max-width:600px;width:100%;margin:0 auto;background-color:#ffffff;border-radius:16px;border:1px solid #e7e5e4;overflow:hidden;box-shadow:0 2px 8px rgba(45,74,50,0.08);">
+                    <tr>
+                        <td align="center" style="padding:28px 24px 22px;text-align:center;border-bottom:1px solid #e8f0e9;background-color:#ffffff;">
+                            <img src="{{ logo_mark_url }}" alt="{{ society_name }}" width="56" height="56" style="display:block;margin:0 auto;border:0;outline:none;text-decoration:none;">
+                            <p style="margin:16px 0 0;font-family:'DM Sans',Arial,sans-serif;font-size:clamp(16px,3.8vw,20px);font-weight:700;color:#2d4a32;line-height:1.35;text-align:center;max-width:32em;margin-left:auto;margin-right:auto;">{{ society_name }}</p>
+                            <p style="margin:8px 0 0;font-family:'DM Sans',Arial,sans-serif;font-size:13px;color:#57534e;line-height:1.5;text-align:center;max-width:28em;margin-left:auto;margin-right:auto;">{{ society_tagline }}</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="padding:0 20px;text-align:center;">
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" align="center" style="max-width:520px;margin:0 auto;">
+                                <tr>
+                                    <td align="center" style="padding:28px 8px 10px;text-align:center;font-family:'DM Sans',Arial,Helvetica,sans-serif;font-size:15px;line-height:1.65;color:#1c1917;">
+                                        {% block email_inner %}{% endblock %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td align="center" style="padding:8px 8px 28px;text-align:center;font-family:'DM Sans',Arial,Helvetica,sans-serif;font-size:15px;line-height:1.65;color:#1c1917;">
+                                        {% block email_footer_extra %}{% endblock %}
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="padding:22px 20px;background-color:#e8f0e9;border-top:1px solid #d4e4d6;text-align:center;">
+                            <p style="margin:0;font-family:'DM Sans',Arial,sans-serif;font-size:13px;color:#2d4a32;text-align:center;">
+                                <a href="mailto:{{ support_email }}" style="color:#2d4a32;text-decoration:none;font-weight:600;">{{ support_email }}</a>
+                                <span style="color:#5a7d5f;"> · </span>
+                                <a href="tel:{{ support_phone_tel }}" style="color:#2d4a32;text-decoration:none;font-weight:600;">{{ support_phone }}</a>
+                            </p>
+                            <p style="margin:10px auto 0;max-width:32em;font-family:'DM Sans',Arial,sans-serif;font-size:12px;color:#57534e;line-height:1.55;text-align:center;">
+                                {% block legal_line %}This is an automated message from {{ society_name }}. Please do not reply to this email unless the address above is monitored for support.{% endblock %}
+                            </p>
+                            {% if site_url %}
+                            <p style="margin:14px 0 0;font-family:'DM Sans',Arial,sans-serif;font-size:12px;text-align:center;">
+                                <a href="{{ site_url }}/" style="color:#5a7d5f;text-decoration:underline;">{{ site_url }}</a>
+                            </p>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+                <!--[if mso]>
+                </td></tr></table>
+                <![endif]-->
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

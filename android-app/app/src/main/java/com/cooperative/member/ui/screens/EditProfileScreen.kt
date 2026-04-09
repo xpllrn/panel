@@ -233,23 +233,29 @@ fun EditProfileScreen(profile: MemberProfile, vm: ProfileViewModel, onBack: () -
                                         Text("Verify and update email")
                                     }
                                 }
-                                TextButton(
-                                    onClick = {
-                                        otp = ""
-                                        vm.requestEmailChange(newEmail)
-                                    },
-                                    enabled = !isRequestingEmailOtp && !isVerifyingEmailOtp
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("Resend code")
-                                }
-                                TextButton(
-                                    onClick = {
-                                        otp = ""
-                                        vm.resetEmailChangeFlow()
-                                    },
-                                    enabled = !isRequestingEmailOtp && !isVerifyingEmailOtp
-                                ) {
-                                    Text("Change new email")
+                                    TextButton(
+                                        onClick = {
+                                            otp = ""
+                                            vm.requestEmailChange(newEmail)
+                                        },
+                                        enabled = !isRequestingEmailOtp && !isVerifyingEmailOtp
+                                    ) {
+                                        Text("Resend code")
+                                    }
+                                    TextButton(
+                                        onClick = {
+                                            otp = ""
+                                            vm.resetEmailChangeFlow()
+                                        },
+                                        enabled = !isRequestingEmailOtp && !isVerifyingEmailOtp
+                                    ) {
+                                        Text("Cancel")
+                                    }
                                 }
                             }
                         }

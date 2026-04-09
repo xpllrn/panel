@@ -41,6 +41,8 @@ data class ProfileUpdateResponse(
     val error: String? = null
 )
 
+data class PasswordChangeRequest(val current_password: String, val new_password: String)
+
 // ── Profile ──
 
 data class MemberProfile(

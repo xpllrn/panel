@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Panels</string>
+    <string name="app_name">Delhi Aam Nagrik</string>
+    <string name="society_legal_name">Delhi Aam Nagrik Co-operative Credit Society Ltd.</string>
+    <string name="about_screen_title">About</string>
+    <string name="login_sign_in_subtitle">Sign in to your Delhi Aam Nagrik account</string>
+    <string name="login_otp_subtitle">Enter the 6-digit code sent to your email</string>
+    <string name="appearance_chooser_label">Choose how the app looks</string>
+    <string name="profile_footer_brand">Delhi Aam Nagrik</string>
+    <string name="notifications_channel_name">Delhi Aam Nagrik alerts</string>
 </resources>

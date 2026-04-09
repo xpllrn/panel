@@ -46,26 +46,40 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.cooperative.member.R
 import com.cooperative.member.data.MemberProfile
 import com.cooperative.member.ui.theme.Red400
 import com.cooperative.member.ui.viewmodel.ProfileState
 import com.cooperative.member.ui.viewmodel.ProfileViewModel
 
 @Composable
-fun ProfileScreen(vm: ProfileViewModel, onAboutClick: () -> Unit, onEditProfileClick: () -> Unit) {
+fun ProfileScreen(
+    vm: ProfileViewModel,
+    onAboutClick: () -> Unit,
+    onEditProfileClick: () -> Unit,
+    onChangePasswordClick: () -> Unit
+) {
     val state by vm.state.collectAsState()
     val theme by vm.themeMode.collectAsState(initial = "light")
 
     when (val s = state) {
         is ProfileState.Loading -> LoadingBox()
         is ProfileState.Error -> ErrorBox(s.message) { vm.loadProfile() }
-        is ProfileState.Ready -> ProfileContent(s.profile, theme, vm, onAboutClick, onEditProfileClick)
+        is ProfileState.Ready -> ProfileContent(
+            s.profile,
+            theme,
+            vm,
+            onAboutClick,
+            onEditProfileClick,
+            onChangePasswordClick
+        )
     }
 }
 
@@ -75,7 +89,8 @@ private fun ProfileContent(
     theme: String,
     vm: ProfileViewModel,
     onAboutClick: () -> Unit,
-    onEditProfileClick: () -> Unit
+    onEditProfileClick: () -> Unit,
+    onChangePasswordClick: () -> Unit
 ) {
     val pushSaving by vm.pushSaving.collectAsState()
     val testPushLoading by vm.testPushLoading.collectAsState()
@@ -156,6 +171,34 @@ private fun ProfileContent(
                             )
                         }
                     }
+                    Spacer(Modifier.height(10.dp))
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onChangePasswordClick() },
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Change password",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(
+                                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -179,7 +222,7 @@ private fun ProfileContent(
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "Choose how Panels looks",
+                        stringResource(R.string.appearance_chooser_label),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -335,7 +378,7 @@ private fun ProfileContent(
             }
             Spacer(Modifier.height(12.dp))
             Text(
-                "Panels",
+                stringResource(R.string.profile_footer_brand),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,

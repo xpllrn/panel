@@ -1,0 +1,10 @@
+{% extends "emails/base_branded.html" %}
+{% block email_title %}Email confirmed{% endblock %}
+{% block preheader_text %}Your {{ society_name }} account email is updated{% endblock %}
+{% block email_inner %}
+<h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#2d4a32;font-family:'DM Sans',Arial,sans-serif;line-height:1.3;">Email address confirmed</h1>
+<p style="margin:0 0 16px;">Hello {{ user.display_name }},</p>
+<p style="margin:0 0 12px;color:#57534e;">Your account email is now:</p>
+<p style="margin:0 0 20px;font-size:17px;font-weight:700;color:#1c1917;word-break:break-all;">{{ user.email }}</p>
+<p style="margin:0;font-size:14px;color:#78716c;">Sign-in verification codes and account messages will be sent here. Thank you for keeping your details up to date.</p>
+{% endblock %}

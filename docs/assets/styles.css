@@ -1,4 +1,4 @@
-/* Panels public site (GitHub Pages) — earth / green, minimal, structured */
+/* Delhi Aam Nagrik public site — earth / green, minimal, structured */
 
 :root {
   /* Earth & forest greens */
@@ -401,6 +401,13 @@ a.identity:hover .title {
   color: var(--forest);
   letter-spacing: -0.01em;
   line-height: 1.25;
+}
+
+/* Registered society name in header (long line wraps cleanly) */
+.identity .title.legal-name {
+  font-size: clamp(0.7rem, 2.1vw, 0.88rem);
+  line-height: 1.28;
+  max-width: min(17.5rem, 46vw);
 }
 
 .subtitle {
@@ -1245,6 +1252,11 @@ button.submit {
 
   .title {
     font-size: 0.9375rem;
+  }
+
+  .identity .title.legal-name {
+    font-size: clamp(0.62rem, 3.1vw, 0.8rem);
+    max-width: min(15.5rem, 78vw);
   }
 
   .subtitle {

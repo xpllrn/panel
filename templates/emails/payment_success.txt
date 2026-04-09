@@ -1,12 +1,13 @@
-Subject: Payment Successful - ₹{{ amount }}
-
 Hello {{ user.display_name }},
 
-Your payment has been successfully received.
+Your payment has been recorded.
 
-Details:
-- Type: {{ payment_type }}
-- Amount: ₹{{ amount }}
-- Reference: {{ reference }}
+Type: {{ payment_type }}
+Amount: ₹{{ amount }}
+Reference: {{ reference }}
 
 Thank you for banking with {{ society_name }}.
+
+---
+{{ society_name }} · {{ support_email }} · {{ support_phone }}
+{{ site_url }}

@@ -31,6 +31,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.cooperative.member.ui.screens.AccountsScreen
 import com.cooperative.member.ui.screens.AboutScreen
+import com.cooperative.member.ui.screens.ChangePasswordScreen
 import com.cooperative.member.ui.screens.EditProfileScreen
 import com.cooperative.member.ui.screens.HomeScreen
 import com.cooperative.member.ui.screens.LoadingBox
@@ -80,7 +81,7 @@ fun MainShell(
                 tabs.forEach { tab ->
                     val selected = currentDestination?.hierarchy?.any {
                         when (tab.route) {
-                            "profile" -> it.route in setOf("profile", "profile_edit", "about")
+                            "profile" -> it.route in setOf("profile", "profile_edit", "profile_password", "about")
                             else -> it.route == tab.route
                         }
                     } == true
@@ -126,7 +127,8 @@ fun MainShell(
                 ProfileScreen(
                     vm = profileVm,
                     onAboutClick = { navController.navigate("about") },
-                    onEditProfileClick = { navController.navigate("profile_edit") }
+                    onEditProfileClick = { navController.navigate("profile_edit") },
+                    onChangePasswordClick = { navController.navigate("profile_password") }
                 )
             }
             composable("profile_edit") {
@@ -140,6 +142,12 @@ fun MainShell(
                 } else {
                     LoadingBox()
                 }
+            }
+            composable("profile_password") {
+                ChangePasswordScreen(
+                    vm = profileVm,
+                    onBack = { navController.popBackStack() }
+                )
             }
             composable("about") {
                 AboutScreen(onBack = { navController.popBackStack() })

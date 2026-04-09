@@ -13,8 +13,8 @@ android {
         applicationId = "com.panels.panel"
         minSdk = 24
         targetSdk = 34
-        versionCode = 7
-        versionName = "1.5.5"
+        versionCode = 9
+        versionName = "1.5.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

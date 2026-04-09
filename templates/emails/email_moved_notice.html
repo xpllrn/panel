@@ -1,0 +1,18 @@
+{% extends "emails/base_branded.html" %}
+{% block email_title %}Email address changed{% endblock %}
+{% block preheader_text %}Important security notice about your {{ society_name }} account{% endblock %}
+{% block email_inner %}
+<h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#2d4a32;font-family:'DM Sans',Arial,sans-serif;line-height:1.3;">Your sign-in email was changed</h1>
+<p style="margin:0 0 16px;">Hello {{ display_name }},</p>
+<p style="margin:0 0 16px;color:#57534e;">The email address on file for your {{ society_name }} account was updated.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0;border-collapse:collapse;background-color:#fff8f0;border-radius:12px;border:1px solid #e7e5e4;">
+    <tr>
+        <td style="padding:16px 18px;font-size:14px;color:#57534e;">New email on account</td>
+    </tr>
+    <tr>
+        <td style="padding:0 18px 18px;font-size:16px;color:#1c1917;font-weight:700;word-break:break-all;">{{ new_email }}</td>
+    </tr>
+</table>
+<p style="margin:0;font-size:14px;color:#57534e;">If you made this change, no further action is needed. Future sign-in codes and notices will go to the new address.</p>
+<p style="margin:16px 0 0;font-size:14px;color:#78716c;">If you did <strong>not</strong> authorise this, contact us right away: <a href="mailto:{{ support_email }}" style="color:#2d4a32;">{{ support_email }}</a> · <a href="tel:{{ support_phone_tel }}" style="color:#2d4a32;">{{ support_phone }}</a></p>
+{% endblock %}

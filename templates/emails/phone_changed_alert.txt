@@ -1,0 +1,11 @@
+Hello {{ user.display_name }},
+
+The mobile number on your {{ society_name }} profile was updated.
+
+Previous: {{ old_mobile|default:"(none)" }}
+New: {{ new_mobile|default:"(none)" }}
+
+If you did not make this change, contact {{ support_email }} or {{ support_phone }}.
+
+---
+{{ society_name }} · {{ site_url }}

@@ -1,18 +1,13 @@
-Subject: New Login to Your Account
-
 Hello {{ user.display_name }},
 
-A new login to your account was detected.
+A new login to your {{ society_name }} account was detected.
 
-Login Details:
-- Date: {{ timestamp|date:"d M Y" }}
-- Time: {{ timestamp|time:"h:i A" }}
-- IP Address: {{ ip_address }}
+Date: {{ timestamp|date:"d M Y" }}
+Time: {{ timestamp|time:"h:i A" }}
+IP address: {{ ip_address }}
 
-If this was you, no further action is needed. If you did not log in, please change your password immediately and contact our office.
-
-Best regards,
-{{ society_name }} Team
+If this was you, no action is needed. If not, change your password and contact us.
 
 ---
-This is an automated message. Please do not reply to this email.
+{{ society_name }} · {{ support_email }} · {{ support_phone }}
+{{ site_url }}

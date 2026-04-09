@@ -8,6 +8,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import com.cooperative.member.R
 
 class MemberFirebaseMessagingService : FirebaseMessagingService() {
 
@@ -34,7 +35,7 @@ class MemberFirebaseMessagingService : FirebaseMessagingService() {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Panels alerts",
+            getString(R.string.notifications_channel_name),
             NotificationManager.IMPORTANCE_HIGH
         )
         manager.createNotificationChannel(channel)

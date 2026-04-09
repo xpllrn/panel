@@ -1,0 +1,13 @@
+{% extends "emails/base_branded.html" %}
+{% block email_title %}Verify new email{% endblock %}
+{% block preheader_text %}Confirm your new email address for {{ society_name }}{% endblock %}
+{% block email_inner %}
+<h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#2d4a32;font-family:'DM Sans',Arial,sans-serif;line-height:1.3;text-align:center;">Confirm your new email</h1>
+<p style="margin:0 0 16px;text-align:center;">Hello {{ user.display_name }},</p>
+<p style="margin:0 0 20px;color:#57534e;text-align:center;">You asked to use this email address with your {{ society_name }} account. Enter this code in the app or website to confirm:</p>
+<div style="margin:24px auto;padding:20px 24px;max-width:340px;background-color:#e8f0e9;border-radius:12px;border:1px solid #7d9a81;text-align:center;">
+    <span style="font-family:'DM Sans',ui-monospace,monospace;font-size:28px;font-weight:700;letter-spacing:6px;color:#2d4a32;">{{ otp_code }}</span>
+</div>
+<p style="margin:0 0 8px;font-size:14px;color:#57534e;text-align:center;">This code expires in <strong style="color:#1c1917;">{{ expires_minutes }} minutes</strong>.</p>
+<p style="margin:16px 0 0;font-size:14px;color:#78716c;text-align:center;">If you did not request this change, ignore this email. Your account will stay on the current email.</p>
+{% endblock %}

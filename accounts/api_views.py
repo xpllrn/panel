@@ -19,7 +19,14 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.api_permissions import IsAdmin, IsMember
-from accounts.email_utils import send_email_change_otp_email, send_login_otp_email
+from accounts.email_utils import (
+    send_email_change_confirmed,
+    send_email_change_otp_email,
+    send_email_moved_security_notice,
+    send_login_otp_email,
+    send_password_change_alert,
+    send_phone_changed_alert,
+)
 from accounts.models import (
     AuditLog,
     FundAccount,
@@ -55,7 +62,7 @@ from accounts.serializers import (
     UserDetailSerializer,
     UserListSerializer,
 )
-from accounts.utils import apply_fund_allocations, log_action
+from accounts.utils import apply_fund_allocations, log_action, validate_password_strength
 
 # ========================================
 # Auth Endpoints
@@ -68,7 +75,7 @@ def api_info(request):
     """API information and available endpoints."""
     return Response(
         {
-            "name": "Panels API",
+            "name": "Delhi Aam Nagrik API",
             "version": "1.0.0",
             "auth": {
                 "login_start": "/api/v1/auth/login/",
@@ -76,6 +83,7 @@ def api_info(request):
                 "login_resend_otp": "/api/v1/auth/login/resend-otp/",
                 "refresh": "/api/v1/auth/refresh/",
                 "profile": "/api/v1/auth/profile/",
+                "profile_password": "/api/v1/auth/profile/password/",
             },
             "admin": {
                 "members": "/api/v1/admin/members/",
@@ -110,6 +118,7 @@ def auth_profile_update_view(request):
     """Update editable profile fields for authenticated user."""
     mobile_primary = request.data.get("mobile_primary")
     date_of_birth = request.data.get("date_of_birth")
+    previous_mobile = request.user.mobile_primary
 
     updated_fields = []
 
@@ -139,8 +148,41 @@ def auth_profile_update_view(request):
     except Exception as e:
         return Response({"success": False, "error": str(e)}, status=400)
 
+    if "mobile_primary" in updated_fields:
+        old_m = (previous_mobile or "").strip()
+        new_m = (request.user.mobile_primary or "").strip()
+        if old_m != new_m:
+            send_phone_changed_alert(request.user, previous_mobile or "", request.user.mobile_primary or "")
+
     serializer = MemberProfileSerializer(request.user)
     return Response({"success": True, "message": "Profile updated successfully.", "profile": serializer.data})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def auth_password_change_view(request):
+    """Change password for the authenticated member (mobile app / API)."""
+    current_password = request.data.get("current_password", "")
+    new_password = request.data.get("new_password", "")
+    if not current_password or not new_password:
+        return Response(
+            {"success": False, "error": "current_password and new_password are required."},
+            status=400,
+        )
+
+    user = request.user
+    if not user.check_password(current_password):
+        return Response({"success": False, "error": "Current password is incorrect."}, status=400)
+
+    is_valid, errors = validate_password_strength(new_password, user=user)
+    if not is_valid:
+        return Response({"success": False, "error": errors[0] if errors else "Invalid password."}, status=400)
+
+    user.set_password(new_password)
+    user.save(update_fields=["password"])
+    log_action(request, "update", "member", user.id, "Member changed password via API")
+    send_password_change_alert(user)
+    return Response({"success": True, "message": "Password updated successfully."})
 
 
 def _build_rate_limit_key(username, request):
@@ -2067,4 +2109,7 @@ def confirm_email_change_view(request):
         request.user.id,
         f"Email changed from {old_email} to {new_email}",
     )
+    if old_email and str(old_email).strip():
+        send_email_moved_security_notice(old_email, request.user.display_name, new_email)
+    send_email_change_confirmed(request.user)
     return Response({"success": True, "message": "Email updated successfully.", "email": request.user.email})

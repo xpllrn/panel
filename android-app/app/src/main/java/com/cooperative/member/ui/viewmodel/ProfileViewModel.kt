@@ -45,6 +45,11 @@ class ProfileViewModel(app: Application) : AndroidViewModel(app) {
     private val _pushUiMessage = MutableStateFlow<UiMessage?>(null)
     val pushUiMessage: StateFlow<UiMessage?> = _pushUiMessage.asStateFlow()
 
+    private val _passwordChangeMessage = MutableStateFlow<UiMessage?>(null)
+    val passwordChangeMessage: StateFlow<UiMessage?> = _passwordChangeMessage.asStateFlow()
+    private val _isChangingPassword = MutableStateFlow(false)
+    val isChangingPassword: StateFlow<Boolean> = _isChangingPassword.asStateFlow()
+
     val themeMode = session.themeMode
 
     init {
@@ -165,6 +170,39 @@ class ProfileViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearPersonalMessage() {
         _personalMessage.value = null
+    }
+
+    fun clearPasswordChangeMessage() {
+        _passwordChangeMessage.value = null
+    }
+
+    fun changePassword(currentPassword: String, newPassword: String, confirmPassword: String) {
+        when {
+            currentPassword.isBlank() || newPassword.isBlank() -> {
+                _passwordChangeMessage.value = UiMessage("Fill in all password fields.", true)
+                return
+            }
+            newPassword != confirmPassword -> {
+                _passwordChangeMessage.value = UiMessage("New password and confirmation do not match.", true)
+                return
+            }
+            newPassword.length < 8 -> {
+                _passwordChangeMessage.value = UiMessage("New password must be at least 8 characters.", true)
+                return
+            }
+        }
+        _isChangingPassword.value = true
+        _passwordChangeMessage.value = null
+        viewModelScope.launch {
+            repo.changePassword(currentPassword, newPassword)
+                .onSuccess {
+                    _passwordChangeMessage.value = UiMessage(it.message ?: "Password updated.", false)
+                }
+                .onFailure {
+                    _passwordChangeMessage.value = UiMessage(it.message ?: "Could not change password.", true)
+                }
+            _isChangingPassword.value = false
+        }
     }
 
     fun logout() {

@@ -1,0 +1,13 @@
+Hello {{ display_name }},
+
+The email address on your {{ society_name }} account was changed.
+
+New email on file: {{ new_email }}
+
+If you made this change, no action is needed.
+
+If you did not authorise this, contact us immediately:
+{{ support_email }} · {{ support_phone }}
+
+---
+{{ society_name }} · {{ site_url }}
