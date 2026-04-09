@@ -1,74 +1,77 @@
 package com.cooperative.member.ui.navigation
 
+import android.app.Application
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.runtime.key
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.cooperative.member.ui.screens.*
+import com.cooperative.member.CooperativeApp
+import com.cooperative.member.ui.screens.AccountDetailScreen
+import com.cooperative.member.ui.screens.LoanDetailScreen
+import com.cooperative.member.ui.screens.LoginScreen
+import com.cooperative.member.ui.viewmodel.AccountsViewModel
+import com.cooperative.member.ui.viewmodel.LoansViewModel
 import com.cooperative.member.ui.viewmodel.LoginViewModel
 
 @Composable
 fun AppNavigation() {
-    val navController = rememberNavController()
-    val loginViewModel: LoginViewModel = hiltViewModel()
-    val isLoggedIn by loginViewModel.isLoggedIn.collectAsState()
-    
-    NavHost(
-        navController = navController,
-        startDestination = if (isLoggedIn) "main" else "login"
-    ) {
-        composable("login") {
-            LoginScreen(
-                navController = navController,
-                viewModel = loginViewModel
-            )
-        }
-        
-        composable("main") {
-            MainScreen(
-                parentNavController = navController,
-                onLogout = {
-                    loginViewModel.logout()
-                    navController.navigate("login") {
-                        popUpTo("main") { inclusive = true }
+    val app = LocalContext.current.applicationContext as CooperativeApp
+    val isLoggedIn by app.session.isLoggedIn.collectAsState(initial = false)
+
+    val loginVm: LoginViewModel = viewModel()
+    val accountsVm: AccountsViewModel = viewModel()
+    val loansVm: LoansViewModel = viewModel()
+
+    key(isLoggedIn) {
+        val navController = rememberNavController()
+        val start = if (isLoggedIn) "main" else "login"
+
+        NavHost(navController = navController, startDestination = start) {
+            composable("login") {
+                LoginScreen(loginVm)
+            }
+
+            composable("main") {
+                MainShell(
+                    onAccountClick = { id ->
+                        navController.navigate("account_detail/$id")
+                    },
+                    onLoanClick = { id ->
+                        navController.navigate("loan_detail/$id")
                     }
-                }
-            )
-        }
-        
-        composable(
-            route = "account_detail/{accountId}",
-            arguments = listOf(navArgument("accountId") { type = NavType.IntType })
-        ) { backStackEntry ->
-            val accountId = backStackEntry.arguments?.getInt("accountId") ?: 0
-            AccountDetailScreen(
-                navController = navController,
-                accountId = accountId
-            )
-        }
-        
-        composable(
-            route = "loan_detail/{loanId}",
-            arguments = listOf(navArgument("loanId") { type = NavType.IntType })
-        ) { backStackEntry ->
-            val loanId = backStackEntry.arguments?.getInt("loanId") ?: 0
-            LoanDetailScreen(
-                navController = navController,
-                loanId = loanId
-            )
-        }
-        
-        composable("transactions") {
-            TransactionsScreen(navController = navController)
-        }
-        
-        composable("settings") {
-            SettingsScreen()
+                )
+            }
+
+            composable(
+                "account_detail/{id}",
+                arguments = listOf(navArgument("id") { type = NavType.IntType })
+            ) { entry ->
+                val id = entry.arguments?.getInt("id") ?: return@composable
+                AccountDetailScreen(
+                    accountId = id,
+                    vm = accountsVm,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(
+                "loan_detail/{id}",
+                arguments = listOf(navArgument("id") { type = NavType.IntType })
+            ) { entry ->
+                val id = entry.arguments?.getInt("id") ?: return@composable
+                LoanDetailScreen(
+                    loanId = id,
+                    vm = loansVm,
+                    onBack = { navController.popBackStack() }
+                )
+            }
         }
     }
 }

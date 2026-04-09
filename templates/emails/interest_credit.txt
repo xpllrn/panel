@@ -1,0 +1,17 @@
+Subject: Interest Credited - ₹{{ interest_amount }}
+
+Hello {{ user.display_name }},
+
+Interest has been credited to your account.
+
+Account Details:
+- Account: {{ account.account_type|title }} ({{ account.account_number }})
+- Interest Credited: ₹{{ interest_amount }}
+
+Thank you for banking with {{ society_name }}.
+
+Best regards,
+{{ society_name }} Team
+
+---
+This is an automated message. Please do not reply to this email.

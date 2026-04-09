@@ -254,6 +254,59 @@ class User(AbstractUser):
         """Check if user can manage other users"""
         return self.is_superuser or self.role == "admin"
 
+    # 14. Notification & Verification Settings
+    email_notifications = models.BooleanField(default=True, verbose_name="Email Notifications")
+    sms_notifications = models.BooleanField(default=False, verbose_name="SMS Notifications")
+
+    # Email verification
+    email_verified = models.BooleanField(default=False, verbose_name="Email Verified")
+    email_verification_token = models.CharField(max_length=100, blank=True, null=True)
+    email_verification_sent_at = models.DateTimeField(blank=True, null=True)
+
+    def send_verification_email(self):
+        """Send email verification link to user."""
+        from accounts.email_utils import send_verification_email
+
+        return send_verification_email(self)
+
+    def verify_email(self, token):
+        """Verify email with provided token."""
+        if self.email_verification_token == token and not self.email_verified:
+            self.email_verified = True
+            self.email_verification_token = None
+            self.email_verification_sent_at = None
+            self.save(update_fields=["email_verified", "email_verification_token", "email_verification_sent_at"])
+            return True
+        return False
+
+
+class Notification(models.Model):
+    """In-app notifications for members."""
+
+    TYPE_CHOICES = [
+        ("general", "General"),
+        ("transaction", "Transaction"),
+        ("loan", "Loan"),
+        ("system", "System"),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    notification_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default="general", db_index=True)
+    is_read = models.BooleanField(default=False, db_index=True)
+    read_at = models.DateTimeField(blank=True, null=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Notification"
+        verbose_name_plural = "Notifications"
+
+    def __str__(self):
+        return f"{self.user.display_name} - {self.title}"
+
 
 class MemberAccount(models.Model):
     """

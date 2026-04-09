@@ -1,365 +1,244 @@
 package com.cooperative.member.ui.screens
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.navigation.NavController
-import com.cooperative.member.data.model.LoanDetail
-import com.cooperative.member.ui.viewmodel.LoanViewModel
-import com.cooperative.member.util.Resource
+import com.cooperative.member.data.LoanDetailResponse
+import com.cooperative.member.data.LoanRepayment
+import com.cooperative.member.ui.theme.CashGreen
+import com.cooperative.member.ui.theme.Red400
+import com.cooperative.member.ui.viewmodel.LoanDetailState
+import com.cooperative.member.ui.viewmodel.LoansViewModel
+import com.cooperative.member.util.Fmt
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoanDetailScreen(
-    navController: NavController,
     loanId: Int,
-    viewModel: LoanViewModel = hiltViewModel()
+    vm: LoansViewModel,
+    onBack: () -> Unit
 ) {
-    val loanDetailState by viewModel.loanDetailState.collectAsState()
-    
-    LaunchedEffect(loanId) {
-        viewModel.loadLoanDetail(loanId)
+    LaunchedEffect(loanId) { vm.loadDetail(loanId) }
+
+    val state by vm.detail.collectAsState()
+
+    when (val s = state) {
+        is LoanDetailState.Loading -> LoadingBox()
+        is LoanDetailState.Error -> ErrorBox(s.message) { vm.loadDetail(loanId) }
+        is LoanDetailState.Ready -> LoanContent(s.detail, onBack)
     }
-    
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Loan Details") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.navigateUp() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+}
+
+@Composable
+private fun LoanContent(d: LoanDetailResponse, onBack: () -> Unit) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 24.dp)
+    ) {
+        // Header
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 4.dp, top = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+                Text(
+                    d.loan_type.replace("_", " ").replaceFirstChar { it.uppercase() } + " Loan",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onBackground
                 )
-            )
+            }
         }
-    ) { paddingValues ->
-        when (val state = loanDetailState) {
-            is Resource.Loading -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("Loading loan details...")
-                }
-            }
-            is Resource.Success -> {
-                LoanDetailContent(
-                    loanDetail = state.data!!,
-                    modifier = Modifier.padding(paddingValues)
+
+        // Outstanding hero
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    Fmt.rupee(d.outstanding_balance),
+                    style = MaterialTheme.typography.displayMedium,
+                    color = Red400
+                )
+                Text(
+                    "Outstanding Balance",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
                 )
             }
-            is Resource.Error -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = state.message ?: "Error loading loan",
-                            color = MaterialTheme.colorScheme.error
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = { viewModel.loadLoanDetail(loanId) }) {
-                            Text("Retry")
-                        }
+        }
+
+        // EMI + Interest cards
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                HighlightCard("EMI", Fmt.rupee(d.emi_amount), CashGreen, Modifier.weight(1f))
+                HighlightCard("Interest", "${d.interest_rate}%", MaterialTheme.colorScheme.onBackground, Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+
+        // Info card
+        item {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    InfoRow("Loan Number", d.loan_number)
+                    InfoRow("Principal", Fmt.rupee(d.principal_amount))
+                    InfoRow("Tenure", "${d.tenure_months} months")
+                    InfoRow("Status", (d.status_display ?: d.status).replaceFirstChar { it.uppercase() })
+                    if (!d.interest_type.isNullOrBlank()) InfoRow("Interest Type", d.interest_type)
+                    if (!d.application_date.isNullOrBlank()) InfoRow("Applied", formatDate(d.application_date))
+                    if (!d.approval_date.isNullOrBlank()) InfoRow("Approved", formatDate(d.approval_date))
+                    if (!d.disbursement_date.isNullOrBlank()) InfoRow("Disbursed", formatDate(d.disbursement_date))
+                    if (!d.first_emi_date.isNullOrBlank()) InfoRow("First EMI", formatDate(d.first_emi_date))
+                    if (!d.processing_fee.isNullOrBlank()) InfoRow("Processing Fee", Fmt.rupee(d.processing_fee))
+                    if (!d.total_payable.isNullOrBlank()) InfoRow("Total Payable", Fmt.rupee(d.total_payable))
+                    if (!d.total_paid.isNullOrBlank()) InfoRow("Total Paid", Fmt.rupee(d.total_paid))
+                    if (d.emis_paid != null && d.total_emis != null) {
+                        InfoRow("EMIs Paid", "${d.emis_paid} / ${d.total_emis}")
                     }
+                    if (!d.purpose.isNullOrBlank()) InfoRow("Purpose", d.purpose)
                 }
             }
-            null -> {}
+            Spacer(Modifier.height(16.dp))
+        }
+
+        // Repayment schedule
+        if (d.repayments.isNotEmpty()) {
+            item { SectionHeader("Repayment Schedule") }
+            items(d.repayments) { rep ->
+                RepaymentRow(rep)
+            }
         }
     }
 }
 
 @Composable
-fun LoanDetailContent(
-    loanDetail: LoanDetail,
+private fun HighlightCard(
+    label: String,
+    value: String,
+    valueColor: androidx.compose.ui.graphics.Color,
     modifier: Modifier = Modifier
 ) {
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant
     ) {
-        // Loan Info Card
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = loanDetail.loan.loan_type.uppercase(),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = loanDetail.loan.loan_number,
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text(
-                                text = "Outstanding",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            Text(
-                                text = "₹${loanDetail.loan.outstanding_balance}",
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = MaterialTheme.colorScheme.error,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = "EMI Amount",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            Text(
-                                text = "₹${loanDetail.loan.emi_amount}",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Divider()
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Principal:", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            "₹${loanDetail.loan.principal_amount}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Interest Rate:", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            "${loanDetail.loan.interest_rate}%",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Tenure:", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            "${loanDetail.loan.tenure_months} months",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    
-                    if (loanDetail.loan.disbursement_date != null) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Disbursement:", style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                loanDetail.loan.disbursement_date,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Status:", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            loanDetail.loan.status.uppercase(),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
-            }
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                value,
+                style = MaterialTheme.typography.headlineSmall,
+                color = valueColor
+            )
         }
-        
-        // Repayment Schedule
-        if (loanDetail.repayment_schedule?.isNotEmpty() == true) {
-            item {
+    }
+}
+
+@Composable
+private fun RepaymentRow(rep: LoanRepayment) {
+    val isPaid = rep.payment_status?.lowercase()?.let {
+        it == "paid" || it == "completed"
+    } ?: false
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
                 Text(
-                    text = "Repayment Schedule",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(vertical = 8.dp)
+                    "Installment #${rep.installment_number}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground
                 )
-            }
-            
-            items(loanDetail.repayment_schedule ?: emptyList()) { emi ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = when (emi.status) {
-                            "paid" -> MaterialTheme.colorScheme.primaryContainer
-                            "overdue" -> MaterialTheme.colorScheme.errorContainer
-                            else -> MaterialTheme.colorScheme.surfaceVariant
-                        }
+                Text(
+                    "Due: ${formatDate(rep.due_date)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (!rep.paid_date.isNullOrBlank()) {
+                    Text(
+                        "Paid: ${formatDate(rep.paid_date)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = CashGreen
                     )
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "EMI #${emi.installment_number}",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = emi.status.uppercase(),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = when (emi.status) {
-                                    "paid" -> MaterialTheme.colorScheme.primary
-                                    "overdue" -> MaterialTheme.colorScheme.error
-                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                }
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Due Date:", style = MaterialTheme.typography.bodySmall)
-                            Text(
-                                emi.due_date,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("EMI Amount:", style = MaterialTheme.typography.bodySmall)
-                            Text(
-                                "₹${emi.total_emi}",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Principal:", style = MaterialTheme.typography.bodySmall)
-                            Text(
-                                "₹${emi.principal_component}",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Interest:", style = MaterialTheme.typography.bodySmall)
-                            Text(
-                                "₹${emi.interest_component}",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        
-                        if (emi.payment_date != null) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Divider()
-                            Spacer(modifier = Modifier.height(4.dp))
-                            
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Paid On:", style = MaterialTheme.typography.bodySmall)
-                                Text(
-                                    emi.payment_date,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            
-                            if (emi.amount_paid != null) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Amount Paid:", style = MaterialTheme.typography.bodySmall)
-                                    Text(
-                                        "₹${emi.amount_paid}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
-                            
-                            if (emi.late_penalty != null && emi.late_penalty != "0.00") {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Late Penalty:", style = MaterialTheme.typography.bodySmall)
-                                    Text(
-                                        "₹${emi.late_penalty}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.error
-                                    )
-                                }
-                            }
-                        }
-                    }
                 }
+            }
+            Spacer(Modifier.width(8.dp))
+            Column(horizontalAlignment = Alignment.End) {
+                val amount = rep.amount_due ?: rep.amount_paid ?: "0"
+                Text(
+                    Fmt.rupee(amount),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = if (isPaid) CashGreen else MaterialTheme.colorScheme.onBackground
+                )
+                Text(
+                    if (isPaid) "Paid" else (rep.payment_status ?: "Pending").replaceFirstChar { it.uppercase() },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isPaid) CashGreen else MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

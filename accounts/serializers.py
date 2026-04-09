@@ -5,10 +5,10 @@ from accounts.models import (
     FundAccount,
     FundAllocationRule,
     FundTransaction,
-    InterestPayout,
     Loan,
     LoanRepayment,
     MemberAccount,
+    Notification,
     Receipt,
     User,
 )
@@ -586,53 +586,19 @@ class AuditLogSerializer(serializers.ModelSerializer):
         return obj.user.display_name if obj.user else "System"
 
 
-# ========================================
-# Interest Payout Serializer
-# ========================================
-
-
-class InterestPayoutSerializer(serializers.ModelSerializer):
-    """Interest payout serializer."""
-
-    account_number = serializers.CharField(source="account.account_number", read_only=True)
+class NotificationSerializer(serializers.ModelSerializer):
+    """Member notification serializer."""
 
     class Meta:
-        model = InterestPayout
+        model = Notification
         fields = [
             "id",
-            "account",
-            "account_number",
-            "amount",
-            "period_start",
-            "period_end",
-            "created_by",
+            "title",
+            "message",
+            "notification_type",
+            "is_read",
+            "read_at",
+            "metadata",
             "created_at",
         ]
-        read_only_fields = ["id", "created_by", "created_at"]
-
-
-# ========================================
-# Financial Summary Serializer
-# ========================================
-
-
-class FinancialSummarySerializer(serializers.Serializer):
-    """Serializer for the financial summary response."""
-
-    loan_interest_income = serializers.DecimalField(max_digits=15, decimal_places=2)
-    principal_collected = serializers.DecimalField(max_digits=15, decimal_places=2)
-    penalty_income = serializers.DecimalField(max_digits=15, decimal_places=2)
-    processing_fees = serializers.DecimalField(max_digits=15, decimal_places=2)
-    deposit_interest_expense = serializers.DecimalField(max_digits=15, decimal_places=2)
-    fund_allocations = serializers.DecimalField(max_digits=15, decimal_places=2)
-    gross_revenue = serializers.DecimalField(max_digits=15, decimal_places=2)
-    total_expenses = serializers.DecimalField(max_digits=15, decimal_places=2)
-    net_profit = serializers.DecimalField(max_digits=15, decimal_places=2)
-    active_loans_count = serializers.IntegerField()
-    total_disbursed = serializers.DecimalField(max_digits=15, decimal_places=2)
-    total_loans_outstanding = serializers.DecimalField(max_digits=15, decimal_places=2)
-    total_overdue = serializers.DecimalField(max_digits=15, decimal_places=2)
-    npa_count = serializers.IntegerField()
-    recovery_rate = serializers.FloatField()
-    monthly_interest_liability = serializers.DecimalField(max_digits=15, decimal_places=2)
-    deposit_by_type = serializers.DictField()
+        read_only_fields = fields

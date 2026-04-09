@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>New Login Alert - {{ society_name }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #2196F3; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; background: #f9f9f9; }
+        .details-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        .details-table td { padding: 8px 12px; border-bottom: 1px solid #ddd; }
+        .details-table td:first-child { font-weight: bold; width: 40%; color: #555; }
+        .footer { padding: 20px; text-align: center; font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{{ society_name }}</h1>
+        </div>
+        <div class="content">
+            <h2>New Login Detected</h2>
+            <p>Hello {{ user.display_name }},</p>
+            <p>A new login to your account was detected.</p>
+            <table class="details-table">
+                <tr>
+                    <td>Date</td>
+                    <td>{{ timestamp|date:"d M Y" }}</td>
+                </tr>
+                <tr>
+                    <td>Time</td>
+                    <td>{{ timestamp|time:"h:i A" }}</td>
+                </tr>
+                <tr>
+                    <td>IP Address</td>
+                    <td>{{ ip_address }}</td>
+                </tr>
+            </table>
+            <p>If this was you, no further action is needed. If you did not log in, please change your password immediately and contact our office.</p>
+        </div>
+        <div class="footer">
+            <p>This is an automated message from {{ society_name }}. Please do not reply to this email.</p>
+        </div>
+    </div>
+</body>
+</html>

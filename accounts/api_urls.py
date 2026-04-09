@@ -83,4 +83,20 @@ urlpatterns = [
     path("member/loans/<int:loan_id>/", api_views.member_loans_detail, name="member_loans_detail"),
     # Member: Transactions
     path("member/transactions/", api_views.member_transactions_list, name="member_transactions_list"),
+    # Member: Notifications
+    path("member/notifications/", api_views.member_notifications_list, name="member_notifications_list"),
+    path(
+        "member/notifications/<int:notification_id>/read/",
+        api_views.member_notifications_mark_read,
+        name="member_notifications_mark_read",
+    ),
+    path(
+        "member/notifications/mark-all-read/",
+        api_views.member_notifications_mark_all_read,
+        name="member_notifications_mark_all_read",
+    ),
+    # Email & Notifications
+    path("email/preferences/", api_views.email_preferences_view, name="email_preferences"),
+    path("email/send-verification/", api_views.send_verification_email_view, name="send_verification_email"),
+    path("email/verify/", api_views.verify_email_view, name="verify_email"),
 ]

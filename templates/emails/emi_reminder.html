@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>EMI Due Reminder - {{ society_name }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #2196F3; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; background: #f9f9f9; }
+        .details-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        .details-table td { padding: 8px 12px; border-bottom: 1px solid #ddd; }
+        .details-table td:first-child { font-weight: bold; width: 40%; color: #555; }
+        .footer { padding: 20px; text-align: center; font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{{ society_name }}</h1>
+        </div>
+        <div class="content">
+            <h2>EMI Payment Reminder</h2>
+            <p>Hello {{ user.display_name }},</p>
+            <p>This is a friendly reminder that your EMI payment is due in <strong>{{ days_until_due }} days</strong>.</p>
+            <table class="details-table">
+                <tr>
+                    <td>Loan Number</td>
+                    <td>{{ loan.loan_number }}</td>
+                </tr>
+                <tr>
+                    <td>Loan Type</td>
+                    <td>{{ loan.loan_type|title }}</td>
+                </tr>
+                <tr>
+                    <td>EMI Amount</td>
+                    <td>₹{{ emi_amount }}</td>
+                </tr>
+                <tr>
+                    <td>Outstanding Balance</td>
+                    <td>₹{{ loan.outstanding_balance }}</td>
+                </tr>
+            </table>
+            <p>Please ensure timely payment to avoid late penalties.</p>
+            <p>For any assistance, please contact our office.</p>
+        </div>
+        <div class="footer">
+            <p>This is an automated message from {{ society_name }}. Please do not reply to this email.</p>
+        </div>
+    </div>
+</body>
+</html>

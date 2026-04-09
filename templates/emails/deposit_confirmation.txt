@@ -1,0 +1,17 @@
+Subject: Deposit Confirmation - ₹{{ amount }}
+
+Hello {{ user.display_name }},
+
+Your deposit has been successfully processed.
+
+Deposit Details:
+- Account: {{ account.account_type|title }} ({{ account.account_number }})
+- Amount: ₹{{ amount }}
+- Receipt Number: {{ receipt.receipt_number }}
+- Date: {{ receipt.created_at|date:"d M Y" }}
+- New Balance: ₹{{ receipt.balance_after }}
+
+Thank you for banking with {{ society_name }}.
+
+Best regards,
+{{ society_name }} Team

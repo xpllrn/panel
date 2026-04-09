@@ -3,9 +3,11 @@ from decimal import Decimal
 
 from django.db import transaction
 from django.db.models import F, Sum
+from django.utils import timezone
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.api_permissions import IsAdmin, IsMember
@@ -18,6 +20,7 @@ from accounts.models import (
     Loan,
     LoanRepayment,
     MemberAccount,
+    Notification,
     Receipt,
     User,
 )
@@ -33,13 +36,14 @@ from accounts.serializers import (
     MemberAccountCreateSerializer,
     MemberAccountSerializer,
     MemberProfileSerializer,
+    NotificationSerializer,
     ReceiptCreateSerializer,
     ReceiptSerializer,
     UserCreateSerializer,
     UserDetailSerializer,
     UserListSerializer,
 )
-from accounts.utils import apply_fund_allocations, log_action
+from accounts.utils import apply_fund_allocations, create_member_notification, log_action
 
 # ========================================
 # Auth Endpoints
@@ -424,6 +428,20 @@ def admin_receipts_create(request):
                 f"Created receipt via API: {receipt.receipt_number} - {txn_type} ₹{amount}",
             )
 
+            create_member_notification(
+                user=account.user,
+                title="Transaction Update",
+                message=f"{txn_type.title()} of ₹{amount} posted to account {account.account_number}.",
+                notification_type="transaction",
+                metadata={
+                    "receipt_id": receipt.id,
+                    "receipt_number": receipt.receipt_number,
+                    "account_id": account.id,
+                    "transaction_type": txn_type,
+                    "amount": str(amount),
+                },
+            )
+
         return Response(ReceiptSerializer(receipt).data, status=status.HTTP_201_CREATED)
     except MemberAccount.DoesNotExist:
         return Response({"error": "Account not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -656,6 +674,14 @@ def admin_loans_approve(request, loan_id):
     loan.save()
     LoanRepayment.objects.bulk_create(repayments)
 
+    create_member_notification(
+        user=loan.user,
+        title="Loan Approved",
+        message=f"Your loan {loan.loan_number} has been approved and is now active.",
+        notification_type="loan",
+        metadata={"loan_id": loan.id, "loan_number": loan.loan_number, "status": loan.status},
+    )
+
     log_action(request, "approve", "loan", loan.id, f"Approved loan via API: {loan.loan_number}")
     return Response(LoanDetailSerializer(loan).data)
 
@@ -778,6 +804,20 @@ def admin_loans_record_emi(request, loan_id):
                 "loan",
                 loan.id,
                 f"Recorded EMI #{installment_number} via API: ₹{amount} for {loan.loan_number}",
+            )
+
+            create_member_notification(
+                user=loan.user,
+                title="EMI Payment Recorded",
+                message=f"EMI #{installment_number} of ₹{amount} recorded for {loan.loan_number}.",
+                notification_type="loan",
+                metadata={
+                    "loan_id": loan.id,
+                    "loan_number": loan.loan_number,
+                    "installment_number": int(installment_number),
+                    "amount_paid": str(amount),
+                    "penalty": str(penalty),
+                },
             )
 
         return Response(
@@ -1238,6 +1278,59 @@ def member_transactions_list(request):
     return paginator.get_paginated_response(ReceiptSerializer(page, many=True).data)
 
 
+@api_view(["GET"])
+@permission_classes([IsMember])
+def member_notifications_list(request):
+    """List member notifications with unread count."""
+    qs = Notification.objects.filter(user=request.user).order_by("-created_at")
+
+    unread_only = request.query_params.get("unread", "")
+    if unread_only.lower() in ["1", "true", "yes"]:
+        qs = qs.filter(is_read=False)
+
+    from rest_framework.pagination import PageNumberPagination
+
+    unread_count = Notification.objects.filter(user=request.user, is_read=False).count()
+    paginator = PageNumberPagination()
+    page = paginator.paginate_queryset(qs, request)
+    data = NotificationSerializer(page, many=True).data
+
+    return Response(
+        {
+            "count": qs.count(),
+            "next": paginator.get_next_link(),
+            "previous": paginator.get_previous_link(),
+            "unread_count": unread_count,
+            "results": data,
+        }
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsMember])
+def member_notifications_mark_read(request, notification_id):
+    """Mark a single notification as read."""
+    try:
+        notification = Notification.objects.get(id=notification_id, user=request.user)
+    except Notification.DoesNotExist:
+        return Response({"error": "Notification not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    if not notification.is_read:
+        notification.is_read = True
+        notification.read_at = timezone.now()
+        notification.save(update_fields=["is_read", "read_at"])
+
+    return Response({"success": True})
+
+
+@api_view(["POST"])
+@permission_classes([IsMember])
+def member_notifications_mark_all_read(request):
+    """Mark all member notifications as read."""
+    Notification.objects.filter(user=request.user, is_read=False).update(is_read=True, read_at=timezone.now())
+    return Response({"success": True})
+
+
 # ========================================
 # Admin: Interest Posting
 # ========================================
@@ -1293,16 +1386,20 @@ def admin_post_interest(request):
                 created_by=request.user,
             )
 
-            # Create receipt
-            last_receipt = Receipt.objects.order_by("-id").first()
-            if last_receipt and last_receipt.receipt_number:
+            # Create receipt with consistent RCP-YYYY-NNNNN format
+            year = today.year
+            last_receipt = (
+                Receipt.objects.filter(receipt_number__startswith=f"RCP-{year}-").order_by("-receipt_number").first()
+            )
+            if last_receipt:
                 try:
-                    last_num = int(last_receipt.receipt_number.replace("RCT", ""))
-                    new_receipt_number = f"RCT{last_num + 1:06d}"
+                    last_seq = int(last_receipt.receipt_number.split("-")[-1])
+                    next_seq = last_seq + 1
                 except (ValueError, IndexError):
-                    new_receipt_number = f"RCT{Receipt.objects.count() + 1:06d}"
+                    next_seq = 1
             else:
-                new_receipt_number = "RCT000001"
+                next_seq = 1
+            new_receipt_number = f"RCP-{year}-{next_seq:05d}"
 
             Receipt.objects.create(
                 user=account.user,
@@ -1396,3 +1493,84 @@ def admin_distribute_dividend(request):
             "member_count": member_count,
         }
     )
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def email_preferences_view(request):
+    """Get or update user email preferences."""
+    if request.method == "GET":
+        return Response(
+            {
+                "email_notifications": request.user.email_notifications,
+                "sms_notifications": request.user.sms_notifications,
+                "email_verified": request.user.email_verified,
+                "email": request.user.email,
+            }
+        )
+
+    elif request.method == "POST":
+        email_notifications = request.data.get("email_notifications")
+        sms_notifications = request.data.get("sms_notifications")
+
+        if email_notifications is not None:
+            request.user.email_notifications = bool(email_notifications)
+
+        if sms_notifications is not None:
+            request.user.sms_notifications = bool(sms_notifications)
+
+        request.user.save(update_fields=["email_notifications", "sms_notifications"])
+
+        return Response(
+            {
+                "success": True,
+                "message": "Email preferences updated successfully.",
+                "email_notifications": request.user.email_notifications,
+                "sms_notifications": request.user.sms_notifications,
+            }
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def send_verification_email_view(request):
+    """Send email verification link to user."""
+    if request.user.email_verified:
+        return Response({"success": False, "error": "Email is already verified."}, status=400)
+
+    if not request.user.email:
+        return Response(
+            {"success": False, "error": "No email address found. Please update your profile with an email address."},
+            status=400,
+        )
+
+    success = request.user.send_verification_email()
+
+    if success:
+        return Response({"success": True, "message": "Verification email sent successfully."})
+    else:
+        return Response(
+            {"success": False, "error": "Failed to send verification email. Please try again later."}, status=500
+        )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def verify_email_view(request):
+    """Verify email with token."""
+    token = request.data.get("token")
+
+    if not token:
+        return Response({"success": False, "error": "Verification token is required."}, status=400)
+
+    try:
+        user = User.objects.get(email_verification_token=token)
+        success = user.verify_email(token)
+
+        if success:
+            return Response({"success": True, "message": "Email verified successfully!"})
+        else:
+            return Response({"success": False, "error": "Invalid or expired verification token."}, status=400)
+
+    except User.DoesNotExist:
+        return Response({"success": False, "error": "Invalid verification token."}, status=400)

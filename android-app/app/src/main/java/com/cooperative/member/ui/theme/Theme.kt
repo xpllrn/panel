@@ -3,6 +3,7 @@ package com.cooperative.member.ui.theme
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -10,101 +11,89 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
-import com.cooperative.member.data.preferences.ThemeMode
 
-private val DarkColorScheme = darkColorScheme(
-    primary = DarkPrimary,
-    onPrimary = Color.White,
-    primaryContainer = DarkSurfaceVariant,
-    onPrimaryContainer = Color.White,
-    secondary = DarkGreen,
-    onSecondary = Color.White,
-    background = DarkBackground,
-    onBackground = Color.White,
+private val LightColors = lightColorScheme(
+    primary = CashGreen,
+    onPrimary = White,
+    primaryContainer = CashGreenLight,
+    onPrimaryContainer = CashGreenDark,
+    secondary = Gray700,
+    onSecondary = White,
+    background = White,
+    onBackground = Gray900,
+    surface = White,
+    onSurface = Gray900,
+    surfaceVariant = Gray100,
+    onSurfaceVariant = Gray500,
+    error = Red500,
+    onError = White,
+    errorContainer = Color(0xFFFEE2E2),
+    onErrorContainer = Red600,
+    outline = Gray300,
+    outlineVariant = Gray200
+)
+
+private val DarkColors = darkColorScheme(
+    primary = DarkGreen,
+    onPrimary = Black,
+    primaryContainer = Color(0xFF003D0F),
+    onPrimaryContainer = DarkGreen,
+    secondary = Gray400,
+    onSecondary = Black,
+    background = DarkBg,
+    onBackground = Gray100,
     surface = DarkSurface,
-    onSurface = Color.White,
-    surfaceVariant = DarkSurfaceVariant,
-    onSurfaceVariant = Color(0xFFB0B0B0),
-    error = DarkRed,
-    onError = Color.White,
-    errorContainer = Color(0xFF5C1A1A),
-    onErrorContainer = Color(0xFFFFB4AB)
+    onSurface = Gray100,
+    surfaceVariant = DarkCard,
+    onSurfaceVariant = Gray400,
+    error = Red400,
+    onError = Black,
+    errorContainer = Color(0xFF3B1111),
+    onErrorContainer = Red400,
+    outline = Gray600,
+    outlineVariant = Gray700
 )
 
-private val AmoledColorScheme = darkColorScheme(
-    primary = AmoledPrimary,
-    onPrimary = Color.White,
-    primaryContainer = AmoledSurfaceVariant,
-    onPrimaryContainer = Color.White,
-    secondary = AmoledGreen,
-    onSecondary = Color.White,
-    background = AmoledBackground,
-    onBackground = Color.White,
-    surface = AmoledSurface,
-    onSurface = Color.White,
-    surfaceVariant = AmoledSurfaceVariant,
-    onSurfaceVariant = Color(0xFFB0B0B0),
-    error = AmoledRed,
-    onError = Color.White,
-    errorContainer = Color(0xFF3A0000),
-    onErrorContainer = Color(0xFFFFB4AB)
-)
-
-private val LightColorScheme = lightColorScheme(
-    primary = BankBlue,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFE3F2FD),
-    onPrimaryContainer = BankBlueDark,
-    secondary = BankGreen,
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFE8F5E9),
-    onSecondaryContainer = Color(0xFF1B5E20),
-    background = BankLightGray,
-    onBackground = Color(0xFF1C1B1F),
-    surface = BankWhite,
-    onSurface = Color(0xFF1C1B1F),
-    surfaceVariant = Color(0xFFF8F9FA),
-    onSurfaceVariant = BankGray,
-    error = BankRed,
-    onError = Color.White,
-    errorContainer = Color(0xFFFFDAD6),
-    onErrorContainer = Color(0xFF410002),
-    outline = BankDivider
+private val AppShapes = Shapes(
+    extraSmall = RoundedCornerShape(8.dp),
+    small = RoundedCornerShape(12.dp),
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(28.dp)
 )
 
 @Composable
-fun CooperativeMemberTheme(
-    themeMode: ThemeMode = ThemeMode.SYSTEM,
+fun CooperativeTheme(
+    themeMode: String = "dark",
     content: @Composable () -> Unit
 ) {
-    val systemInDarkTheme = isSystemInDarkTheme()
-    
-    val colorScheme = when (themeMode) {
-        ThemeMode.LIGHT -> LightColorScheme
-        ThemeMode.DARK -> DarkColorScheme
-        ThemeMode.AMOLED -> AmoledColorScheme
-        ThemeMode.SYSTEM -> if (systemInDarkTheme) DarkColorScheme else LightColorScheme
+    val systemDark = isSystemInDarkTheme()
+    val useDark = when (themeMode) {
+        "light" -> false
+        "dark" -> true
+        else -> systemDark
     }
-    
-    val isDark = when (themeMode) {
-        ThemeMode.LIGHT -> false
-        ThemeMode.DARK, ThemeMode.AMOLED -> true
-        ThemeMode.SYSTEM -> systemInDarkTheme
-    }
-    
+    val colors = if (useDark) DarkColors else LightColors
+
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.primary.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !isDark
+            window.statusBarColor = colors.background.toArgb()
+            window.navigationBarColor = colors.background.toArgb()
+            val ctrl = WindowCompat.getInsetsController(window, view)
+            ctrl.isAppearanceLightStatusBars = !useDark
+            ctrl.isAppearanceLightNavigationBars = !useDark
         }
     }
 
     MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
+        colorScheme = colors,
+        typography = AppTypography,
+        shapes = AppShapes,
         content = content
     )
 }

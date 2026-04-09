@@ -2,11 +2,14 @@
 Utility functions for the accounts app.
 """
 
+import logging
 from decimal import Decimal
 
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db.models import Sum
+
+logger = logging.getLogger(__name__)
 
 
 def split_full_name(full_name):
@@ -326,12 +329,31 @@ def apply_fund_allocations(request, trigger_event, total_amount, source_descript
                         f"Auto-allocated ₹{allocation_amount} to {fund.name} via {trigger_event}: {source_description}",
                     )
 
-            except Exception:
+            except Exception as e:
                 # Log error but don't break the parent transaction
+                logger.error(
+                    "Fund allocation failed for rule %s (fund: %s): %s",
+                    rule.id,
+                    rule.fund.name,
+                    str(e),
+                )
                 continue
 
-    except Exception:
-        # Silently fail - fund allocation should never break parent operations
-        pass
+    except Exception as e:
+        # Log error but don't break parent operations
+        logger.error("Fund allocation process failed: %s", str(e))
 
     return created_transactions
+
+
+def create_member_notification(user, title, message, notification_type="general", metadata=None):
+    """Create an in-app notification for a member."""
+    from accounts.models import Notification
+
+    return Notification.objects.create(
+        user=user,
+        title=title,
+        message=message,
+        notification_type=notification_type,
+        metadata=metadata or {},
+    )

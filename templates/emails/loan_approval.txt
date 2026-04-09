@@ -1,0 +1,23 @@
+Subject: Loan Approved - ₹{{ amount }}
+
+Hello {{ user.display_name }},
+
+Congratulations! Your loan application has been approved.
+
+Loan Details:
+- Loan Number: {{ loan.loan_number }}
+- Loan Type: {{ loan.loan_type|title }}
+- Principal Amount: ₹{{ amount }}
+- Interest Rate: {{ loan.interest_rate }}%
+- EMI Amount: ₹{{ loan.emi_amount }}
+- Tenure: {{ loan.tenure_months }} months
+
+The approved amount will be disbursed to your account shortly.
+
+For any queries, please contact our office.
+
+Best regards,
+{{ society_name }} Team
+
+---
+This is an automated message. Please do not reply to this email.

@@ -1,0 +1,18 @@
+Subject: EMI Due Reminder - ₹{{ emi_amount }}
+
+Hello {{ user.display_name }},
+
+This is a friendly reminder that your EMI payment is due in {{ days_until_due }} days.
+
+Loan Details:
+- Loan Number: {{ loan.loan_number }}
+- Loan Type: {{ loan.loan_type|title }}
+- EMI Amount: ₹{{ emi_amount }}
+- Outstanding Balance: ₹{{ loan.outstanding_balance }}
+
+Please ensure timely payment to avoid late penalties.
+
+For any assistance, please contact our office.
+
+Best regards,
+{{ society_name }} Team

@@ -293,8 +293,7 @@ Views use manual pagination with `Paginator` from `django.core.paginator`.
 │   ├── admin.py         # Django admin registration
 │   └── migrations/      # 23 migration files
 ├── admin_portal/        # Admin dashboard (views only, no models)
-│   ├── views.py         # 40+ admin views (~2870 lines)
-│   └── urls.py          # 60 URL patterns
+│   └── views.py         # 40+ admin views (~2870 lines)
 ├── member_portal/       # Member self-service (read-only views)
 │   ├── views.py         # Member views
 │   └── urls.py          # 15 URL patterns
@@ -305,97 +304,13 @@ Views use manual pagination with `Paginator` from `django.core.paginator`.
 ├── static/
 │   ├── css/             # base.css, layout.css, components.css, pages/
 │   └── js/              # utils.js, members.js, accounts.js, loans.js, etc.
-├── scripts/             # setup_code_review_graph.sh, example_code_review.sh
-├── .kiro/               # Kiro steering and hooks
+├── android-app/         # Android mobile app (Kotlin/Jetpack Compose)
+├── .kiro/               # Kiro hooks
 ├── docker-compose.yml   # PostgreSQL + Django services
 ├── Dockerfile           # Python 3.11-slim, Gunicorn
 ├── requirements.txt     # Python dependencies
-├── pyproject.toml       # Ruff configuration
-└── .code-review-graphignore  # Graph exclusion patterns
+└── pyproject.toml       # Ruff configuration
 ```
-
----
-
-## Code Review Graph Integration
-
-This project uses [code-review-graph](https://github.com/tirth8205/code-review-graph) for AI-powered code review optimization. It builds a structural knowledge graph using Tree-sitter AST parsing and reduces token usage by up to 8.2x.
-
-### Setup
-
-```bash
-# Docker (recommended)
-./scripts/setup_code_review_graph.sh
-
-# Or manually
-docker-compose exec web pip install code-review-graph
-docker-compose exec web code-review-graph install
-docker-compose exec web code-review-graph build
-```
-
-### CLI Commands
-
-```bash
-code-review-graph build              # Parse entire codebase (~10s)
-code-review-graph update             # Incremental update (<2s)
-code-review-graph status             # Graph statistics
-code-review-graph watch              # Auto-update on file changes
-code-review-graph detect-changes     # Risk-scored change impact
-code-review-graph visualize          # Interactive HTML graph
-code-review-graph wiki               # Generate markdown wiki
-```
-
-### AI Assistant Slash Commands
-
-```
-/code-review-graph:build-graph       # Build or rebuild the code graph
-/code-review-graph:review-delta      # Review changes since last commit
-/code-review-graph:review-pr         # Full PR review with blast-radius
-```
-
-### MCP Tools (22 available)
-
-**Core:** `build_or_update_graph_tool`, `get_impact_radius_tool`, `get_review_context_tool`, `query_graph_tool`
-**Search:** `semantic_search_nodes_tool`, `find_large_functions_tool`, `list_flows_tool`, `get_affected_flows_tool`
-**Architecture:** `list_communities_tool`, `get_architecture_overview_tool`, `generate_wiki_tool`
-**Refactoring:** `refactor_tool`, `apply_refactor_tool`
-**Multi-repo:** `list_repos_tool`, `cross_repo_search_tool`
-
-### Django-Specific Usage
-
-```bash
-# Find all views using a model
-code-review-graph query accounts/models.py --type callers
-
-# Find tests for a model
-code-review-graph query accounts/models.py --type tests
-
-# Blast radius of changes
-code-review-graph detect-changes
-```
-
-### Configuration
-
-- **Exclusions:** `.code-review-graphignore` (excludes cache, migrations, static, media, docs)
-- **Database:** Stored in `.code-review-graph/` (gitignored)
-- **Auto-update:** Hooks update graph on file save and git commit
-- **Optional features:** `pip install code-review-graph[embeddings]`, `[communities]`, or `[all]`
-
-### Workflow Templates
-
-1. `review_changes` - Focused code review
-2. `architecture_map` - Architecture overview
-3. `debug_issue` - Debug with dependency context
-4. `onboard_developer` - Onboarding docs
-5. `pre_merge_check` - Pre-merge validation
-
-### Performance
-
-| Metric | Value |
-|--------|-------|
-| Initial build | ~10 seconds |
-| Incremental update | <2 seconds |
-| Query latency | <1ms |
-| Token reduction | 6-9x |
 
 ---
 

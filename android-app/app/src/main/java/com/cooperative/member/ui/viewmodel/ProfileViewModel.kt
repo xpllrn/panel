@@ -1,32 +1,49 @@
 package com.cooperative.member.ui.viewmodel
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.cooperative.member.data.model.MemberProfile
-import com.cooperative.member.data.repository.MemberRepository
-import com.cooperative.member.util.Resource
-import dagger.hilt.android.lifecycle.HiltViewModel
+import com.cooperative.member.CooperativeApp
+import com.cooperative.member.data.MemberProfile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
-@HiltViewModel
-class ProfileViewModel @Inject constructor(
-    private val memberRepository: MemberRepository
-) : ViewModel() {
-    
-    private val _profileState = MutableStateFlow<Resource<MemberProfile>?>(null)
-    val profileState: StateFlow<Resource<MemberProfile>?> = _profileState
-    
+sealed interface ProfileState {
+    data object Loading : ProfileState
+    data class Ready(val profile: MemberProfile) : ProfileState
+    data class Error(val message: String) : ProfileState
+}
+
+class ProfileViewModel(app: Application) : AndroidViewModel(app) {
+
+    private val repo = (app as CooperativeApp).repository
+    private val session = (app as CooperativeApp).session
+
+    private val _state = MutableStateFlow<ProfileState>(ProfileState.Loading)
+    val state: StateFlow<ProfileState> = _state.asStateFlow()
+
+    val themeMode = session.themeMode
+
     init {
         loadProfile()
     }
-    
+
     fun loadProfile() {
+        _state.value = ProfileState.Loading
         viewModelScope.launch {
-            _profileState.value = Resource.Loading()
-            _profileState.value = memberRepository.getProfile()
+            repo.getProfile()
+                .onSuccess { _state.value = ProfileState.Ready(it) }
+                .onFailure { _state.value = ProfileState.Error(it.message ?: "Failed") }
         }
+    }
+
+    fun setTheme(mode: String) {
+        viewModelScope.launch { repo.setTheme(mode) }
+    }
+
+    fun logout() {
+        viewModelScope.launch { repo.logout() }
     }
 }

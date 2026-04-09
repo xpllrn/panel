@@ -16,12 +16,11 @@ A modern admin panel built with Django, Django REST Framework, and PostgreSQL, f
 
 ## Tech Stack
 
-- Django 5.0.1
+- Django 4.2+
 - Django REST Framework 3.14.0
 - PostgreSQL 15
 - Docker & Docker Compose
 - Bootstrap 5
-- code-review-graph (AI-powered code review optimization)
 
 ## Quick Start
 

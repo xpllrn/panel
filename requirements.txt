@@ -12,4 +12,3 @@ reportlab==4.1.0
 
 # Development tools
 ruff==0.4.4
-code-review-graph>=0.1.0  # Code review optimization tool
