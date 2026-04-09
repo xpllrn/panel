@@ -1,0 +1,39 @@
+# Production-style stack for a single EC2 host (Postgres + Gunicorn).
+# Usage: docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+#
+# Required in .env: SECRET_KEY, DB_PASSWORD, ALLOWED_HOSTS, DEBUG=False
+# Optional: BREVO_API_KEY, DEFAULT_FROM_EMAIL, MARKETING_SITE_ORIGIN, etc.
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${DB_NAME:-adminpanel}
+      POSTGRES_USER: ${DB_USER:-admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    expose:
+      - "5432"
+
+  web:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+    command: >
+      sh -c "sleep 5 &&
+      python manage.py migrate --noinput &&
+      python manage.py collectstatic --noinput &&
+      gunicorn --bind 0.0.0.0:8000 --workers 3 config.wsgi:application"
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:
