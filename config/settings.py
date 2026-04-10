@@ -12,7 +12,16 @@ SECRET_KEY = config("SECRET_KEY")  # No default - must be set in .env
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config("DEBUG", default=False, cast=bool)  # Default to False for security
 
-ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1").split(",")
+# Production default includes app.* (staff/member portal at /login/). Override in .env to add EC2 IP, www, etc.
+_default_allowed = (
+    "localhost,127.0.0.1"
+    if DEBUG
+    else (
+        "localhost,127.0.0.1,app.delhiaamnagrik.org,www.app.delhiaamnagrik.org,"
+        "admin.delhiaamnagrik.org,api.delhiaamnagrik.org"
+    )
+)
+ALLOWED_HOSTS = [h.strip() for h in config("ALLOWED_HOSTS", default=_default_allowed).split(",") if h.strip()]
 
 # Security settings
 # USE_TLS default False: plain HTTP (e.g. Gunicorn on :8000). Set USE_TLS=true behind Nginx/Cloudflare
@@ -34,6 +43,15 @@ if not DEBUG:
         SECURE_HSTS_SECONDS = 0
         SECURE_HSTS_INCLUDE_SUBDOMAINS = False
         SECURE_HSTS_PRELOAD = False
+
+# HTTPS POST (login forms) requires trusted Origin when using TLS (e.g. Cloudflare → Django).
+if DEBUG:
+    _csrf_default = "http://localhost:8000,http://127.0.0.1:8000"
+else:
+    _csrf_default = (
+        "https://app.delhiaamnagrik.org,https://admin.delhiaamnagrik.org,https://api.delhiaamnagrik.org"
+    )
+CSRF_TRUSTED_ORIGINS = [x.strip() for x in config("CSRF_TRUSTED_ORIGINS", default=_csrf_default).split(",") if x.strip()]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -183,6 +201,15 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
 ]
+if not DEBUG:
+    _cors_extra = config(
+        "CORS_EXTRA_ORIGINS",
+        default="https://app.delhiaamnagrik.org,https://delhiaamnagrik.org,https://www.delhiaamnagrik.org",
+    )
+    for _origin in _cors_extra.split(","):
+        _o = _origin.strip()
+        if _o and _o not in CORS_ALLOWED_ORIGINS:
+            CORS_ALLOWED_ORIGINS.append(_o)
 
 # Email Configuration
 EMAIL_BACKEND = config("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
@@ -202,7 +229,11 @@ SOCIETY_LEGAL_NAME = config(
 # Optional shorter label (navbar, receipts, etc.). Defaults to the legal name if unset.
 SOCIETY_NAME = config("SOCIETY_NAME", default=SOCIETY_LEGAL_NAME)
 SOCIETY_TAGLINE = config("SOCIETY_TAGLINE", default="Member services · Delhi, India")
-FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:8000")
+# Browser base URL for email verification links and similar (portal lives at app.*).
+FRONTEND_URL = config(
+    "FRONTEND_URL",
+    default="http://localhost:8000" if DEBUG else "https://app.delhiaamnagrik.org",
+)
 # Public site origin for email logos (/assets/logo-mark.png). Use your live member site.
 MARKETING_SITE_ORIGIN = config("MARKETING_SITE_ORIGIN", default="https://delhiaamnagrik.org")
 SUPPORT_CONTACT_EMAIL = config("SUPPORT_CONTACT_EMAIL", default="contact@delhiaamnagrik.org")

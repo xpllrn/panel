@@ -1,8 +1,10 @@
 # Production-style stack for a single EC2 host (Postgres + Gunicorn).
 # Usage: docker compose -f docker-compose.prod.yml --env-file .env up -d --build
 #
-# Required in .env: SECRET_KEY, DB_PASSWORD, ALLOWED_HOSTS, DEBUG=False
-# Optional: BREVO_API_KEY, DEFAULT_FROM_EMAIL, MARKETING_SITE_ORIGIN, etc.
+# Required in .env: SECRET_KEY, DB_PASSWORD, DEBUG=False
+# ALLOWED_HOSTS: defaults include app.delhiaamnagrik.org (portal /login/). Add your EC2 IP if you still open :8000 by IP.
+# Behind Cloudflare HTTPS: set USE_TLS=true so cookies and CSRF work with X-Forwarded-Proto.
+# Optional: BREVO_API_KEY, DEFAULT_FROM_EMAIL, FRONTEND_URL, CSRF_TRUSTED_ORIGINS, CORS_EXTRA_ORIGINS
 
 services:
   db:
