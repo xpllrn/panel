@@ -29,6 +29,8 @@ staticfiles/
 !.env.example
 firebase-service-account.json
 *-firebase-adminsdk-*.json
+# Production FCM key on server (docker-compose.prod mounts ./secrets → /app/secrets)
+secrets/
 *.pem
 
 # OS & editors

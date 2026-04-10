@@ -131,11 +131,15 @@ data class LoanSummary(
 data class Transaction(
     val id: Int = 0,
     val receipt_number: String = "",
+    val account_number: String? = null,
     val transaction_type: String = "",
+    val transaction_type_display: String? = null,
     val amount: String = "0.00",
     val balance_after: String = "0.00",
     val payment_mode: String? = null,
+    val reference_number: String? = null,
     val description: String? = null,
+    val remarks: String? = null,
     val created_at: String = ""
 )
 

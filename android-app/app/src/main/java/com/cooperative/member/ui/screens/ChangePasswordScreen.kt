@@ -80,7 +80,7 @@ fun ChangePasswordScreen(vm: ProfileViewModel, onBack: () -> Unit) {
         ) {
             item {
                 Text(
-                    "Use a strong password you do not use elsewhere. You will stay signed in on this device.",
+                    "Use a strong password you do not use elsewhere. You will be asked to sign in again after updating it.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

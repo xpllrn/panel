@@ -5,6 +5,8 @@
 # ALLOWED_HOSTS: defaults include app.delhiaamnagrik.org (portal /login/). Add your EC2 IP if you still open :8000 by IP.
 # Behind Cloudflare HTTPS: set USE_TLS=true so cookies and CSRF work with X-Forwarded-Proto.
 # Optional: BREVO_API_KEY, DEFAULT_FROM_EMAIL, FRONTEND_URL, CSRF_TRUSTED_ORIGINS, CORS_EXTRA_ORIGINS
+# Push (FCM): place Firebase service account JSON on the host (not in git), e.g. ./secrets/firebase-service-account.json
+# then set FCM_ENABLED=true and FCM_CREDENTIALS_PATH=/app/secrets/firebase-service-account.json in .env
 
 services:
   db:
@@ -36,6 +38,9 @@ services:
       gunicorn --bind 0.0.0.0:8000 --workers 3 --timeout 120 --graceful-timeout 30 config.wsgi:application"
     depends_on:
       - db
+    volumes:
+      # Host path is relative to this compose file (e.g. ~/panel/secrets on EC2).
+      - ./secrets:/app/secrets:ro
 
 volumes:
   postgres_data:

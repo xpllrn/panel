@@ -88,6 +88,11 @@ urlpatterns = [
     path("member/loans/<int:loan_id>/", api_views.member_loans_detail, name="member_loans_detail"),
     # Member: Transactions
     path("member/transactions/", api_views.member_transactions_list, name="member_transactions_list"),
+    path(
+        "member/transactions/<int:transaction_id>/",
+        api_views.member_transactions_detail,
+        name="member_transactions_detail",
+    ),
     # Member: Notifications
     path("member/notifications/", api_views.member_notifications_list, name="member_notifications_list"),
     path(

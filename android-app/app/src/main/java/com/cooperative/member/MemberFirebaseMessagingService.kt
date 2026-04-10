@@ -15,13 +15,13 @@ class MemberFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
 
-        val title = message.notification?.title ?: message.data["title"] ?: "Notification"
-        val body = message.notification?.body ?: message.data["message"] ?: ""
+        val payloadTitle = message.notification?.title ?: message.data["title"] ?: "Notification"
+        val body = message.notification?.body ?: message.data["message"] ?: payloadTitle
         ensureNotificationChannel()
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle(title)
+            .setContentTitle("DANC")
             .setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)

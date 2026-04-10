@@ -111,7 +111,7 @@ body {
   color: var(--stone-900);
   background: var(--cream);
   -webkit-font-smoothing: antialiased;
-  overflow-x: clip;
+  overflow-x: hidden;
   padding-left: env(safe-area-inset-left, 0);
   padding-right: env(safe-area-inset-right, 0);
 }
@@ -371,6 +371,10 @@ button:focus-visible {
   flex-wrap: wrap;
 }
 
+.top-row > * {
+  min-width: 0;
+}
+
 a.identity {
   text-decoration: none;
   color: inherit;
@@ -384,6 +388,10 @@ a.identity:hover .title {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  min-width: 0;
+}
+
+.identity > div {
   min-width: 0;
 }
 
@@ -425,10 +433,13 @@ a.identity:hover .title {
   flex-wrap: wrap;
   font-size: var(--text-small);
   color: var(--stone-600);
+  min-width: 0;
 }
 
 .quick-contact a {
   font-weight: 500;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .lang-switch {
@@ -1158,23 +1169,24 @@ button.submit {
 
   .quick-contact {
     width: 100%;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    grid-template-areas:
-      "help lang theme"
-      "mail lang theme";
-    gap: 0.3rem 0.5rem;
-    font-size: 0.8125rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.55rem;
+    font-size: 0.8rem;
     align-items: center;
   }
 
   .quick-contact > span:first-child {
-    grid-area: help;
+    order: 1;
+    flex: 1 1 100%;
   }
 
   .quick-contact > a[href^="mailto:"] {
-    grid-area: mail;
+    order: 2;
+    flex: 1 1 100%;
     min-width: 0;
+    line-height: 1.35;
+    font-size: 0.78rem;
   }
 
   .quick-contact > span[aria-hidden="true"] {
@@ -1187,16 +1199,12 @@ button.submit {
   }
 
   .lang-switch {
-    grid-area: lang;
-    justify-self: end;
-    align-self: center;
-    margin-left: 0;
+    order: 3;
+    margin-left: auto;
   }
 
   .theme-toggle {
-    grid-area: theme;
-    justify-self: end;
-    align-self: center;
+    order: 4;
   }
 
   .lang-switch button {
@@ -1262,8 +1270,12 @@ button.submit {
   }
 
   .identity .title.legal-name {
-    font-size: clamp(0.62rem, 3.1vw, 0.8rem);
-    max-width: min(15.5rem, 78vw);
+    font-size: clamp(0.64rem, 3vw, 0.8rem);
+    max-width: 100%;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
   .subtitle {
@@ -1310,6 +1322,25 @@ button.submit {
 
   .contact {
     gap: var(--space-md);
+  }
+
+  .menu-btn {
+    width: 100%;
+    justify-content: flex-start;
+    border-radius: var(--radius-md);
+    padding: 0.6rem 0.85rem;
+  }
+
+  .nav-wrap {
+    padding: 0.45rem 0 0.25rem;
+  }
+
+  .main-nav ul.open {
+    margin-top: 0.2rem;
+  }
+
+  .main-nav .nav-link {
+    padding: 0.7rem 0.9rem;
   }
 }
 

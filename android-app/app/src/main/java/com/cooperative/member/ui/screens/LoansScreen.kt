@@ -50,16 +50,13 @@ fun LoansScreen(vm: LoansViewModel, onLoanClick: (Int) -> Unit = {}) {
     when (val s = state) {
         is LoansListState.Loading -> LoadingBox()
         is LoansListState.Error -> ErrorBox(s.message) { vm.loadLoans() }
-        is LoansListState.Ready -> {
-            if (s.loans.isEmpty()) EmptyLoans()
-            else LoansList(s.loans, onLoanClick)
-        }
+        is LoansListState.Ready -> LoansList(s.loans, onLoanClick)
     }
 }
 
 @Composable
-private fun EmptyLoans() {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+private fun EmptyLoans(modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth().padding(vertical = 52.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
                 Icons.Default.CheckCircle,
@@ -120,8 +117,14 @@ private fun LoansList(loans: List<Loan>, onLoanClick: (Int) -> Unit) {
             }
         }
 
-        items(loans) { loan ->
-            LoanRow(loan) { onLoanClick(loan.id) }
+        if (loans.isEmpty()) {
+            item {
+                EmptyLoans(modifier = Modifier.fillMaxWidth())
+            }
+        } else {
+            items(loans) { loan ->
+                LoanRow(loan) { onLoanClick(loan.id) }
+            }
         }
     }
 }

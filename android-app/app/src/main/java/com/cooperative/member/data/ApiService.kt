@@ -53,6 +53,9 @@ interface ApiService {
         @Query("page_size") pageSize: Int? = null
     ): Response<TransactionsListResponse>
 
+    @GET("member/transactions/{id}/")
+    suspend fun getTransactionDetail(@Path("id") id: Int): Response<Transaction>
+
     @POST("member/devices/register/")
     suspend fun registerDevice(@Body body: DeviceTokenRequest): Response<GenericSuccessResponse>
 

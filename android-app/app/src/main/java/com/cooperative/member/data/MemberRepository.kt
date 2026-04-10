@@ -57,6 +57,10 @@ class MemberRepository(
         api.getTransactions(pageSize = 50)
     }.map { it.results }
 
+    suspend fun getTransactionDetail(id: Int): Result<Transaction> = apiCall {
+        api.getTransactionDetail(id)
+    }
+
     suspend fun logout() {
         val token = session.getDeviceToken()
         if (!token.isNullOrBlank()) {
@@ -132,6 +136,10 @@ class MemberRepository(
         val body = resp.body() ?: throw ApiException(0, "Empty response")
         if (!body.success) throw ApiException(0, body.error ?: "Could not change password.")
         body
+    }
+
+    suspend fun resetSessionAfterPasswordChange() {
+        logout()
     }
 
     private suspend fun <T> apiCall(call: suspend () -> retrofit2.Response<T>): Result<T> =

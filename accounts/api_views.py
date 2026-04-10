@@ -1572,6 +1572,18 @@ def member_transactions_list(request):
 
 @api_view(["GET"])
 @permission_classes([IsMember])
+def member_transactions_detail(request, transaction_id):
+    """Get a single member transaction/receipt detail."""
+    try:
+        receipt = Receipt.objects.select_related("member_account").get(id=transaction_id, user=request.user)
+    except Receipt.DoesNotExist:
+        return Response({"error": "Transaction not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    return Response(ReceiptSerializer(receipt).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsMember])
 def member_notifications_list(request):
     """List member notifications with unread count."""
     qs = Notification.objects.filter(user=request.user).order_by("-created_at")

@@ -25,9 +25,11 @@ import com.cooperative.member.CooperativeApp
 import com.cooperative.member.ui.screens.AccountDetailScreen
 import com.cooperative.member.ui.screens.LoanDetailScreen
 import com.cooperative.member.ui.screens.LoginScreen
+import com.cooperative.member.ui.screens.TransactionDetailScreen
 import com.cooperative.member.ui.viewmodel.AccountsViewModel
 import com.cooperative.member.ui.viewmodel.LoansViewModel
 import com.cooperative.member.ui.viewmodel.LoginViewModel
+import com.cooperative.member.ui.viewmodel.TransactionsViewModel
 
 @Composable
 fun AppNavigation() {
@@ -74,6 +76,9 @@ fun AppNavigation() {
                     },
                     onLoanClick = { id ->
                         navController.navigate("loan_detail/$id")
+                    },
+                    onTransactionClick = { id ->
+                        navController.navigate("transaction_detail/$id")
                     }
                 )
             }
@@ -100,6 +105,19 @@ fun AppNavigation() {
                 LoanDetailScreen(
                     loanId = id,
                     vm = loansVm,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(
+                "transaction_detail/{id}",
+                arguments = listOf(navArgument("id") { type = NavType.IntType })
+            ) { entry ->
+                val txVm: TransactionsViewModel = viewModel()
+                val id = entry.arguments?.getInt("id") ?: return@composable
+                TransactionDetailScreen(
+                    transactionId = id,
+                    vm = txVm,
                     onBack = { navController.popBackStack() }
                 )
             }

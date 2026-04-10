@@ -8,6 +8,7 @@ import com.cooperative.member.data.MemberProfile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 data class UiMessage(val text: String, val isError: Boolean)
@@ -196,7 +197,12 @@ class ProfileViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             repo.changePassword(currentPassword, newPassword)
                 .onSuccess {
-                    _passwordChangeMessage.value = UiMessage(it.message ?: "Password updated.", false)
+                    _passwordChangeMessage.value = UiMessage(
+                        "Password updated successfully. Please log in again.",
+                        false
+                    )
+                    delay(1200)
+                    repo.resetSessionAfterPasswordChange()
                 }
                 .onFailure {
                     _passwordChangeMessage.value = UiMessage(it.message ?: "Could not change password.", true)

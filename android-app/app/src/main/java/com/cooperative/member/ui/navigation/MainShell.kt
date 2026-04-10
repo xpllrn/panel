@@ -60,7 +60,8 @@ private val tabs = listOf(
 @Composable
 fun MainShell(
     onAccountClick: (Int) -> Unit,
-    onLoanClick: (Int) -> Unit
+    onLoanClick: (Int) -> Unit,
+    onTransactionClick: (Int) -> Unit
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -120,7 +121,7 @@ fun MainShell(
             startDestination = "home",
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable("home") { HomeScreen(homeVm, onAccountClick, onLoanClick) }
+            composable("home") { HomeScreen(homeVm, onAccountClick, onLoanClick, onTransactionClick) }
             composable("accounts") { AccountsScreen(accountsVm, onAccountClick) }
             composable("loans") { LoansScreen(loansVm, onLoanClick) }
             composable("profile") {

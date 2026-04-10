@@ -74,7 +74,7 @@ def send_member_test_push(user):
         return {"success": False, "reason": "push_disabled"}
     return _send_push_notification(
         user,
-        "Panels — demo",
+        "DANC",
         "This is a test notification from your settings.",
         {"type": "demo", "source": "member_test"},
     )

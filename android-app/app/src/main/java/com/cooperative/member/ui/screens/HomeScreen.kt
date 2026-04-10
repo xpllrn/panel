@@ -57,14 +57,15 @@ import com.cooperative.member.util.Fmt
 fun HomeScreen(
     vm: HomeViewModel,
     onAccountClick: (Int) -> Unit = {},
-    onLoanClick: (Int) -> Unit = {}
+    onLoanClick: (Int) -> Unit = {},
+    onTransactionClick: (Int) -> Unit = {}
 ) {
     val state by vm.state.collectAsState()
 
     when (val s = state) {
         is HomeState.Loading -> LoadingBox()
         is HomeState.Error -> ErrorBox(s.message) { vm.load() }
-        is HomeState.Ready -> HomeContent(s.data, onAccountClick, onLoanClick)
+        is HomeState.Ready -> HomeContent(s.data, onAccountClick, onLoanClick, onTransactionClick)
     }
 }
 
@@ -72,7 +73,8 @@ fun HomeScreen(
 private fun HomeContent(
     d: DashboardResponse,
     onAccountClick: (Int) -> Unit,
-    onLoanClick: (Int) -> Unit
+    onLoanClick: (Int) -> Unit,
+    onTransactionClick: (Int) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -146,10 +148,19 @@ private fun HomeContent(
         }
 
         // Recent transactions
+        item { SectionHeader("Recent Transactions") }
         if (d.recent_transactions.isNotEmpty()) {
-            item { SectionHeader("Recent Transactions") }
             items(d.recent_transactions) { tx ->
-                TransactionRow(tx)
+                TransactionRow(tx, onClick = { onTransactionClick(tx.id) })
+            }
+        } else {
+            item {
+                Text(
+                    "No recent transactions yet.",
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -255,14 +266,15 @@ private fun LoanCard(loan: LoanSummary, onClick: () -> Unit) {
 }
 
 @Composable
-fun TransactionRow(tx: Transaction) {
+fun TransactionRow(tx: Transaction, onClick: (() -> Unit)? = null) {
     val isCredit = tx.transaction_type.lowercase().let {
         it.contains("deposit") || it.contains("credit") || it.contains("interest")
     }
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clickable(enabled = onClick != null) { onClick?.invoke() },
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceVariant
     ) {
