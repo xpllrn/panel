@@ -38,7 +38,8 @@
   --text-small: 0.875rem;
   --leading: 1.6;
   --max-text: 42rem;
-  --container-pad: clamp(1rem, 4vw, 1.5rem);
+  /* Comfortable gutters on phones (avoid edge-to-edge text and buttons) */
+  --container-pad: clamp(1.25rem, 5vw, 1.75rem);
   --touch-min: 44px;
   --header-bg: rgba(247, 245, 240, 0.92);
   --footer-text: #d4e8d6;
@@ -674,6 +675,8 @@ a.identity:hover .title {
   color: var(--ticker-text);
   overflow: hidden;
   border-bottom: 1px solid var(--forest-hover);
+  padding-left: max(var(--container-pad), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--container-pad), env(safe-area-inset-right, 0px));
 }
 
 .ticker p {
@@ -1049,7 +1052,7 @@ button.submit {
   .ticker p {
     animation: none;
     white-space: normal;
-    padding: 0.55rem var(--space-md);
+    padding: 0.55rem 0;
   }
 }
 
@@ -1135,13 +1138,17 @@ button.submit {
 }
 
 @media (max-width: 600px) {
+  :root {
+    --container-pad: clamp(1.25rem, 5.5vw, 1.5rem);
+  }
+
   .site-header {
     backdrop-filter: blur(8px);
   }
 
   .top-row {
     gap: var(--space-sm);
-    padding: 0.65rem 0;
+    padding: 0.75rem 0;
     align-items: stretch;
   }
 
@@ -1242,7 +1249,7 @@ button.submit {
   .ticker p {
     font-size: 0.82rem;
     line-height: 1.45;
-    padding: 0.6rem var(--container-pad);
+    padding: 0.6rem 0;
   }
 
   .identity img {
@@ -1308,7 +1315,7 @@ button.submit {
 
 @media (max-width: 380px) {
   :root {
-    --container-pad: 0.875rem;
+    --container-pad: max(1.125rem, 4.5vw);
   }
 }
 
