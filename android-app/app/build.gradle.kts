@@ -16,14 +16,14 @@ android {
     }
 
     namespace = "com.cooperative.member"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.panels.panel"
+        applicationId = "com.panels.danc"
         minSdk = 24
-        targetSdk = 34
-        versionCode = 9
-        versionName = "1.5.7"
+        targetSdk = 35
+        versionCode = 10
+        versionName = "1.5.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -47,11 +47,15 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            ndk {
+                debugSymbolLevel = "SYMBOL_TABLE"
+            }
             // Production API (same Django app as EC2 when DNS points api.* to your server)
             buildConfigField("String", "API_BASE_URL", "\"https://api.delhiaamnagrik.org/api/v1\"")
             if (hasKeystoreProperties) {
