@@ -15,12 +15,9 @@ DEBUG = config("DEBUG", default=False, cast=bool)  # Default to False for securi
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1").split(",")
 
 # Security settings
-# When Gunicorn is exposed directly on :8000 without TLS, set in .env:
-#   USE_TLS=false
-# so browsers are not redirected to https://...:8000 (which will time out).
-# Enable USE_TLS=true (and use Nginx or similar terminating HTTPS) for production.
+# USE_TLS default False: plain HTTP (e.g. Gunicorn on :8000). Set USE_TLS=true behind Nginx/Cloudflare
+# HTTPS; proxy must send X-Forwarded-Proto (SECURE_PROXY_SSL_HEADER is set when USE_TLS is True).
 if not DEBUG:
-    # Default False: Gunicorn on :8000 is plain HTTP. Set USE_TLS=true when HTTPS terminates at Nginx (or similar).
     USE_TLS = config("USE_TLS", default=False, cast=bool)
     SECURE_SSL_REDIRECT = USE_TLS
     SESSION_COOKIE_SECURE = USE_TLS
@@ -29,6 +26,7 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = "DENY"
     if USE_TLS:
+        SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
         SECURE_HSTS_SECONDS = 31536000  # 1 year
         SECURE_HSTS_INCLUDE_SUBDOMAINS = True
         SECURE_HSTS_PRELOAD = True
