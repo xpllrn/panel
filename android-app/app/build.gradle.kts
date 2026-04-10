@@ -21,6 +21,7 @@ android {
             useSupportLibrary = true
         }
 
+        // Debug / dev: Android emulator → host machine localhost (Docker Django on :8000)
         buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8000/api/v1\"")
     }
 
@@ -31,7 +32,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            buildConfigField("String", "API_BASE_URL", "\"https://your-domain.com/api/v1\"")
+            // Production API (same Django app as EC2 when DNS points api.* to your server)
+            buildConfigField("String", "API_BASE_URL", "\"https://api.delhiaamnagrik.org/api/v1\"")
         }
     }
 

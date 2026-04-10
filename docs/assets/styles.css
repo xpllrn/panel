@@ -39,7 +39,7 @@
   --leading: 1.6;
   --max-text: 42rem;
   /* Comfortable gutters on phones (avoid edge-to-edge text and buttons) */
-  --container-pad: clamp(1.25rem, 5vw, 1.75rem);
+  --container-pad: clamp(1.375rem, 6vw, 1.85rem);
   --touch-min: 44px;
   --header-bg: rgba(247, 245, 240, 0.92);
   --footer-text: #d4e8d6;
