@@ -15,16 +15,27 @@ DEBUG = config("DEBUG", default=False, cast=bool)  # Default to False for securi
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1").split(",")
 
 # Security settings
+# When Gunicorn is exposed directly on :8000 without TLS, set in .env:
+#   USE_TLS=false
+# so browsers are not redirected to https://...:8000 (which will time out).
+# Enable USE_TLS=true (and use Nginx or similar terminating HTTPS) for production.
 if not DEBUG:
-    SECURE_SSL_REDIRECT = True
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
+    # Default False: Gunicorn on :8000 is plain HTTP. Set USE_TLS=true when HTTPS terminates at Nginx (or similar).
+    USE_TLS = config("USE_TLS", default=False, cast=bool)
+    SECURE_SSL_REDIRECT = USE_TLS
+    SESSION_COOKIE_SECURE = USE_TLS
+    CSRF_COOKIE_SECURE = USE_TLS
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = "DENY"
-    SECURE_HSTS_SECONDS = 31536000  # 1 year
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
+    if USE_TLS:
+        SECURE_HSTS_SECONDS = 31536000  # 1 year
+        SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+        SECURE_HSTS_PRELOAD = True
+    else:
+        SECURE_HSTS_SECONDS = 0
+        SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+        SECURE_HSTS_PRELOAD = False
 
 INSTALLED_APPS = [
     "django.contrib.admin",
