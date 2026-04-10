@@ -18,3 +18,6 @@ build/
 .cxx
 local.properties
 /app/google-services.json
+key.properties
+*.keystore
+*.jks

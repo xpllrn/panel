@@ -1,0 +1,4 @@
+storeFile=../panel-release.keystore
+storePassword=CHANGE_ME
+keyAlias=panel
+keyPassword=CHANGE_ME
