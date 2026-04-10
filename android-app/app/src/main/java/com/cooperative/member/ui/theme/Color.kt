@@ -1,4 +1,4 @@
-package com.cooperative.member.ui.theme
+package com.panels.danc.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

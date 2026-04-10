@@ -1,4 +1,4 @@
-package com.cooperative.member.ui.navigation
+package com.panels.danc.ui.navigation
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -21,15 +21,15 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.cooperative.member.CooperativeApp
-import com.cooperative.member.ui.screens.AccountDetailScreen
-import com.cooperative.member.ui.screens.LoanDetailScreen
-import com.cooperative.member.ui.screens.LoginScreen
-import com.cooperative.member.ui.screens.TransactionDetailScreen
-import com.cooperative.member.ui.viewmodel.AccountsViewModel
-import com.cooperative.member.ui.viewmodel.LoansViewModel
-import com.cooperative.member.ui.viewmodel.LoginViewModel
-import com.cooperative.member.ui.viewmodel.TransactionsViewModel
+import com.panels.danc.CooperativeApp
+import com.panels.danc.ui.screens.AccountDetailScreen
+import com.panels.danc.ui.screens.LoanDetailScreen
+import com.panels.danc.ui.screens.LoginScreen
+import com.panels.danc.ui.screens.TransactionDetailScreen
+import com.panels.danc.ui.viewmodel.AccountsViewModel
+import com.panels.danc.ui.viewmodel.LoansViewModel
+import com.panels.danc.ui.viewmodel.LoginViewModel
+import com.panels.danc.ui.viewmodel.TransactionsViewModel
 
 @Composable
 fun AppNavigation() {

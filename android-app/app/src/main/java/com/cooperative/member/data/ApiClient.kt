@@ -1,6 +1,6 @@
-package com.cooperative.member.data
+package com.panels.danc.data
 
-import com.cooperative.member.BuildConfig
+import com.panels.danc.BuildConfig
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit

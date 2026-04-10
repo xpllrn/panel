@@ -1,4 +1,4 @@
-package com.cooperative.member.data
+package com.panels.danc.data
 
 import retrofit2.Response
 import retrofit2.http.Body

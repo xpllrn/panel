@@ -1,4 +1,4 @@
-package com.cooperative.member.ui.screens
+package com.panels.danc.ui.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
@@ -43,15 +43,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.cooperative.member.data.AccountSummary
-import com.cooperative.member.data.DashboardResponse
-import com.cooperative.member.data.LoanSummary
-import com.cooperative.member.data.Transaction
-import com.cooperative.member.ui.theme.CashGreen
-import com.cooperative.member.ui.theme.Red400
-import com.cooperative.member.ui.viewmodel.HomeState
-import com.cooperative.member.ui.viewmodel.HomeViewModel
-import com.cooperative.member.util.Fmt
+import com.panels.danc.data.AccountSummary
+import com.panels.danc.data.DashboardResponse
+import com.panels.danc.data.LoanSummary
+import com.panels.danc.data.Transaction
+import com.panels.danc.ui.theme.CashGreen
+import com.panels.danc.ui.theme.Red400
+import com.panels.danc.ui.viewmodel.HomeState
+import com.panels.danc.ui.viewmodel.HomeViewModel
+import com.panels.danc.util.Fmt
 
 @Composable
 fun HomeScreen(

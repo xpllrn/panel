@@ -1,6 +1,6 @@
-package com.cooperative.member
+package com.panels.danc
 
-import com.cooperative.member.data.LoginStartResponse
+import com.panels.danc.data.LoginStartResponse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test

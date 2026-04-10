@@ -1,4 +1,4 @@
-package com.cooperative.member.data
+package com.panels.danc.data
 
 import android.content.Context
 import androidx.datastore.core.DataStore

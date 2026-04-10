@@ -1,4 +1,4 @@
-package com.cooperative.member.ui.screens
+package com.panels.danc.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
@@ -29,10 +29,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.cooperative.member.data.AccountDetailResponse
-import com.cooperative.member.ui.viewmodel.AccountDetailState
-import com.cooperative.member.ui.viewmodel.AccountsViewModel
-import com.cooperative.member.util.Fmt
+import com.panels.danc.data.AccountDetailResponse
+import com.panels.danc.ui.viewmodel.AccountDetailState
+import com.panels.danc.ui.viewmodel.AccountsViewModel
+import com.panels.danc.util.Fmt
 
 @Composable
 fun AccountDetailScreen(

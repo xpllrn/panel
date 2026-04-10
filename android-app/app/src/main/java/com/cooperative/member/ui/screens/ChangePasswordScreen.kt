@@ -1,4 +1,4 @@
-package com.cooperative.member.ui.screens
+package com.panels.danc.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -40,8 +40,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.cooperative.member.ui.viewmodel.ProfileViewModel
-import com.cooperative.member.ui.viewmodel.UiMessage
+import com.panels.danc.ui.viewmodel.ProfileViewModel
+import com.panels.danc.ui.viewmodel.UiMessage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

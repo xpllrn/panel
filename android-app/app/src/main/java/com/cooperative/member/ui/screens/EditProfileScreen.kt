@@ -1,4 +1,4 @@
-package com.cooperative.member.ui.screens
+package com.panels.danc.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -55,9 +55,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.cooperative.member.data.MemberProfile
-import com.cooperative.member.ui.viewmodel.ProfileViewModel
-import com.cooperative.member.ui.viewmodel.UiMessage
+import com.panels.danc.data.MemberProfile
+import com.panels.danc.ui.viewmodel.ProfileViewModel
+import com.panels.danc.ui.viewmodel.UiMessage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

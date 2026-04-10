@@ -15,15 +15,15 @@ android {
         keystoreProperties.load(keystorePropertiesFile.inputStream())
     }
 
-    namespace = "com.cooperative.member"
+    namespace = "com.panels.danc"
     compileSdk = 35
 
     defaultConfig {
         applicationId = "com.panels.danc"
         minSdk = 24
         targetSdk = 35
-        versionCode = 10
-        versionName = "1.5.8"
+        versionCode = 11
+        versionName = "1.5.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

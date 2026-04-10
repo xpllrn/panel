@@ -1,4 +1,4 @@
-package com.cooperative.member.ui.screens
+package com.panels.danc.ui.screens
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -53,11 +53,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.cooperative.member.R
-import com.cooperative.member.data.MemberProfile
-import com.cooperative.member.ui.theme.Red400
-import com.cooperative.member.ui.viewmodel.ProfileState
-import com.cooperative.member.ui.viewmodel.ProfileViewModel
+import com.panels.danc.R
+import com.panels.danc.data.MemberProfile
+import com.panels.danc.ui.theme.Red400
+import com.panels.danc.ui.viewmodel.ProfileState
+import com.panels.danc.ui.viewmodel.ProfileViewModel
 
 @Composable
 fun ProfileScreen(

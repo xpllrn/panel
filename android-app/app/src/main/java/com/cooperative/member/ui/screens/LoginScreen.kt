@@ -1,4 +1,4 @@
-package com.cooperative.member.ui.screens
+package com.panels.danc.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -65,9 +65,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.cooperative.member.R
-import com.cooperative.member.ui.viewmodel.LoginState
-import com.cooperative.member.ui.viewmodel.LoginViewModel
+import com.panels.danc.R
+import com.panels.danc.ui.viewmodel.LoginState
+import com.panels.danc.ui.viewmodel.LoginViewModel
 
 @Composable
 fun LoginScreen(vm: LoginViewModel) {

@@ -1,4 +1,4 @@
-package com.cooperative.member.ui.screens
+package com.panels.danc.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -30,13 +30,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.cooperative.member.data.LoanDetailResponse
-import com.cooperative.member.data.LoanRepayment
-import com.cooperative.member.ui.theme.CashGreen
-import com.cooperative.member.ui.theme.Red400
-import com.cooperative.member.ui.viewmodel.LoanDetailState
-import com.cooperative.member.ui.viewmodel.LoansViewModel
-import com.cooperative.member.util.Fmt
+import com.panels.danc.data.LoanDetailResponse
+import com.panels.danc.data.LoanRepayment
+import com.panels.danc.ui.theme.CashGreen
+import com.panels.danc.ui.theme.Red400
+import com.panels.danc.ui.viewmodel.LoanDetailState
+import com.panels.danc.ui.viewmodel.LoansViewModel
+import com.panels.danc.util.Fmt
 
 @Composable
 fun LoanDetailScreen(

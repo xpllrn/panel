@@ -1,4 +1,4 @@
-package com.cooperative.member.util
+package com.panels.danc.util
 
 import java.math.BigDecimal
 import java.math.RoundingMode

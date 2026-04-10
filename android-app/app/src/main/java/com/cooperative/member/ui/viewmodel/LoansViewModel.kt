@@ -1,11 +1,11 @@
-package com.cooperative.member.ui.viewmodel
+package com.panels.danc.ui.viewmodel
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.cooperative.member.CooperativeApp
-import com.cooperative.member.data.Loan
-import com.cooperative.member.data.LoanDetailResponse
+import com.panels.danc.CooperativeApp
+import com.panels.danc.data.Loan
+import com.panels.danc.data.LoanDetailResponse
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

@@ -1,4 +1,4 @@
-package com.cooperative.member
+package com.panels.danc
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -8,7 +8,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import com.cooperative.member.R
+import com.panels.danc.R
 
 class MemberFirebaseMessagingService : FirebaseMessagingService() {
 

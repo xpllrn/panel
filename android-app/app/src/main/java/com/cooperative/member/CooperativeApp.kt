@@ -1,9 +1,9 @@
-package com.cooperative.member
+package com.panels.danc
 
 import android.app.Application
-import com.cooperative.member.data.ApiClient
-import com.cooperative.member.data.MemberRepository
-import com.cooperative.member.data.SessionManager
+import com.panels.danc.data.ApiClient
+import com.panels.danc.data.MemberRepository
+import com.panels.danc.data.SessionManager
 import kotlinx.coroutines.runBlocking
 
 class CooperativeApp : Application() {

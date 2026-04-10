@@ -1,4 +1,4 @@
-package com.cooperative.member.ui.screens
+package com.panels.danc.ui.screens
 
 import android.content.Context
 import android.content.Intent
@@ -41,8 +41,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
-import com.cooperative.member.BuildConfig
-import com.cooperative.member.R
+import com.panels.danc.BuildConfig
+import com.panels.danc.R
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId

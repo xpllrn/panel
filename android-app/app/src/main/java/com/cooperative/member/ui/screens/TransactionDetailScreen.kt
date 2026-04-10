@@ -1,4 +1,4 @@
-package com.cooperative.member.ui.screens
+package com.panels.danc.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
@@ -27,10 +27,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.cooperative.member.data.Transaction
-import com.cooperative.member.ui.viewmodel.TransactionDetailState
-import com.cooperative.member.ui.viewmodel.TransactionsViewModel
-import com.cooperative.member.util.Fmt
+import com.panels.danc.data.Transaction
+import com.panels.danc.ui.viewmodel.TransactionDetailState
+import com.panels.danc.ui.viewmodel.TransactionsViewModel
+import com.panels.danc.util.Fmt
 
 @Composable
 fun TransactionDetailScreen(

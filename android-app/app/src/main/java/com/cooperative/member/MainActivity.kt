@@ -1,4 +1,4 @@
-package com.cooperative.member
+package com.panels.danc
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -6,8 +6,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import com.cooperative.member.ui.navigation.AppNavigation
-import com.cooperative.member.ui.theme.PanelsTheme
+import com.panels.danc.ui.navigation.AppNavigation
+import com.panels.danc.ui.theme.PanelsTheme
 
 class MainActivity : ComponentActivity() {
 

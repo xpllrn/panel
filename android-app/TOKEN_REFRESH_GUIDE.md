@@ -51,7 +51,7 @@ The access token typically expires after 15-60 minutes (depending on backend set
 
 1. Login to the app
 2. In Android Studio, go to `Device File Explorer`
-3. Navigate to: `/data/data/com.cooperative.member/files/datastore/`
+3. Navigate to: `/data/data/com.panels.danc/files/datastore/`
 4. Delete or modify the `coop_session.preferences_pb` file
 5. Try to use the app - it should handle the error gracefully
 

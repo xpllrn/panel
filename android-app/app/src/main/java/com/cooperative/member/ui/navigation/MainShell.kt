@@ -1,4 +1,4 @@
-package com.cooperative.member.ui.navigation
+package com.panels.danc.ui.navigation
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -29,19 +29,19 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.cooperative.member.ui.screens.AccountsScreen
-import com.cooperative.member.ui.screens.AboutScreen
-import com.cooperative.member.ui.screens.ChangePasswordScreen
-import com.cooperative.member.ui.screens.EditProfileScreen
-import com.cooperative.member.ui.screens.HomeScreen
-import com.cooperative.member.ui.screens.LoadingBox
-import com.cooperative.member.ui.screens.LoansScreen
-import com.cooperative.member.ui.screens.ProfileScreen
-import com.cooperative.member.ui.viewmodel.ProfileState
-import com.cooperative.member.ui.viewmodel.AccountsViewModel
-import com.cooperative.member.ui.viewmodel.HomeViewModel
-import com.cooperative.member.ui.viewmodel.LoansViewModel
-import com.cooperative.member.ui.viewmodel.ProfileViewModel
+import com.panels.danc.ui.screens.AccountsScreen
+import com.panels.danc.ui.screens.AboutScreen
+import com.panels.danc.ui.screens.ChangePasswordScreen
+import com.panels.danc.ui.screens.EditProfileScreen
+import com.panels.danc.ui.screens.HomeScreen
+import com.panels.danc.ui.screens.LoadingBox
+import com.panels.danc.ui.screens.LoansScreen
+import com.panels.danc.ui.screens.ProfileScreen
+import com.panels.danc.ui.viewmodel.ProfileState
+import com.panels.danc.ui.viewmodel.AccountsViewModel
+import com.panels.danc.ui.viewmodel.HomeViewModel
+import com.panels.danc.ui.viewmodel.LoansViewModel
+import com.panels.danc.ui.viewmodel.ProfileViewModel
 
 private data class Tab(
     val route: String,

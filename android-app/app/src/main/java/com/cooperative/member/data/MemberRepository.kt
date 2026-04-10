@@ -1,4 +1,4 @@
-package com.cooperative.member.data
+package com.panels.danc.data
 
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.tasks.await

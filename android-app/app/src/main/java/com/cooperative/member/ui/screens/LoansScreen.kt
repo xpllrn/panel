@@ -1,4 +1,4 @@
-package com.cooperative.member.ui.screens
+package com.panels.danc.ui.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -34,13 +34,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
-import com.cooperative.member.data.Loan
-import com.cooperative.member.ui.theme.CashGreen
-import com.cooperative.member.ui.theme.PanelsTheme
-import com.cooperative.member.ui.theme.Red400
-import com.cooperative.member.ui.viewmodel.LoansListState
-import com.cooperative.member.ui.viewmodel.LoansViewModel
-import com.cooperative.member.util.Fmt
+import com.panels.danc.data.Loan
+import com.panels.danc.ui.theme.CashGreen
+import com.panels.danc.ui.theme.PanelsTheme
+import com.panels.danc.ui.theme.Red400
+import com.panels.danc.ui.viewmodel.LoansListState
+import com.panels.danc.ui.viewmodel.LoansViewModel
+import com.panels.danc.util.Fmt
 import java.math.BigDecimal
 
 @Composable
