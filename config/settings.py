@@ -244,6 +244,10 @@ LOGIN_OTP_EXPIRY_MINUTES = config("LOGIN_OTP_EXPIRY_MINUTES", cast=int, default=
 LOGIN_OTP_MAX_ATTEMPTS = config("LOGIN_OTP_MAX_ATTEMPTS", cast=int, default=5)
 # Dev only: log login OTP codes to Django logs (e.g. docker-compose logs -f web). Never enable in production.
 LOGIN_OTP_LOG_PLAINTEXT = config("LOGIN_OTP_LOG_PLAINTEXT", cast=bool, default=False)
+LOGIN_OTP_BYPASS_USERNAMES = [
+    x.strip().lower() for x in config("LOGIN_OTP_BYPASS_USERNAMES", default="").split(",") if x.strip()
+]
+LOGIN_OTP_BYPASS_CODE = config("LOGIN_OTP_BYPASS_CODE", default="")
 
 # Brevo HTTP API
 BREVO_API_KEY = config("BREVO_API_KEY", default="")

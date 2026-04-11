@@ -200,6 +200,18 @@ def _check_rate_limit(username, request):
     return True
 
 
+def _is_login_otp_bypass_user(user):
+    """Return True when user is explicitly allowlisted for review OTP bypass."""
+    allowed = getattr(settings, "LOGIN_OTP_BYPASS_USERNAMES", [])
+    username = (getattr(user, "username", "") or "").strip().lower()
+    return bool(username and username in allowed)
+
+
+def _get_login_otp_bypass_code():
+    """Return configured bypass OTP code or empty string."""
+    return (getattr(settings, "LOGIN_OTP_BYPASS_CODE", "") or "").strip()
+
+
 def _generate_numeric_otp():
     return str(secrets.randbelow(900000) + 100000)
 
@@ -245,10 +257,15 @@ def auth_login_start_view(request):
     if not user.is_active or user.status != "active":
         return Response({"success": False, "error": "No active account found with the given credentials."}, status=401)
 
-    if not user.email:
+    bypass_enabled_for_user = _is_login_otp_bypass_user(user)
+    bypass_code = _get_login_otp_bypass_code() if bypass_enabled_for_user else ""
+    if bypass_enabled_for_user and not bypass_code:
+        return Response({"success": False, "error": "Login bypass is not configured correctly."}, status=500)
+
+    if not bypass_enabled_for_user and not user.email:
         return Response({"success": False, "error": "No email configured for this account."}, status=400)
 
-    otp_code = _generate_numeric_otp()
+    otp_code = bypass_code if bypass_enabled_for_user else _generate_numeric_otp()
     challenge_token = secrets.token_urlsafe(32)
     otp_expiry_minutes = getattr(settings, "LOGIN_OTP_EXPIRY_MINUTES", 15)
     max_attempts = getattr(settings, "LOGIN_OTP_MAX_ATTEMPTS", 5)
@@ -265,20 +282,27 @@ def auth_login_start_view(request):
         user_agent=request.META.get("HTTP_USER_AGENT", "")[:255],
     )
 
-    email_sent = send_login_otp_email(user, otp_code, expires_minutes=otp_expiry_minutes)
-    if not email_sent:
-        challenge.consumed_at = timezone.now()
-        challenge.save(update_fields=["consumed_at"])
-        return Response({"success": False, "error": "Failed to send OTP email. Try again later."}, status=500)
+    if bypass_enabled_for_user:
+        log_action(request, "login", "system", user.id, f"Review OTP bypass challenge issued: {user.username}")
+    else:
+        email_sent = send_login_otp_email(user, otp_code, expires_minutes=otp_expiry_minutes)
+        if not email_sent:
+            challenge.consumed_at = timezone.now()
+            challenge.save(update_fields=["consumed_at"])
+            return Response({"success": False, "error": "Failed to send OTP email. Try again later."}, status=500)
+        log_action(request, "login", "system", user.id, f"OTP sent for login: {user.username}")
 
-    log_action(request, "login", "system", user.id, f"OTP sent for login: {user.username}")
     return Response(
         {
             "success": True,
-            "message": "OTP sent to your email address.",
+            "message": (
+                "OTP challenge created. Use the review OTP provided in app access instructions."
+                if bypass_enabled_for_user
+                else "OTP sent to your email address."
+            ),
             "challenge_token": challenge.challenge_token,
             "expires_in_seconds": otp_expiry_minutes * 60,
-            "email_masked": mask_email_for_display(user.email),
+            "email_masked": mask_email_for_display(user.email) if user.email else "",
         }
     )
 
@@ -304,22 +328,40 @@ def auth_resend_otp_view(request):
         challenge.save(update_fields=["consumed_at"])
         return Response({"success": False, "error": "OTP challenge expired. Start login again."}, status=400)
 
-    otp_code = _generate_numeric_otp()
+    bypass_enabled_for_user = _is_login_otp_bypass_user(challenge.user)
+    bypass_code = _get_login_otp_bypass_code() if bypass_enabled_for_user else ""
+    if bypass_enabled_for_user and not bypass_code:
+        return Response({"success": False, "error": "Login bypass is not configured correctly."}, status=500)
+
+    otp_code = bypass_code if bypass_enabled_for_user else _generate_numeric_otp()
     challenge.otp_hash = make_password(otp_code)
     otp_expiry_minutes = getattr(settings, "LOGIN_OTP_EXPIRY_MINUTES", 15)
     challenge.expires_at = timezone.now() + timedelta(minutes=otp_expiry_minutes)
     challenge.attempt_count = 0
     challenge.save(update_fields=["otp_hash", "expires_at", "attempt_count"])
 
-    if not send_login_otp_email(challenge.user, otp_code, expires_minutes=otp_expiry_minutes):
-        return Response({"success": False, "error": "Failed to resend OTP."}, status=500)
+    if not bypass_enabled_for_user:
+        if not send_login_otp_email(challenge.user, otp_code, expires_minutes=otp_expiry_minutes):
+            return Response({"success": False, "error": "Failed to resend OTP."}, status=500)
+    else:
+        log_action(
+            request,
+            "login",
+            "system",
+            challenge.user.id,
+            f"Review OTP bypass challenge resent: {challenge.user.username}",
+        )
 
     return Response(
         {
             "success": True,
-            "message": "OTP resent successfully.",
+            "message": (
+                "Review OTP challenge refreshed."
+                if bypass_enabled_for_user
+                else "OTP resent successfully."
+            ),
             "expires_in_seconds": otp_expiry_minutes * 60,
-            "email_masked": mask_email_for_display(challenge.user.email),
+            "email_masked": mask_email_for_display(challenge.user.email) if challenge.user.email else "",
         }
     )
 

@@ -5,7 +5,7 @@ Covers utility functions, model validators, and user model methods.
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from rest_framework.test import APIClient
@@ -329,6 +329,30 @@ class OtpLoginFlowTests(TestCase):
         )
         self.assertEqual(verify.status_code, 400)
         self.assertFalse(verify.data.get("success"))
+
+    @override_settings(LOGIN_OTP_BYPASS_USERNAMES=["otpuser"], LOGIN_OTP_BYPASS_CODE="654321")
+    def test_bypass_user_can_login_without_email_otp_delivery(self):
+        self.user.email = ""
+        self.user.save(update_fields=["email"])
+
+        start = self.client.post(
+            reverse("api:auth_login_start"),
+            {"username": "otpuser", "password": "TestPass123!"},
+            format="json",
+        )
+        self.assertEqual(start.status_code, 200)
+        self.assertTrue(start.data.get("success"))
+        self.assertIn("challenge_token", start.data)
+
+        verify = self.client.post(
+            reverse("api:auth_verify_otp"),
+            {"challenge_token": start.data["challenge_token"], "otp": "654321"},
+            format="json",
+        )
+        self.assertEqual(verify.status_code, 200)
+        self.assertTrue(verify.data.get("success"))
+        self.assertIn("access", verify.data)
+        self.assertIn("refresh", verify.data)
 
     def test_register_and_unregister_device(self):
         self.client.force_authenticate(self.user)

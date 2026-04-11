@@ -54,7 +54,7 @@ android {
                 "proguard-rules.pro"
             )
             ndk {
-                debugSymbolLevel = "SYMBOL_TABLE"
+                debugSymbolLevel = "FULL"
             }
             // Production API (same Django app as EC2 when DNS points api.* to your server)
             buildConfigField("String", "API_BASE_URL", "\"https://api.delhiaamnagrik.org/api/v1\"")
