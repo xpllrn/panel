@@ -75,35 +75,35 @@ html[data-theme="dark"] {
 }
 
 html[data-theme="dark"] {
-  --forest: #9cc69b;
-  --forest-hover: #b4d7b3;
-  --sage: #8eb78d;
-  --moss: #79a978;
-  --leaf-soft: #1a241a;
-  --cream: #101510;
-  --cream-dark: #151b15;
-  --earth: #8cab8b;
-  --stone-900: #e5efe4;
-  --stone-600: #c1d0c0;
-  --stone-500: #9eb39d;
-  --stone-200: #2b392b;
-  --white: #1a241a;
+  --forest: #7ab78a;
+  --forest-hover: #95c8a2;
+  --sage: #86b495;
+  --moss: #6aa180;
+  --leaf-soft: #263629;
+  --cream: #1b251d;
+  --cream-dark: #212d24;
+  --earth: #a6b9a7;
+  --stone-900: #edf5ec;
+  --stone-600: #d0ded0;
+  --stone-500: #b2c6b3;
+  --stone-200: #415443;
+  --white: #2a3a2d;
   --shadow-card: 0 2px 10px rgba(0, 0, 0, 0.35);
   --shadow-card-hover: 0 3px 12px rgba(0, 0, 0, 0.42);
   --shadow-inset: inset 0 1px 0 rgba(180, 215, 179, 0.12);
-  --header-bg: rgba(13, 18, 13, 0.94);
-  --footer-bg: #0d120d;
+  --header-bg: rgba(28, 40, 30, 0.94);
+  --footer-bg: #1f2d23;
   --footer-text: #d3e0d2;
-  --ticker-bg: #161f16;
+  --ticker-bg: #283a2e;
   --ticker-text: #d8e8d7;
   --btn-primary-text: #102010;
-  --bg-start: #0f140f;
-  --bg-mid: #111711;
-  --bg-end: #182018;
-  --surface-1: #161d16;
-  --surface-2: #1a231a;
-  --surface-3: #1e2820;
-  --border-soft: #2f3e31;
+  --bg-start: #1d2921;
+  --bg-mid: #202e24;
+  --bg-end: #27352b;
+  --surface-1: #253328;
+  --surface-2: #2b3a2f;
+  --surface-3: #324336;
+  --border-soft: #4a5e4c;
 }
 
 body {
