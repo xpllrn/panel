@@ -29,6 +29,8 @@ class AccountsViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _list = MutableStateFlow<AccountsListState>(AccountsListState.Loading)
     val list: StateFlow<AccountsListState> = _list.asStateFlow()
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
     private val _detail = MutableStateFlow<AccountDetailState>(AccountDetailState.Loading)
     val detail: StateFlow<AccountDetailState> = _detail.asStateFlow()
@@ -43,6 +45,20 @@ class AccountsViewModel(app: Application) : AndroidViewModel(app) {
             repo.getAccounts()
                 .onSuccess { _list.value = AccountsListState.Ready(it) }
                 .onFailure { _list.value = AccountsListState.Error(it.message ?: "Failed") }
+        }
+    }
+
+    fun refreshAccounts() {
+        _isRefreshing.value = true
+        viewModelScope.launch {
+            repo.getAccounts()
+                .onSuccess { _list.value = AccountsListState.Ready(it) }
+                .onFailure { error ->
+                    if (_list.value is AccountsListState.Loading) {
+                        _list.value = AccountsListState.Error(error.message ?: "Failed")
+                    }
+                }
+            _isRefreshing.value = false
         }
     }
 

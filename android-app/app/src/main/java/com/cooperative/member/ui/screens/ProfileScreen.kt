@@ -41,6 +41,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -59,6 +61,7 @@ import com.panels.danc.ui.theme.Red400
 import com.panels.danc.ui.viewmodel.ProfileState
 import com.panels.danc.ui.viewmodel.ProfileViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
     vm: ProfileViewModel,
@@ -68,18 +71,25 @@ fun ProfileScreen(
 ) {
     val state by vm.state.collectAsState()
     val theme by vm.themeMode.collectAsState(initial = "light")
+    val isRefreshing by vm.isRefreshing.collectAsState()
 
     when (val s = state) {
         is ProfileState.Loading -> LoadingBox()
         is ProfileState.Error -> ErrorBox(s.message) { vm.loadProfile() }
-        is ProfileState.Ready -> ProfileContent(
-            s.profile,
-            theme,
-            vm,
-            onAboutClick,
-            onEditProfileClick,
-            onChangePasswordClick
-        )
+        is ProfileState.Ready -> PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = { vm.refreshProfile() },
+            modifier = Modifier.fillMaxSize()
+        ) {
+            ProfileContent(
+                s.profile,
+                theme,
+                vm,
+                onAboutClick,
+                onEditProfileClick,
+                onChangePasswordClick
+            )
+        }
     }
 }
 

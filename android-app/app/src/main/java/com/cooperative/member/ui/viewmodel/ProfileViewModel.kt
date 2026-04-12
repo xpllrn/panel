@@ -26,6 +26,8 @@ class ProfileViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _state = MutableStateFlow<ProfileState>(ProfileState.Loading)
     val state: StateFlow<ProfileState> = _state.asStateFlow()
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
     private val _emailChangeChallenge = MutableStateFlow<String?>(null)
     val emailChangeChallenge: StateFlow<String?> = _emailChangeChallenge.asStateFlow()
     private val _emailChangeMessage = MutableStateFlow<UiMessage?>(null)
@@ -63,6 +65,20 @@ class ProfileViewModel(app: Application) : AndroidViewModel(app) {
             repo.getProfile()
                 .onSuccess { _state.value = ProfileState.Ready(it) }
                 .onFailure { _state.value = ProfileState.Error(it.message ?: "Failed") }
+        }
+    }
+
+    fun refreshProfile() {
+        _isRefreshing.value = true
+        viewModelScope.launch {
+            repo.getProfile()
+                .onSuccess { _state.value = ProfileState.Ready(it) }
+                .onFailure { error ->
+                    if (_state.value is ProfileState.Loading) {
+                        _state.value = ProfileState.Error(error.message ?: "Failed")
+                    }
+                }
+            _isRefreshing.value = false
         }
     }
 

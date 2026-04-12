@@ -14,11 +14,17 @@
         <span class="stat-item">Total: <strong>{{ total_members }}</strong></span>
         <span class="stat-item">Active: <strong>{{ active_members }}</strong></span>
     </div>
-    <form class="search-form" method="get" action="">
+    <form id="membersSearchForm" class="search-form" method="get" action="">
         <input type="text" name="q" placeholder="Search members..." value="{{ search_query|default:'' }}"
             class="search-input" aria-label="Search members">
-        <button type="submit" class="btn btn-primary btn-sm">Search</button>
-        {% if search_query %}
+        <input type="hidden" id="filter-status" name="status" value="{{ selected_status|default:'' }}">
+        <input type="hidden" id="filter-member-type" name="member_type" value="{{ selected_member_type|default:'' }}">
+        <input type="hidden" id="filter-date-filter" name="date_filter" value="{{ date_filter|default:'registered' }}">
+        <input type="hidden" id="filter-date-from" name="date_from" value="{{ date_from|default:'' }}">
+        <input type="hidden" id="filter-date-to" name="date_to" value="{{ date_to|default:'' }}">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="openMembersFilterModal()">Filters</button>
+        <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+        {% if search_query or selected_status or selected_member_type or date_from or date_to %}
         <a href="{% url 'members' %}" class="clear-search">Clear</a>
         {% endif %}
     </form>
@@ -26,11 +32,65 @@
     <button class="btn btn-primary btn-sm" onclick="showAddMemberModal()">+ Add Member</button>
 </div>
 
-{% if search_query %}
+{% if search_query or selected_status or selected_member_type or date_from or date_to %}
 <div class="search-info">
-    Showing results for "<strong>{{ search_query }}</strong>" ({{ page_obj.paginator.count }} found)
+    Showing {{ page_obj.paginator.count }} member(s)
+    {% if search_query %}matching "<strong>{{ search_query }}</strong>"{% endif %}
+    {% if selected_status %} with status <strong>{{ selected_status|title }}</strong>{% endif %}
+    {% if selected_member_type %} in type <strong>{{ selected_member_type|title }}</strong>{% endif %}
+    {% if date_from or date_to %}
+    with <strong>{{ date_filter|title }}</strong> between <strong>{{ date_from|default:"..." }}</strong> and <strong>{{ date_to|default:"..." }}</strong>
+    {% endif %}
 </div>
 {% endif %}
+
+<div id="membersFilterModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Member Filters</h3>
+            <button class="modal-close" onclick="closeMembersFilterModal()" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label">Status</label>
+                <select id="members-filter-status-input" class="form-input">
+                    <option value="">All Statuses</option>
+                    {% for value, label in status_choices %}
+                    <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Member Type</label>
+                <select id="members-filter-type-input" class="form-input">
+                    <option value="">All Member Types</option>
+                    {% for value, label in member_type_choices %}
+                    <option value="{{ value }}" {% if selected_member_type == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Date Type</label>
+                <select id="members-filter-date-type-input" class="form-input">
+                    <option value="registered" {% if date_filter == 'registered' %}selected{% endif %}>Registered Date</option>
+                    <option value="resigned" {% if date_filter == 'resigned' %}selected{% endif %}>Resigned Date</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">From</label>
+                <input type="date" id="members-filter-date-from-input" class="form-input" value="{{ date_from|default:'' }}">
+            </div>
+            <div class="form-group">
+                <label class="form-label">To</label>
+                <input type="date" id="members-filter-date-to-input" class="form-input" value="{{ date_to|default:'' }}">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="clearMembersFilters()">Clear</button>
+            <button class="btn btn-primary" onclick="applyMembersFilters()">Apply</button>
+        </div>
+    </div>
+</div>
 
 <div class="data-table">
     <table>
@@ -65,7 +125,7 @@
                 <td class="actions-cell" onclick="event.stopPropagation();">
                     <button class="kebab-menu" onclick="toggleDropdown(event, {{ member.id }})" aria-label="Actions">&#8942;</button>
                     <div class="dropdown-menu" id="dropdown-{{ member.id }}">
-                        <button class="dropdown-item" onclick="editMember(event, {{ member.id }})">Edit</button>
+                        <button class="dropdown-item" onclick="showMemberModal({{ member.id }})">View</button>
                         <button class="dropdown-item" onclick="resetPassword(event, {{ member.id }})">Reset Password</button>
                         <button class="dropdown-item dropdown-item-danger" onclick="confirmDelete(event, {{ member.id }}, '{{ member.username }}')">Delete</button>
                     </div>
@@ -88,15 +148,15 @@
     </div>
     <div class="pagination-nav">
         {% if page_obj.has_previous %}
-        <a href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="First page">&laquo; First</a>
-        <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="Previous page">Previous</a>
+        <a href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_member_type %}&member_type={{ selected_member_type }}{% endif %}{% if date_filter %}&date_filter={{ date_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="First page">&laquo; First</a>
+        <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_member_type %}&member_type={{ selected_member_type }}{% endif %}{% if date_filter %}&date_filter={{ date_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="Previous page">Previous</a>
         {% endif %}
 
         <span class="page-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
 
         {% if page_obj.has_next %}
-        <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="Next page">Next</a>
-        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="Last page">Last &raquo;</a>
+        <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_member_type %}&member_type={{ selected_member_type }}{% endif %}{% if date_filter %}&date_filter={{ date_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="Next page">Next</a>
+        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_member_type %}&member_type={{ selected_member_type }}{% endif %}{% if date_filter %}&date_filter={{ date_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="Last page">Last &raquo;</a>
         {% endif %}
     </div>
 </div>
@@ -388,6 +448,7 @@
         </div>
 
         <div class="modal-footer">
+            <button class="btn btn-primary" onclick="editCurrentMember()">Edit Member</button>
             <button class="btn btn-secondary" onclick="closeMemberModal()">Close</button>
         </div>
     </div>
@@ -478,6 +539,18 @@
                         <option value="viewer">Viewer</option>
                     </select>
                 </div>
+                <div class="form-group">
+                    <label class="form-label">Status</label>
+                    <select id="edit-status" name="status" class="form-input">
+                        {% for value, label in status_choices %}
+                        <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Closure / Status Remarks</label>
+                    <textarea id="edit-closure-reason" name="closure_reason" class="form-input" rows="2"></textarea>
+                </div>
                 <div id="edit-member-error" class="error-message"></div>
             </form>
         </div>
@@ -514,6 +587,30 @@
 {% block extra_js %}
 <script>
     window.CSRF_TOKEN = '{{ csrf_token }}';
+
+    function openMembersFilterModal() {
+        document.getElementById('membersFilterModal').classList.add('show');
+    }
+    function closeMembersFilterModal() {
+        document.getElementById('membersFilterModal').classList.remove('show');
+    }
+    function applyMembersFilters() {
+        document.getElementById('filter-status').value = document.getElementById('members-filter-status-input').value;
+        document.getElementById('filter-member-type').value = document.getElementById('members-filter-type-input').value;
+        document.getElementById('filter-date-filter').value = document.getElementById('members-filter-date-type-input').value;
+        document.getElementById('filter-date-from').value = document.getElementById('members-filter-date-from-input').value;
+        document.getElementById('filter-date-to').value = document.getElementById('members-filter-date-to-input').value;
+        closeMembersFilterModal();
+        document.getElementById('membersSearchForm').submit();
+    }
+    function clearMembersFilters() {
+        document.getElementById('members-filter-status-input').value = '';
+        document.getElementById('members-filter-type-input').value = '';
+        document.getElementById('members-filter-date-type-input').value = 'registered';
+        document.getElementById('members-filter-date-from-input').value = '';
+        document.getElementById('members-filter-date-to-input').value = '';
+        applyMembersFilters();
+    }
 </script>
 <script src="{% static 'js/members.js' %}"></script>
 {% endblock %}

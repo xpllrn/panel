@@ -1,4 +1,5 @@
 from django.core.management.base import BaseCommand
+from django.core.management import call_command
 from django.utils import timezone
 
 from accounts.models import User
@@ -12,6 +13,11 @@ class Command(BaseCommand):
         parser.add_argument("--password", required=True, help="Review account password.")
         parser.add_argument("--email", default="", help="Optional email (not required for bypass mode).")
         parser.add_argument("--member-id", default="PLAY-REVIEW-001", help="Optional member ID label.")
+        parser.add_argument(
+            "--seed-light",
+            action="store_true",
+            help="Seed light demo receipts and pending EMI data after creating user.",
+        )
 
     def handle(self, *args, **options):
         username = (options["username"] or "").strip()
@@ -44,3 +50,5 @@ class Command(BaseCommand):
 
         state = "created" if created else "updated"
         self.stdout.write(self.style.SUCCESS(f"Play review user {state}: username={user.username}"))
+        if options.get("seed_light"):
+            call_command("seed_light_demo", username=user.username, receipts=50)

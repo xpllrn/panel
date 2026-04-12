@@ -18,7 +18,7 @@ def _get_redirect_url(user):
     """Get the appropriate redirect URL based on user role."""
     if user.is_staff or user.is_admin_role():
         return "/home/"
-    return "/member/"
+    return "/member-disabled/"
 
 
 def login_view(request):
@@ -77,6 +77,12 @@ def verify_email_link_view(request, token):
             "error_message": "Verification could not be completed. Request a new verification email from your profile.",
         },
     )
+
+
+@login_required
+def member_portal_disabled_view(request):
+    """Inform non-admin users that member portal UI is disabled."""
+    return render(request, "accounts/member_portal_disabled.html")
 
 
 @login_required

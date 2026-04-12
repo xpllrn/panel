@@ -1,0 +1,111 @@
+{% extends 'admin/base.html' %}
+{% load static %}
+
+{% block title %}Database Map - Admin Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+.database-grid {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 1rem;
+}
+@media (max-width: 1000px) {
+    .database-grid {
+        grid-template-columns: 1fr;
+    }
+}
+.card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+    padding: 1rem;
+}
+.card h3 {
+    margin: 0 0 0.8rem;
+}
+.data-table table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.data-table th, .data-table td {
+    padding: 0.55rem 0.6rem;
+    border-bottom: 1px solid #eef1f5;
+    text-align: left;
+    font-size: 0.9rem;
+}
+.mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.82rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2 class="page-title">Database Schema Overview</h2>
+    <div class="header-stats">
+        <span class="stat-item">Graph + Connected Models</span>
+    </div>
+</div>
+
+<div class="database-grid">
+    <div class="card">
+        <h3>Relationship Graph</h3>
+        <div class="mermaid">
+{{ mermaid_graph }}
+        </div>
+    </div>
+
+    <div class="card data-table">
+        <h3>Model Snapshot</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Model</th>
+                    <th>Table</th>
+                    <th>Rows</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in model_counts %}
+                <tr>
+                    <td><strong>{{ item.name }}</strong><br><small>{{ item.purpose }}</small></td>
+                    <td class="mono">{{ item.table }}</td>
+                    <td>{{ item.count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card data-table" style="margin-top: 1rem;">
+    <h3>Relationship List</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>From</th>
+                <th>To</th>
+                <th>Cardinality</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for rel in relationships %}
+            <tr>
+                <td>{{ rel.from }}</td>
+                <td>{{ rel.to }}</td>
+                <td>{{ rel.label }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+mermaid.initialize({ startOnLoad: true, securityLevel: 'loose', theme: 'default' });
+</script>
+{% endblock %}

@@ -31,6 +31,8 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,6 +55,7 @@ import com.panels.danc.ui.viewmodel.HomeState
 import com.panels.danc.ui.viewmodel.HomeViewModel
 import com.panels.danc.util.Fmt
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     vm: HomeViewModel,
@@ -61,11 +64,18 @@ fun HomeScreen(
     onTransactionClick: (Int) -> Unit = {}
 ) {
     val state by vm.state.collectAsState()
+    val isRefreshing by vm.isRefreshing.collectAsState()
 
     when (val s = state) {
         is HomeState.Loading -> LoadingBox()
         is HomeState.Error -> ErrorBox(s.message) { vm.load() }
-        is HomeState.Ready -> HomeContent(s.data, onAccountClick, onLoanClick, onTransactionClick)
+        is HomeState.Ready -> PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = { vm.refresh() },
+            modifier = Modifier.fillMaxSize()
+        ) {
+            HomeContent(s.data, onAccountClick, onLoanClick, onTransactionClick)
+        }
     }
 }
 

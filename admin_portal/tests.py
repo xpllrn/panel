@@ -4,8 +4,14 @@ Covers views, API endpoints, and member management functionality.
 """
 
 from django.contrib.auth import get_user_model
+from datetime import timedelta
+from decimal import Decimal
+
 from django.test import Client, TestCase
+from django.utils import timezone
 from django.urls import reverse
+
+from accounts.models import FundAccount, Loan, LoanRepayment, MemberAccount, Receipt, Voucher
 
 User = get_user_model()
 
@@ -335,3 +341,132 @@ class GetMemberViewTests(TestCase):
         response = self.client.get(reverse("get_member", args=[99999]))
         data = response.json()
         self.assertFalse(data["success"])
+
+
+class MemberStatusLifecycleTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.admin = User.objects.create_user(
+            username="admin2", email="admin2@example.com", password="AdminPass123!", role="admin", is_staff=True
+        )
+        self.member = User.objects.create_user(
+            username="statusmember", email="status@example.com", password="MemberPass123!", role="member"
+        )
+        self.account = MemberAccount.objects.create(
+            user=self.member,
+            account_number="FD-TEST-001",
+            account_type="fd",
+            status="active",
+            opening_date=timezone.now().date(),
+            balance=Decimal("1500.00"),
+            interest_rate=Decimal("7.50"),
+        )
+        self.client.login(username="admin2", password="AdminPass123!")
+
+    def test_inactive_blocked_when_pending_emi_exists(self):
+        loan = Loan.objects.create(
+            loan_number="LN-TEST-001",
+            user=self.member,
+            loan_type="personal",
+            status="active",
+            principal_amount=Decimal("50000"),
+            interest_rate=Decimal("12"),
+            tenure_months=12,
+            emi_amount=Decimal("5000"),
+            total_payable=Decimal("60000"),
+            total_paid=Decimal("0"),
+            outstanding_balance=Decimal("50000"),
+            application_date=timezone.now().date(),
+        )
+        LoanRepayment.objects.create(
+            loan=loan,
+            installment_number=1,
+            due_date=timezone.now().date() - timedelta(days=20),
+            amount_due=Decimal("5000"),
+            amount_paid=Decimal("0"),
+            payment_status="overdue",
+        )
+        response = self.client.post(
+            reverse("edit_member", args=[self.member.id]),
+            {
+                "username": self.member.username,
+                "email": self.member.email,
+                "full_name": "Status Member",
+                "role": "member",
+                "status": "inactive",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["success"])
+
+    def test_resign_after_inactive_period_generates_settlement_receipt(self):
+        self.member.status = "inactive"
+        self.member.inactive_since = timezone.now().date() - timedelta(days=40)
+        self.member.save(update_fields=["status", "inactive_since"])
+        response = self.client.post(
+            reverse("edit_member", args=[self.member.id]),
+            {
+                "username": self.member.username,
+                "email": self.member.email,
+                "full_name": "Status Member",
+                "role": "member",
+                "status": "resign",
+            },
+        )
+        self.assertTrue(response.json()["success"])
+        self.member.refresh_from_db()
+        self.account.refresh_from_db()
+        self.assertEqual(self.member.status, "resign")
+        self.assertFalse(self.member.is_active)
+        self.assertEqual(self.account.balance, Decimal("0.00"))
+        self.assertTrue(Receipt.objects.filter(user=self.member, transaction_type="debit").exists())
+
+
+class VoucherFlowTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.admin = User.objects.create_user(
+            username="admin3", email="admin3@example.com", password="AdminPass123!", role="admin", is_staff=True
+        )
+        self.member = User.objects.create_user(
+            username="vouchermember", email="voucher@example.com", password="MemberPass123!", role="member"
+        )
+        self.account = MemberAccount.objects.create(
+            user=self.member,
+            account_number="RD-TEST-001",
+            account_type="rd",
+            status="active",
+            opening_date=timezone.now().date(),
+            balance=Decimal("0.00"),
+            interest_rate=Decimal("7.00"),
+        )
+        self.fund = FundAccount.objects.create(
+            name="Main Fund",
+            fund_type="other",
+            account_number="FUND-001",
+            balance=Decimal("0.00"),
+            created_by=self.admin,
+        )
+        self.client.login(username="admin3", password="AdminPass123!")
+
+    def test_voucher_create_and_transfer(self):
+        response = self.client.post(
+            reverse("add_receipt"),
+            {
+                "user_id": self.member.id,
+                "use_voucher": "1",
+                "payment_mode": "cash",
+                "account_entries": '[{"account_id": %d, "transaction_type": "credit", "amount": "500.00"}]'
+                % self.account.id,
+            },
+        )
+        self.assertTrue(response.json()["success"])
+        voucher_id = response.json()["voucher_id"]
+        transfer = self.client.post(
+            reverse("transfer_voucher_to_fund", args=[voucher_id]),
+            {"fund_id": self.fund.id},
+        )
+        self.assertTrue(transfer.json()["success"])
+        voucher = Voucher.objects.get(id=voucher_id)
+        self.assertEqual(voucher.status, "transferred")
+        self.assertTrue(Receipt.objects.filter(user=self.member).exists())

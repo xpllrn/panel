@@ -1,0 +1,54 @@
+{% extends 'admin/base.html' %}
+{% load currency_filters %}
+
+{% block title %}Account Details - Admin Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2 class="page-title">{{ account.get_account_type_display }} - {{ account.account_number }}</h2>
+    <a href="{% url 'accounts' %}" class="btn btn-secondary btn-sm">Back to Account Book</a>
+</div>
+
+<div class="data-table" style="margin-bottom: 1rem;">
+    <table>
+        <tbody>
+            <tr><th>Member</th><td>{{ account.user.display_name }} ({{ account.user.member_id|default:'-' }})</td></tr>
+            <tr><th>Status</th><td>{{ account.get_status_display }}</td></tr>
+            <tr><th>Balance</th><td>₹{{ account.balance|inr }}</td></tr>
+            <tr><th>Interest Rate</th><td>{{ account.interest_rate }}%</td></tr>
+            <tr><th>Opening Date</th><td>{{ account.opening_date|date:"d M Y" }}</td></tr>
+            <tr><th>Maturity Date</th><td>{{ account.maturity_date|date:"d M Y"|default:"-" }}</td></tr>
+            <tr><th>Remarks</th><td>{{ account.remarks|default:"-" }}</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="data-table">
+    <table>
+        <thead>
+            <tr>
+                <th>Receipt #</th>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Amount</th>
+                <th>Balance After</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for receipt in transactions %}
+            <tr>
+                <td>{{ receipt.receipt_number }}</td>
+                <td>{{ receipt.created_at|date:"d M Y H:i" }}</td>
+                <td>{{ receipt.get_transaction_type_display }}</td>
+                <td>₹{{ receipt.amount|inr }}</td>
+                <td>₹{{ receipt.balance_after|inr }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5" class="empty-state">No transactions found</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

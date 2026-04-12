@@ -6,15 +6,16 @@ from django.urls import include, path
 
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
+from accounts import views as account_views
 from admin_portal import views as admin_views
 
 
 def root_redirect(request):
-    """Redirect root to admin home or member portal based on role"""
+    """Redirect root based on current active UI surfaces."""
     if request.user.is_authenticated:
         if request.user.is_staff or request.user.is_admin_role():
             return redirect("/home/")
-        return redirect("/member/")
+        return redirect("/member-disabled/")
     return redirect("/login/")
 
 
@@ -38,7 +39,8 @@ urlpatterns = [
     path("api/v1/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/v1/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     # Portals
-    path("member/", include("member_portal.urls")),
+    # Member portal UI intentionally disabled for now. Keep code for future use.
+    path("member-disabled/", account_views.member_portal_disabled_view, name="member_portal_disabled"),
     path("admin/", admin.site.urls),
     path("home/", admin_views.home_view, name="home"),
     path("members/", admin_views.members_view, name="members"),
@@ -50,6 +52,7 @@ urlpatterns = [
     path("accounts/", admin_views.accounts_view, name="accounts"),
     path("accounts/add/", admin_views.add_account_view, name="add_account"),
     path("accounts/<int:account_id>/get/", admin_views.get_account_view, name="get_account"),
+    path("accounts/<int:account_id>/details/", admin_views.account_details_view, name="account_details"),
     path("accounts/<int:account_id>/edit/", admin_views.edit_account_view, name="edit_account"),
     path("accounts/<int:account_id>/delete/", admin_views.delete_member_account_view, name="delete_member_account"),
     path(
@@ -66,6 +69,12 @@ urlpatterns = [
     ),
     path("receipts/", admin_views.receipts_view, name="receipts"),
     path("receipts/add/", admin_views.add_receipt_view, name="add_receipt"),
+    path("receipts/vouchers/", admin_views.vouchers_view, name="vouchers"),
+    path(
+        "receipts/vouchers/<int:voucher_id>/transfer/",
+        admin_views.transfer_voucher_to_fund_view,
+        name="transfer_voucher_to_fund",
+    ),
     path("receipts/<int:receipt_id>/get/", admin_views.get_receipt_view, name="get_receipt"),
     path("loans/", admin_views.loans_view, name="loans"),
     path("loans/add/", admin_views.add_loan_view, name="add_loan"),
@@ -94,7 +103,7 @@ urlpatterns = [
     path("reports/distribute-dividend/", admin_views.distribute_dividend_view, name="distribute_dividend"),
     path("reports/post-interest/", admin_views.post_interest_view, name="post_interest"),
     path("reports/export/", admin_views.export_report_view, name="export_report"),
-    path("calculator/", admin_views.calculator_view, name="calculator"),
+    path("database/", admin_views.database_view, name="database"),
     path("export/members/", admin_views.export_members_view, name="export_members"),
     path("export/accounts/", admin_views.export_accounts_view, name="export_accounts"),
     path("export/receipts/", admin_views.export_receipts_view, name="export_receipts"),

@@ -14,11 +14,14 @@
         <span class="stat-item">Total Funds: <strong>{{ total_funds }}</strong></span>
         <span class="stat-item">Total Balance: <strong>₹{{ total_balance|inr }}</strong></span>
     </div>
-    <form class="search-form" method="get" action="">
+    <form id="fundsSearchForm" class="search-form" method="get" action="">
         <input type="text" name="q" placeholder="Search funds..." value="{{ search_query|default:'' }}"
             class="search-input" aria-label="Search funds">
+        <input type="hidden" id="funds-filter-date-from" name="date_from" value="{{ date_from|default:'' }}">
+        <input type="hidden" id="funds-filter-date-to" name="date_to" value="{{ date_to|default:'' }}">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="openFundsFilterModal()">Filters</button>
         <button type="submit" class="btn btn-primary btn-sm">Search</button>
-        {% if search_query %}
+        {% if search_query or date_from or date_to %}
         <a href="{% url 'funds' %}" class="clear-search">Clear</a>
         {% endif %}
     </form>
@@ -26,11 +29,36 @@
     <button class="btn btn-primary btn-sm" onclick="showAddFundModal()">+ Add Fund</button>
 </div>
 
-{% if search_query %}
+{% if search_query or date_from or date_to %}
 <div class="search-info">
-    Showing results for "<strong>{{ search_query }}</strong>" ({{ page_obj.paginator.count }} found)
+    Showing {{ page_obj.paginator.count }} fund(s)
+    {% if search_query %}for "<strong>{{ search_query }}</strong>"{% endif %}
+    {% if date_from or date_to %} between <strong>{{ date_from|default:"..." }}</strong> and <strong>{{ date_to|default:"..." }}</strong>{% endif %}
 </div>
 {% endif %}
+
+<div id="fundsFilterModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Fund Filters</h3>
+            <button class="modal-close" onclick="closeFundsFilterModal()" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label">From</label>
+                <input type="date" id="funds-filter-date-from-input" class="form-input" value="{{ date_from|default:'' }}">
+            </div>
+            <div class="form-group">
+                <label class="form-label">To</label>
+                <input type="date" id="funds-filter-date-to-input" class="form-input" value="{{ date_to|default:'' }}">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="clearFundsFilters()">Clear</button>
+            <button class="btn btn-primary" onclick="applyFundsFilters()">Apply</button>
+        </div>
+    </div>
+</div>
 
 <div class="data-table">
     <table>
@@ -77,6 +105,50 @@
     </table>
 </div>
 
+<div class="data-table" style="margin-bottom: 1rem;">
+    <div class="modal-header" style="padding: 0;">
+        <h3>Pending Vouchers (Cash-in-Hand)</h3>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>Voucher #</th>
+                <th>Type</th>
+                <th>Member</th>
+                <th>Amount</th>
+                <th>Created</th>
+                <th>Transfer to Fund</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for voucher in pending_vouchers %}
+            <tr>
+                <td>{{ voucher.voucher_number }}</td>
+                <td>{{ voucher.get_voucher_type_display }}</td>
+                <td>{{ voucher.user.display_name }}</td>
+                <td class="amount">₹{{ voucher.total_amount|inr }}</td>
+                <td>{{ voucher.created_at|date:"M d, Y H:i" }}</td>
+                <td>
+                    <div style="display:flex; gap:0.4rem;">
+                        <select id="fund-transfer-{{ voucher.id }}" class="form-input" style="min-width: 180px;">
+                            <option value="">Select fund...</option>
+                            {% for fund in active_funds %}
+                            <option value="{{ fund.id }}">{{ fund.name }} ({{ fund.get_fund_type_display }})</option>
+                            {% endfor %}
+                        </select>
+                        <button class="btn btn-primary btn-sm" onclick="transferPendingVoucher({{ voucher.id }})">Transfer</button>
+                    </div>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="6" class="empty-state">No pending vouchers</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
 <!-- Pagination -->
 {% if page_obj.has_other_pages %}
 <div class="pagination" role="navigation" aria-label="Pagination">
@@ -85,15 +157,15 @@
     </div>
     <div class="pagination-nav">
         {% if page_obj.has_previous %}
-        <a href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="First page">&laquo; First</a>
-        <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="Previous page">Previous</a>
+        <a href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="First page">&laquo; First</a>
+        <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="Previous page">Previous</a>
         {% endif %}
 
         <span class="page-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
 
         {% if page_obj.has_next %}
-        <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="Next page">Next</a>
-        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="Last page">Last &raquo;</a>
+        <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="Next page">Next</a>
+        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="Last page">Last &raquo;</a>
         {% endif %}
     </div>
 </div>
@@ -333,6 +405,27 @@
 let currentFundId = null;
 let deleteTargetId = null;
 
+function openFundsFilterModal() {
+    document.getElementById('fundsFilterModal').style.display = 'flex';
+}
+
+function closeFundsFilterModal() {
+    document.getElementById('fundsFilterModal').style.display = 'none';
+}
+
+function applyFundsFilters() {
+    document.getElementById('funds-filter-date-from').value = document.getElementById('funds-filter-date-from-input').value;
+    document.getElementById('funds-filter-date-to').value = document.getElementById('funds-filter-date-to-input').value;
+    closeFundsFilterModal();
+    document.getElementById('fundsSearchForm').submit();
+}
+
+function clearFundsFilters() {
+    document.getElementById('funds-filter-date-from-input').value = '';
+    document.getElementById('funds-filter-date-to-input').value = '';
+    applyFundsFilters();
+}
+
 function showAddFundModal() {
     document.getElementById('addFundModal').style.display = 'flex';
 }
@@ -509,6 +602,31 @@ function toggleDropdown(e, id) {
         if (d !== dropdown) d.style.display = 'none';
     });
     dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+}
+
+function transferPendingVoucher(voucherId) {
+    var select = document.getElementById('fund-transfer-' + voucherId);
+    if (!select || !select.value) {
+        alert('Select a fund first.');
+        return;
+    }
+    var formData = new FormData();
+    formData.append('fund_id', select.value);
+    formData.append('csrfmiddlewaretoken', window.CSRF_TOKEN);
+
+    fetch('/receipts/vouchers/' + voucherId + '/transfer/', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': window.CSRF_TOKEN },
+        body: formData
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (!data.success) {
+            alert(data.error || 'Voucher transfer failed');
+            return;
+        }
+        location.reload();
+    });
 }
 
 document.addEventListener('click', () => {

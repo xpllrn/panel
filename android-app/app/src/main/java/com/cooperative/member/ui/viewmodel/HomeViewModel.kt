@@ -22,6 +22,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _state = MutableStateFlow<HomeState>(HomeState.Loading)
     val state: StateFlow<HomeState> = _state.asStateFlow()
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
     init {
         load()
@@ -33,6 +35,20 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             repo.getDashboard()
                 .onSuccess { _state.value = HomeState.Ready(it) }
                 .onFailure { _state.value = HomeState.Error(it.message ?: "Failed to load") }
+        }
+    }
+
+    fun refresh() {
+        _isRefreshing.value = true
+        viewModelScope.launch {
+            repo.getDashboard()
+                .onSuccess { _state.value = HomeState.Ready(it) }
+                .onFailure { error ->
+                    if (_state.value is HomeState.Loading) {
+                        _state.value = HomeState.Error(error.message ?: "Failed to refresh")
+                    }
+                }
+            _isRefreshing.value = false
         }
     }
 }

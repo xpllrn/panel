@@ -18,6 +18,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,14 +36,22 @@ import com.panels.danc.ui.viewmodel.AccountsViewModel
 import com.panels.danc.util.Fmt
 import java.math.BigDecimal
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccountsScreen(vm: AccountsViewModel, onAccountClick: (Int) -> Unit = {}) {
     val state by vm.list.collectAsState()
+    val isRefreshing by vm.isRefreshing.collectAsState()
 
     when (val s = state) {
         is AccountsListState.Loading -> LoadingBox()
         is AccountsListState.Error -> ErrorBox(s.message) { vm.loadAccounts() }
-        is AccountsListState.Ready -> AccountsList(s.accounts, onAccountClick)
+        is AccountsListState.Ready -> PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = { vm.refreshAccounts() },
+            modifier = Modifier.fillMaxSize()
+        ) {
+            AccountsList(s.accounts, onAccountClick)
+        }
     }
 }
 

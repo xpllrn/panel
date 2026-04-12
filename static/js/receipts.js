@@ -8,9 +8,18 @@
     // State
     var isAddingReceipt = false;
     var searchTimeout = null;
+    var selectedMemberAccounts = [];
+    var selectedMemberPendingEmis = [];
 
     // DOM Elements (cached on init)
     var receiptModal, addReceiptModal;
+
+    function escapeHTML(str) {
+        if (!str) return '';
+        var div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
 
     /**
      * Initialize the receipts module
@@ -22,6 +31,7 @@
 
         // Set up event listeners
         setupEventListeners();
+        loadVouchers();
     }
 
     /**
@@ -199,12 +209,9 @@
         var results = document.getElementById('receipt-member-results');
         if (results) results.style.display = 'none';
 
-        // Reset account dropdown
-        var accountSelect = document.getElementById('receipt-account-select');
-        if (accountSelect) {
-            accountSelect.innerHTML = '<option value="">Select member first...</option>';
-            accountSelect.disabled = true;
-        }
+        selectedMemberAccounts = [];
+        selectedMemberPendingEmis = [];
+        resetReceiptLines();
 
         var btn = document.getElementById('addReceiptBtn');
         if (btn) {
@@ -241,27 +248,13 @@
             return;
         }
 
-        // Validate account selected
-        if (!formData.get('account_id')) {
-            errorDiv.textContent = 'Please select an account';
+        var lines = collectReceiptLines();
+        if (!lines.length) {
+            errorDiv.textContent = 'Add at least one valid account entry';
             errorDiv.style.display = 'block';
             return;
         }
-
-        // Validate transaction type
-        if (!formData.get('transaction_type')) {
-            errorDiv.textContent = 'Please select a transaction type';
-            errorDiv.style.display = 'block';
-            return;
-        }
-
-        // Validate amount
-        var amount = parseFloat(formData.get('amount'));
-        if (!amount || amount <= 0) {
-            errorDiv.textContent = 'Please enter a valid amount';
-            errorDiv.style.display = 'block';
-            return;
-        }
+        formData.set('account_entries', JSON.stringify(lines));
 
         errorDiv.style.display = 'none';
         isAddingReceipt = true;
@@ -278,6 +271,7 @@
             .then(function (response) { return response.json(); })
             .then(function (data) {
                 if (data.success) {
+                    loadVouchers();
                     window.location.reload();
                 } else {
                     errorDiv.textContent = data.error || 'Error creating receipt';
@@ -347,34 +341,203 @@
         var resultsDiv = document.getElementById('receipt-member-results');
         if (resultsDiv) resultsDiv.style.display = 'none';
 
-        // Load member accounts for cascading dropdown
-        var accountSelect = document.getElementById('receipt-account-select');
-        accountSelect.innerHTML = '<option value="">Loading accounts...</option>';
-        accountSelect.disabled = true;
-
         fetch('/api/members/' + memberId + '/accounts/')
             .then(function (response) { return response.json(); })
             .then(function (data) {
                 if (data.success && data.accounts.length > 0) {
-                    var html = '<option value="">Select account...</option>';
-                    data.accounts.forEach(function (account) {
-                        html += '<option value="' + escapeHTML(String(account.id)) + '">'
-                            + escapeHTML(account.account_number)
-                            + ' (' + escapeHTML(account.account_type_display) + ')'
-                            + ' - \u20B9' + escapeHTML(account.balance)
-                            + '</option>';
-                    });
-                    accountSelect.innerHTML = html;
-                    accountSelect.disabled = false;
+                    selectedMemberAccounts = data.accounts;
+                    selectedMemberPendingEmis = data.pending_emis || [];
+                    renderLineAccountOptions();
+                    refreshLineEmiSelectors();
                 } else {
-                    accountSelect.innerHTML = '<option value="">No active accounts found</option>';
-                    accountSelect.disabled = true;
+                    selectedMemberAccounts = [];
+                    selectedMemberPendingEmis = [];
+                    renderLineAccountOptions();
+                    refreshLineEmiSelectors();
                 }
             })
             .catch(function (error) {
-                accountSelect.innerHTML = '<option value="">Error loading accounts</option>';
-                accountSelect.disabled = true;
+                selectedMemberAccounts = [];
+                selectedMemberPendingEmis = [];
+                renderLineAccountOptions();
+                refreshLineEmiSelectors();
                 console.error('Error loading accounts:', error);
+            });
+    }
+
+    function collectReceiptLines() {
+        var rows = document.querySelectorAll('.receipt-line-item');
+        var lines = [];
+        rows.forEach(function (row) {
+            var accountId = row.querySelector('.line-account-id').value;
+            var transactionType = row.querySelector('.line-transaction-type').value;
+            var amount = row.querySelector('.line-amount').value;
+            var emiSelect = row.querySelector('.line-emi-id');
+            if (!accountId || !transactionType) return;
+            var amountNum = parseFloat(amount);
+            if (!amountNum || amountNum <= 0) return;
+            var line = {
+                account_id: accountId,
+                transaction_type: transactionType,
+                amount: amountNum.toFixed(2),
+                description: ''
+            };
+            if (transactionType === 'loan_emi') {
+                if (!emiSelect || !emiSelect.value) return;
+                line.loan_repayment_id = emiSelect.value;
+                line.description = 'Loan EMI payment';
+            }
+            lines.push(line);
+        });
+        return lines;
+    }
+
+    function resetReceiptLines() {
+        var container = document.getElementById('receipt-lines-container');
+        if (!container) return;
+        container.innerHTML = '';
+        addReceiptLine();
+    }
+
+    function renderLineAccountOptions() {
+        document.querySelectorAll('.line-account-id').forEach(function (select) {
+            var current = select.value;
+            var html = '<option value="">Select account...</option>';
+            selectedMemberAccounts.forEach(function (account) {
+                html += '<option value="' + escapeHTML(String(account.id)) + '">' + escapeHTML(account.account_number)
+                    + ' (' + escapeHTML(account.account_type_display) + ')</option>';
+            });
+            select.innerHTML = html;
+            if (current) select.value = current;
+        });
+    }
+
+    function refreshLineEmiSelectors() {
+        document.querySelectorAll('.receipt-line-item').forEach(function (row) {
+            toggleLineEmiSelector(row);
+        });
+    }
+
+    function toggleLineEmiSelector(row) {
+        var typeSelect = row.querySelector('.line-transaction-type');
+        var emiSelect = row.querySelector('.line-emi-id');
+        var accountSelect = row.querySelector('.line-account-id');
+        if (!typeSelect || !emiSelect || !accountSelect) return;
+
+        var isLoanEmi = typeSelect.value === 'loan_emi';
+        if (!isLoanEmi) {
+            emiSelect.style.display = 'none';
+            emiSelect.required = false;
+            emiSelect.value = '';
+            return;
+        }
+
+        var accountId = accountSelect.value;
+        var available = selectedMemberPendingEmis.filter(function (emi) {
+            return !emi.account_id || String(emi.account_id) === String(accountId);
+        });
+
+        emiSelect.innerHTML = '<option value="">Select pending EMI</option>';
+        available.forEach(function (emi) {
+            var label = emi.loan_number + ' | EMI #' + emi.installment_number + ' | ₹' + emi.amount_due + ' | Due ' + emi.due_date;
+            emiSelect.innerHTML += '<option value="' + escapeHTML(String(emi.id)) + '">' + escapeHTML(label) + '</option>';
+        });
+        emiSelect.style.display = '';
+        emiSelect.required = true;
+    }
+
+    function addReceiptLine() {
+        var container = document.getElementById('receipt-lines-container');
+        if (!container) return;
+        var row = document.createElement('div');
+        row.className = 'receipt-line-item';
+        row.style.cssText = 'display:grid; grid-template-columns: 1.3fr 1fr 1fr 1.3fr auto; gap:0.5rem; margin-bottom:0.5rem;';
+        row.innerHTML = ''
+            + '<select class="form-input line-account-id" required></select>'
+            + '<select class="form-input line-transaction-type" required>'
+            + '<option value="credit">Credit</option><option value="debit">Debit</option><option value="loan_emi">Loan EMI</option><option value="interest">Interest Payment</option>'
+            + '<option value="dividend">Dividend</option><option value="share_capital">Share Capital</option><option value="transfer">Transfer</option>'
+            + '</select>'
+            + '<input type="number" class="form-input line-amount" step="0.01" min="0.01" placeholder="Amount" required>'
+            + '<select class="form-input line-emi-id" style="display:none;"><option value="">Select pending EMI</option></select>'
+            + '<button type="button" class="btn btn-secondary btn-sm" onclick="removeReceiptLine(this)">Remove</button>';
+        container.appendChild(row);
+        renderLineAccountOptions();
+        var typeSelect = row.querySelector('.line-transaction-type');
+        var accountSelect = row.querySelector('.line-account-id');
+        if (typeSelect) {
+            typeSelect.addEventListener('change', function () { toggleLineEmiSelector(row); });
+        }
+        if (accountSelect) {
+            accountSelect.addEventListener('change', function () { toggleLineEmiSelector(row); });
+        }
+        toggleLineEmiSelector(row);
+    }
+
+    function removeReceiptLine(button) {
+        var container = document.getElementById('receipt-lines-container');
+        if (!container) return;
+        if (container.querySelectorAll('.receipt-line-item').length <= 1) return;
+        button.closest('.receipt-line-item').remove();
+    }
+
+    function loadVouchers() {
+        fetch('/receipts/vouchers/')
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                var body = document.getElementById('voucher-table-body');
+                if (!body) return;
+                if (!data.success || !data.vouchers || !data.vouchers.length) {
+                    body.innerHTML = '<tr><td colspan="6" class="empty-state">No vouchers found</td></tr>';
+                    return;
+                }
+                var html = '';
+                var funds = window.RECEIPT_FUNDS || [];
+                data.vouchers.forEach(function (voucher) {
+                    var action = '-';
+                    if (voucher.status === 'pending') {
+                        var fundSelectId = 'voucher-fund-' + voucher.id;
+                        var options = '<option value="">Select fund...</option>';
+                        funds.forEach(function (fund) {
+                            options += '<option value="' + escapeHTML(String(fund.id)) + '">'
+                                + escapeHTML(fund.name) + ' (' + escapeHTML(fund.type) + ')</option>';
+                        });
+                        action = ''
+                            + '<div style="display:flex; gap:0.4rem; align-items:center;">'
+                            + '<select id="' + fundSelectId + '" class="form-input" style="min-width:180px;">' + options + '</select>'
+                            + '<button class="btn btn-primary btn-sm" onclick="transferVoucher(' + voucher.id + ', \'' + fundSelectId + '\')">Transfer</button>'
+                            + '</div>';
+                    }
+                    html += '<tr><td>' + escapeHTML(voucher.voucher_number) + '</td>'
+                        + '<td>' + escapeHTML(voucher.voucher_type_display || 'Voucher') + '</td>'
+                        + '<td>' + escapeHTML(voucher.member_name) + '</td>'
+                        + '<td>₹' + escapeHTML(voucher.total_amount) + '</td>'
+                        + '<td>' + escapeHTML(voucher.status_display) + '</td>'
+                        + '<td>' + action + '</td></tr>';
+                });
+                body.innerHTML = html;
+            });
+    }
+
+    function transferVoucher(voucherId, fundSelectId) {
+        var selectEl = document.getElementById(fundSelectId);
+        var fundId = selectEl ? selectEl.value : '';
+        if (!fundId) return;
+        var form = new FormData();
+        form.append('fund_id', fundId);
+        form.append('csrfmiddlewaretoken', window.CSRF_TOKEN);
+        fetch('/receipts/vouchers/' + voucherId + '/transfer/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': window.CSRF_TOKEN },
+            body: form
+        }).then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.success) {
+                    alert(data.error || 'Transfer failed');
+                    return;
+                }
+                loadVouchers();
+                window.location.reload();
             });
     }
 
@@ -503,7 +666,10 @@
         addReceipt: addReceipt,
         toggleDropdown: toggleDropdown,
         printReceipt: printReceipt,
-        printCurrentReceipt: printCurrentReceipt
+        printCurrentReceipt: printCurrentReceipt,
+        addReceiptLine: addReceiptLine,
+        removeReceiptLine: removeReceiptLine,
+        transferVoucher: transferVoucher
     };
 
     // Also expose as globals for onclick handlers in HTML
@@ -515,5 +681,8 @@
     window.toggleDropdown = toggleDropdown;
     window.printReceipt = printReceipt;
     window.printCurrentReceipt = printCurrentReceipt;
+    window.addReceiptLine = addReceiptLine;
+    window.removeReceiptLine = removeReceiptLine;
+    window.transferVoucher = transferVoucher;
 
 })();

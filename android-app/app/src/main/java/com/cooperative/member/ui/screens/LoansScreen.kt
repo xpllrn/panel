@@ -22,6 +22,8 @@ import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,14 +45,22 @@ import com.panels.danc.ui.viewmodel.LoansViewModel
 import com.panels.danc.util.Fmt
 import java.math.BigDecimal
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoansScreen(vm: LoansViewModel, onLoanClick: (Int) -> Unit = {}) {
     val state by vm.list.collectAsState()
+    val isRefreshing by vm.isRefreshing.collectAsState()
 
     when (val s = state) {
         is LoansListState.Loading -> LoadingBox()
         is LoansListState.Error -> ErrorBox(s.message) { vm.loadLoans() }
-        is LoansListState.Ready -> LoansList(s.loans, onLoanClick)
+        is LoansListState.Ready -> PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = { vm.refreshLoans() },
+            modifier = Modifier.fillMaxSize()
+        ) {
+            LoansList(s.loans, onLoanClick)
+        }
     }
 }
 

@@ -29,6 +29,8 @@ class LoansViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _list = MutableStateFlow<LoansListState>(LoansListState.Loading)
     val list: StateFlow<LoansListState> = _list.asStateFlow()
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
     private val _detail = MutableStateFlow<LoanDetailState>(LoanDetailState.Loading)
     val detail: StateFlow<LoanDetailState> = _detail.asStateFlow()
@@ -43,6 +45,20 @@ class LoansViewModel(app: Application) : AndroidViewModel(app) {
             repo.getLoans()
                 .onSuccess { _list.value = LoansListState.Ready(it) }
                 .onFailure { _list.value = LoansListState.Error(it.message ?: "Failed") }
+        }
+    }
+
+    fun refreshLoans() {
+        _isRefreshing.value = true
+        viewModelScope.launch {
+            repo.getLoans()
+                .onSuccess { _list.value = LoansListState.Ready(it) }
+                .onFailure { error ->
+                    if (_list.value is LoansListState.Loading) {
+                        _list.value = LoansListState.Error(error.message ?: "Failed")
+                    }
+                }
+            _isRefreshing.value = false
         }
     }
 

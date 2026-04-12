@@ -3,6 +3,7 @@ Utility functions for the accounts app.
 """
 
 import logging
+from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth.password_validation import validate_password
@@ -239,6 +240,44 @@ def get_financial_summary(start_date, end_date):
         if isinstance(monthly_interest_liability, Decimal)
         else Decimal(str(round(monthly_interest_liability, 2))),
     }
+
+
+def get_account_type_cashflow(months=6, account_type=None):
+    """Return inflow/outflow grouped by account type for recent months."""
+    from django.utils import timezone
+
+    from accounts.models import MemberAccount, Receipt
+
+    today = timezone.now().date()
+    window_start = today - timedelta(days=months * 31)
+    receipts = Receipt.objects.select_related("member_account").filter(created_at__date__gte=window_start)
+    if account_type:
+        receipts = receipts.filter(member_account__account_type=account_type)
+
+    rows = []
+    for acc_type, label in MemberAccount.ACCOUNT_TYPE_CHOICES:
+        if account_type and acc_type != account_type:
+            continue
+        account_receipts = receipts.filter(member_account__account_type=acc_type)
+        inflow = (
+            account_receipts.filter(transaction_type__in=["credit", "interest", "dividend", "share_capital"]).aggregate(
+                total=Sum("amount")
+            )["total"]
+            or Decimal("0.00")
+        )
+        outflow = account_receipts.filter(transaction_type__in=["debit", "transfer"]).aggregate(total=Sum("amount"))[
+            "total"
+        ] or Decimal("0.00")
+        rows.append(
+            {
+                "account_type": acc_type,
+                "label": label,
+                "inflow": inflow,
+                "outflow": outflow,
+                "net": inflow - outflow,
+            }
+        )
+    return rows
 
 
 def log_action(request, action, entity_type, entity_id, description):

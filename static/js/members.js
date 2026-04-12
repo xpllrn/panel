@@ -235,7 +235,6 @@
         html += '<thead><tr>';
         html += '<th>Account Number</th>';
         html += '<th>Type</th>';
-        html += '<th>Status</th>';
         html += '<th style="text-align: right;">Balance</th>';
         html += '<th style="text-align: center;">Actions</th>';
         html += '</tr></thead><tbody>';
@@ -246,9 +245,8 @@
             html += '<tr>';
             html += '<td><strong>' + escapeHTML(a.account_number) + '</strong></td>';
             html += '<td>' + escapeHTML(a.account_type_display) + '</td>';
-            html += '<td><span class="status-badge status-' + escapeHTML(a.status) + '">' + escapeHTML(a.status_display) + '</span></td>';
             html += '<td style="text-align: right;" class="' + balanceClass + '">' + formatCurrency(a.balance) + '</td>';
-            html += '<td style="text-align: center;"><button class="btn btn-sm btn-secondary" onclick="viewAccountDetails(' + a.id + ')">View</button></td>';
+            html += '<td style="text-align: center;"><button class="btn btn-sm btn-secondary" onclick="viewAccountDetails(' + a.id + ')">Details</button></td>';
             html += '</tr>';
         }
 
@@ -356,6 +354,11 @@
     function closeMemberModal() {
         if (memberModal) memberModal.classList.remove('show');
         currentMemberId = null;
+    }
+
+    function editCurrentMember() {
+        if (!currentMemberId) return;
+        openEditMember(currentMemberId, true);
     }
 
     /**
@@ -482,20 +485,22 @@
     /**
      * Open edit member modal
      */
-    function editMember(event, memberId) {
-        event.stopPropagation();
-        document.getElementById('dropdown-' + memberId).classList.remove('show');
-
+    function openEditMember(memberId, closeDetailsModal) {
         fetch('/members/' + memberId + '/get/')
             .then(function (response) { return response.json(); })
             .then(function (data) {
                 if (data.success) {
+                    if (closeDetailsModal) {
+                        closeMemberModal();
+                    }
                     document.getElementById('edit-member-id').value = memberId;
                     document.getElementById('edit-username').value = data.user.username;
                     document.getElementById('edit-email').value = data.user.email;
                     document.getElementById('edit-full-name').value = data.user.full_name || '';
                     document.getElementById('edit-mobile').value = data.user.mobile_primary || '';
                     document.getElementById('edit-role').value = data.user.role;
+                    document.getElementById('edit-status').value = data.user.status_raw || 'active';
+                    document.getElementById('edit-closure-reason').value = data.user.closure_reason || '';
                     document.getElementById('edit-member-error').style.display = 'none';
 
                     editMemberModal.classList.add('show');
@@ -506,6 +511,15 @@
             .catch(function (error) {
                 alert('Error loading member data: ' + error);
             });
+    }
+
+    function editMember(event, memberId) {
+        event.stopPropagation();
+        var dropdown = document.getElementById('dropdown-' + memberId);
+        if (dropdown) {
+            dropdown.classList.remove('show');
+        }
+        openEditMember(memberId, false);
     }
 
     /**
@@ -687,7 +701,7 @@
                 }
                 html += '</table>';
                 html += '<div style="margin-top: 1rem; text-align: right;">';
-                html += '<a href="/accounts/' + acc.id + '/get/" style="font-size: 0.85rem; color: #2563eb;">View Full Details</a>';
+                html += '<a href="/accounts/' + acc.id + '/details/" style="font-size: 0.85rem; color: #2563eb;">Open Full Details</a>';
                 html += '</div></div>';
 
                 // Show in a simple overlay
@@ -727,6 +741,7 @@
     window.MembersModule = {
         showMemberModal: showMemberModal,
         closeMemberModal: closeMemberModal,
+        editCurrentMember: editCurrentMember,
         switchTab: switchTab,
         showAddMemberModal: showAddMemberModal,
         closeAddMemberModal: closeAddMemberModal,
@@ -747,6 +762,7 @@
     // Also expose as globals for onclick handlers in HTML
     window.showMemberModal = showMemberModal;
     window.closeMemberModal = closeMemberModal;
+    window.editCurrentMember = editCurrentMember;
     window.switchTab = switchTab;
     window.showAddMemberModal = showAddMemberModal;
     window.closeAddMemberModal = closeAddMemberModal;

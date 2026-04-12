@@ -88,28 +88,122 @@
     text-transform: none;
     letter-spacing: 0;
 }
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+.avatar.avatar-sm {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    background: var(--color-primary);
+    color: #fff;
+    font-size: 0.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+}
+.user-details {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.user-name {
+    font-weight: 600;
+}
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="page-header">
     <h2 class="page-title">Account Book</h2>
-    <form class="search-form" method="get" action="">
+    <form id="accountsSearchForm" class="search-form" method="get" action="">
         <input type="text" name="q" placeholder="Search members..."
             value="{{ search_query|default:'' }}" class="search-input" aria-label="Search members">
-        <button type="submit" class="btn btn-primary btn-sm">Search</button>
-        {% if search_query %}
+        <input type="hidden" id="accounts-filter-member-status" name="member_status" value="{{ selected_member_status|default:'' }}">
+        <input type="hidden" id="accounts-filter-account-type" name="account_type" value="{{ selected_account_type|default:'' }}">
+        <input type="hidden" id="accounts-filter-account-status" name="account_status" value="{{ selected_account_status|default:'' }}">
+        <input type="hidden" id="accounts-filter-date-filter" name="date_filter" value="{{ date_filter|default:'member_registered' }}">
+        <input type="hidden" id="accounts-filter-date-from" name="date_from" value="{{ date_from|default:'' }}">
+        <input type="hidden" id="accounts-filter-date-to" name="date_to" value="{{ date_to|default:'' }}">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="openAccountsFilterModal()">Filters</button>
+        <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+        {% if search_query or selected_account_type or selected_account_status or selected_member_status or date_from or date_to %}
         <a href="{% url 'accounts' %}" class="clear-search">Clear</a>
         {% endif %}
     </form>
     <a href="{% url 'export_accounts' %}" class="btn btn-secondary btn-sm">Export Excel</a>
 </div>
 
-{% if search_query %}
+{% if search_query or selected_account_type or selected_account_status or selected_member_status or date_from or date_to %}
 <div class="search-info">
-    Showing {{ page_obj.paginator.count }} member(s) matching "<strong>{{ search_query }}</strong>"
+    Showing {{ page_obj.paginator.count }} member(s)
+    {% if search_query %}matching "<strong>{{ search_query }}</strong>"{% endif %}
+    {% if selected_member_status %} with member status <strong>{{ selected_member_status|title }}</strong>{% endif %}
+    {% if selected_account_type %} in account type <strong>{{ selected_account_type|upper }}</strong>{% endif %}
+    {% if selected_account_status %} with account status <strong>{{ selected_account_status|title }}</strong>{% endif %}
+    {% if date_from or date_to %} with <strong>{{ date_filter|title }}</strong> between <strong>{{ date_from|default:"..." }}</strong> and <strong>{{ date_to|default:"..." }}</strong>{% endif %}
 </div>
 {% endif %}
+
+<div id="accountsFilterModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Account Book Filters</h3>
+            <button class="modal-close" onclick="closeAccountsFilterModal()" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label">Member Status</label>
+                <select id="accounts-filter-member-status-input" class="form-input">
+                    <option value="">All Member Status</option>
+                    {% for value, label in member_status_choices %}
+                    <option value="{{ value }}" {% if selected_member_status == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Account Type</label>
+                <select id="accounts-filter-account-type-input" class="form-input">
+                    <option value="">All Account Types</option>
+                    {% for value, label in account_types %}
+                    <option value="{{ value }}" {% if selected_account_type == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Account Status</label>
+                <select id="accounts-filter-account-status-input" class="form-input">
+                    <option value="">All Account Status</option>
+                    {% for value, label in account_status_choices %}
+                    <option value="{{ value }}" {% if selected_account_status == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Date Type</label>
+                <select id="accounts-filter-date-type-input" class="form-input">
+                    <option value="member_registered" {% if date_filter == 'member_registered' %}selected{% endif %}>Member Registered Date</option>
+                    <option value="account_opened" {% if date_filter == 'account_opened' %}selected{% endif %}>Account Opened Date</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">From</label>
+                <input type="date" id="accounts-filter-date-from-input" class="form-input" value="{{ date_from|default:'' }}">
+            </div>
+            <div class="form-group">
+                <label class="form-label">To</label>
+                <input type="date" id="accounts-filter-date-to-input" class="form-input" value="{{ date_to|default:'' }}">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="clearAccountsFilters()">Clear</button>
+            <button class="btn btn-primary" onclick="applyAccountsFilters()">Apply</button>
+        </div>
+    </div>
+</div>
 
 <div class="account-book-wrapper">
     <table class="account-book-table">
@@ -129,10 +223,15 @@
             {% for member in account_book %}
             <tr>
                 <td class="member-cell">
-                    {{ member.name }}
-                    {% if member.member_id != '-' %}
-                    <span class="member-id">{{ member.member_id }}</span>
-                    {% endif %}
+                    <div class="user-info">
+                        <div class="avatar avatar-sm">{{ member.name|first|upper }}</div>
+                        <div class="user-details">
+                            <span class="user-name">{{ member.name }}</span>
+                            {% if member.member_id != '-' %}
+                            <span class="member-id">{{ member.member_id }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
                 </td>
                 {% for balance_data in member.account_balances %}
                 <td class="balance-cell {% if balance_data.balance == 0 %}zero{% else %}positive{% endif %}">
@@ -178,15 +277,15 @@
     </div>
     <div class="pagination-nav">
         {% if page_obj.has_previous %}
-        <a href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="First page">&laquo; First</a>
-        <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="Previous page">Previous</a>
+        <a href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_member_status %}&member_status={{ selected_member_status }}{% endif %}{% if selected_account_type %}&account_type={{ selected_account_type }}{% endif %}{% if selected_account_status %}&account_status={{ selected_account_status }}{% endif %}{% if date_filter %}&date_filter={{ date_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="First page">&laquo; First</a>
+        <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_member_status %}&member_status={{ selected_member_status }}{% endif %}{% if selected_account_type %}&account_type={{ selected_account_type }}{% endif %}{% if selected_account_status %}&account_status={{ selected_account_status }}{% endif %}{% if date_filter %}&date_filter={{ date_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="Previous page">Previous</a>
         {% endif %}
 
         <span class="page-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
 
         {% if page_obj.has_next %}
-        <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="Next page">Next</a>
-        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}" class="page-link" aria-label="Last page">Last &raquo;</a>
+        <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_member_status %}&member_status={{ selected_member_status }}{% endif %}{% if selected_account_type %}&account_type={{ selected_account_type }}{% endif %}{% if selected_account_status %}&account_status={{ selected_account_status }}{% endif %}{% if date_filter %}&date_filter={{ date_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="Next page">Next</a>
+        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_member_status %}&member_status={{ selected_member_status }}{% endif %}{% if selected_account_type %}&account_type={{ selected_account_type }}{% endif %}{% if selected_account_status %}&account_status={{ selected_account_status }}{% endif %}{% if date_filter %}&date_filter={{ date_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="Last page">Last &raquo;</a>
         {% endif %}
     </div>
 </div>
@@ -196,4 +295,31 @@
 
 {% block extra_js %}
 <script src="{% static 'js/utils.js' %}"></script>
+<script>
+function openAccountsFilterModal() {
+    document.getElementById('accountsFilterModal').classList.add('show');
+}
+function closeAccountsFilterModal() {
+    document.getElementById('accountsFilterModal').classList.remove('show');
+}
+function applyAccountsFilters() {
+    document.getElementById('accounts-filter-member-status').value = document.getElementById('accounts-filter-member-status-input').value;
+    document.getElementById('accounts-filter-account-type').value = document.getElementById('accounts-filter-account-type-input').value;
+    document.getElementById('accounts-filter-account-status').value = document.getElementById('accounts-filter-account-status-input').value;
+    document.getElementById('accounts-filter-date-filter').value = document.getElementById('accounts-filter-date-type-input').value;
+    document.getElementById('accounts-filter-date-from').value = document.getElementById('accounts-filter-date-from-input').value;
+    document.getElementById('accounts-filter-date-to').value = document.getElementById('accounts-filter-date-to-input').value;
+    closeAccountsFilterModal();
+    document.getElementById('accountsSearchForm').submit();
+}
+function clearAccountsFilters() {
+    document.getElementById('accounts-filter-member-status-input').value = '';
+    document.getElementById('accounts-filter-account-type-input').value = '';
+    document.getElementById('accounts-filter-account-status-input').value = '';
+    document.getElementById('accounts-filter-date-type-input').value = 'member_registered';
+    document.getElementById('accounts-filter-date-from-input').value = '';
+    document.getElementById('accounts-filter-date-to-input').value = '';
+    applyAccountsFilters();
+}
+</script>
 {% endblock %}

@@ -14,23 +14,16 @@
         <span class="stat-item">Total: <strong>{{ total_receipts }}</strong></span>
         <span class="stat-item">Today: <strong>{{ today_receipts }}</strong></span>
     </div>
-    <form class="search-form" method="get" action="">
+    <form id="receiptsSearchForm" class="search-form" method="get" action="">
         <input type="text" name="q" placeholder="Search by receipt no, member..."
             value="{{ search_query|default:'' }}" class="search-input" aria-label="Search receipts">
-        <select name="type" class="filter-select" aria-label="Filter by transaction type">
-            <option value="">All Types</option>
-            {% for value, label in transaction_type_choices %}
-            <option value="{{ value }}" {% if selected_type == value %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-        </select>
-        <select name="mode" class="filter-select" aria-label="Filter by payment mode">
-            <option value="">All Modes</option>
-            {% for value, label in payment_mode_choices %}
-            <option value="{{ value }}" {% if selected_mode == value %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-        </select>
+        <input type="hidden" id="receipts-filter-type" name="type" value="{{ selected_type|default:'' }}">
+        <input type="hidden" id="receipts-filter-mode" name="mode" value="{{ selected_mode|default:'' }}">
+        <input type="hidden" id="receipts-filter-date-from" name="date_from" value="{{ date_from|default:'' }}">
+        <input type="hidden" id="receipts-filter-date-to" name="date_to" value="{{ date_to|default:'' }}">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="openReceiptsFilterModal()">Filters</button>
         <button type="submit" class="btn btn-primary btn-sm">Filter</button>
-        {% if search_query or selected_type or selected_mode %}
+        {% if search_query or selected_type or selected_mode or date_from or date_to %}
         <a href="{% url 'receipts' %}" class="clear-search">Clear</a>
         {% endif %}
     </form>
@@ -38,14 +31,56 @@
     <button class="btn btn-primary btn-sm" onclick="showAddReceiptModal()">+ New Receipt</button>
 </div>
 
-{% if search_query or selected_type or selected_mode %}
+{% if search_query or selected_type or selected_mode or date_from or date_to %}
 <div class="search-info">
     Showing {{ page_obj.paginator.count }} receipt(s)
     {% if search_query %} matching "<strong>{{ search_query }}</strong>"{% endif %}
     {% if selected_type %} of type <strong>{{ selected_type|title }}</strong>{% endif %}
     {% if selected_mode %} via <strong>{{ selected_mode|upper }}</strong>{% endif %}
+    {% if date_from or date_to %} in date range <strong>{{ date_from|default:"..." }}</strong> to <strong>{{ date_to|default:"..." }}</strong>{% endif %}
 </div>
 {% endif %}
+
+<div id="receiptsFilterModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Receipt Filters</h3>
+            <button class="modal-close" onclick="closeReceiptsFilterModal()" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label">Transaction Type</label>
+                <select id="receipts-filter-type-input" class="form-input">
+                    <option value="">All Types</option>
+                    {% for value, label in transaction_type_choices %}
+                    <option value="{{ value }}" {% if selected_type == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Payment Mode</label>
+                <select id="receipts-filter-mode-input" class="form-input">
+                    <option value="">All Modes</option>
+                    {% for value, label in payment_mode_choices %}
+                    <option value="{{ value }}" {% if selected_mode == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">From</label>
+                <input type="date" id="receipts-filter-date-from-input" class="form-input" value="{{ date_from|default:'' }}">
+            </div>
+            <div class="form-group">
+                <label class="form-label">To</label>
+                <input type="date" id="receipts-filter-date-to-input" class="form-input" value="{{ date_to|default:'' }}">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="clearReceiptsFilters()">Clear</button>
+            <button class="btn btn-primary" onclick="applyReceiptsFilters()">Apply</button>
+        </div>
+    </div>
+</div>
 
 <div class="data-table">
     <table>
@@ -112,15 +147,15 @@
     </div>
     <div class="pagination-nav">
         {% if page_obj.has_previous %}
-        <a href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_mode %}&mode={{ selected_mode }}{% endif %}" class="page-link" aria-label="First page">&laquo; First</a>
-        <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_mode %}&mode={{ selected_mode }}{% endif %}" class="page-link" aria-label="Previous page">Previous</a>
+        <a href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_mode %}&mode={{ selected_mode }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="First page">&laquo; First</a>
+        <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_mode %}&mode={{ selected_mode }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="Previous page">Previous</a>
         {% endif %}
 
         <span class="page-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
 
         {% if page_obj.has_next %}
-        <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_mode %}&mode={{ selected_mode }}{% endif %}" class="page-link" aria-label="Next page">Next</a>
-        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_mode %}&mode={{ selected_mode }}{% endif %}" class="page-link" aria-label="Last page">Last &raquo;</a>
+        <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_mode %}&mode={{ selected_mode }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="Next page">Next</a>
+        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_mode %}&mode={{ selected_mode }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="Last page">Last &raquo;</a>
         {% endif %}
     </div>
 </div>
@@ -271,23 +306,28 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Account *</label>
-                    <select id="receipt-account-select" name="account_id" class="form-input" required disabled>
-                        <option value="">Select member first...</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Transaction Type *</label>
-                    <select name="transaction_type" class="form-input" required>
-                        <option value="">Select type...</option>
-                        {% for value, label in transaction_type_choices %}
-                        <option value="{{ value }}">{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Amount *</label>
-                    <input type="number" name="amount" class="form-input" step="0.01" min="0.01" required>
+                    <label class="form-label">Receipt Entries *</label>
+                    <div id="receipt-lines-container">
+                        <div class="receipt-line-item" data-line-index="0" style="display:grid; grid-template-columns: 1.3fr 1fr 1fr 1.3fr auto; gap:0.5rem; margin-bottom:0.5rem;">
+                            <select class="form-input line-account-id" required></select>
+                            <select class="form-input line-transaction-type" required>
+                                <option value="credit">Credit</option>
+                                <option value="debit">Debit</option>
+                                <option value="loan_emi">Loan EMI</option>
+                                <option value="interest">Interest Payment</option>
+                                <option value="dividend">Dividend</option>
+                                <option value="share_capital">Share Capital</option>
+                                <option value="transfer">Transfer</option>
+                            </select>
+                            <input type="number" class="form-input line-amount" step="0.01" min="0.01" placeholder="Amount" required>
+                            <select class="form-input line-emi-id" style="display:none;">
+                                <option value="">Select pending EMI</option>
+                            </select>
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="removeReceiptLine(this)">Remove</button>
+                        </div>
+                    </div>
+                    <small class="form-hint">Use Loan EMI only for actual loan repayment lines. EMI selector appears only when available for the selected member.</small>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="addReceiptLine()">+ Add Entry</button>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Payment Mode *</label>
@@ -295,6 +335,29 @@
                         {% for value, label in payment_mode_choices %}
                         <option value="{{ value }}">{{ label }}</option>
                         {% endfor %}
+                    </select>
+                    <small class="form-hint">Cash mode is automatically saved as voucher for later fund transfer.</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Fund Settlement (optional)</label>
+                    <select name="fund_id" class="form-input">
+                        <option value="">Do not move to fund</option>
+                        {% for fund in funds %}
+                        <option value="{{ fund.id }}">{{ fund.name }} ({{ fund.get_fund_type_display }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">
+                        <input type="checkbox" name="use_voucher" value="1">
+                        Save as voucher first (no balance update now)
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Voucher Type</label>
+                    <select name="voucher_type" class="form-input">
+                        <option value="voucher">Voucher</option>
+                        <option value="contra_voucher">Contra Voucher</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -318,11 +381,54 @@
         </div>
     </div>
 </div>
+
+<div class="data-table" style="margin-top: 1rem;">
+    <div class="modal-header" style="padding: 0;">
+        <h3>Recent Vouchers</h3>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>Voucher #</th>
+                <th>Type</th>
+                <th>Member</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody id="voucher-table-body">
+            <tr><td colspan="6" class="empty-state">Loading vouchers...</td></tr>
+        </tbody>
+    </table>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
     window.CSRF_TOKEN = '{{ csrf_token }}';
+    window.RECEIPT_FUNDS = {{ fund_options_json|safe }};
+    function openReceiptsFilterModal() {
+        document.getElementById('receiptsFilterModal').classList.add('show');
+    }
+    function closeReceiptsFilterModal() {
+        document.getElementById('receiptsFilterModal').classList.remove('show');
+    }
+    function applyReceiptsFilters() {
+        document.getElementById('receipts-filter-type').value = document.getElementById('receipts-filter-type-input').value;
+        document.getElementById('receipts-filter-mode').value = document.getElementById('receipts-filter-mode-input').value;
+        document.getElementById('receipts-filter-date-from').value = document.getElementById('receipts-filter-date-from-input').value;
+        document.getElementById('receipts-filter-date-to').value = document.getElementById('receipts-filter-date-to-input').value;
+        closeReceiptsFilterModal();
+        document.getElementById('receiptsSearchForm').submit();
+    }
+    function clearReceiptsFilters() {
+        document.getElementById('receipts-filter-type-input').value = '';
+        document.getElementById('receipts-filter-mode-input').value = '';
+        document.getElementById('receipts-filter-date-from-input').value = '';
+        document.getElementById('receipts-filter-date-to-input').value = '';
+        applyReceiptsFilters();
+    }
 </script>
 <script src="{% static 'js/receipts.js' %}"></script>
 {% endblock %}

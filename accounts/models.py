@@ -38,6 +38,7 @@ class User(AbstractUser):
     STATUS_CHOICES = [
         ("active", "Active"),
         ("inactive", "Inactive"),
+        ("resign", "Resigned"),
         ("closed", "Closed"),
         ("deceased", "Deceased"),
         ("blacklisted", "Blacklisted"),
@@ -49,6 +50,7 @@ class User(AbstractUser):
     member_type = models.CharField(max_length=20, choices=MEMBER_TYPE_CHOICES, default="regular", db_index=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active", db_index=True)
     date_of_joining = models.DateField(blank=True, null=True, verbose_name="Date of Joining")
+    inactive_since = models.DateField(blank=True, null=True, verbose_name="Inactive Since")
     exit_date = models.DateField(blank=True, null=True, verbose_name="Exit/Closure Date")
     closure_reason = models.TextField(blank=True, null=True, verbose_name="Reason for Closure")
 
@@ -518,6 +520,68 @@ class Receipt(models.Model):
         return f"{self.receipt_number} - {self.get_transaction_type_display()} - {self.amount}"
 
 
+class Voucher(models.Model):
+    """Voucher staging model for pending receipts before settlement."""
+
+    VOUCHER_TYPE_CHOICES = [
+        ("voucher", "Voucher"),
+        ("contra_voucher", "Contra Voucher"),
+    ]
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("transferred", "Transferred"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    voucher_number = models.CharField(max_length=20, unique=True, db_index=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="vouchers")
+    voucher_type = models.CharField(max_length=20, choices=VOUCHER_TYPE_CHOICES, default="voucher", db_index=True)
+    total_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    payment_mode = models.CharField(max_length=20, choices=Receipt.PAYMENT_MODE_CHOICES, default="cash")
+    reference_number = models.CharField(max_length=100, blank=True, null=True)
+    remarks = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending", db_index=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="vouchers_created")
+    transferred_to_fund = models.ForeignKey(
+        "FundAccount", on_delete=models.SET_NULL, blank=True, null=True, related_name="vouchers_transferred"
+    )
+    transferred_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Voucher"
+        verbose_name_plural = "Vouchers"
+
+    def __str__(self):
+        return f"{self.voucher_number} - {self.user.display_name}"
+
+
+class VoucherEntry(models.Model):
+    """Line-level account entries captured in a voucher."""
+
+    voucher = models.ForeignKey(Voucher, on_delete=models.CASCADE, related_name="entries")
+    member_account = models.ForeignKey(MemberAccount, on_delete=models.CASCADE, related_name="voucher_entries")
+    transaction_type = models.CharField(max_length=20, choices=Receipt.TRANSACTION_TYPE_CHOICES)
+    amount = models.DecimalField(max_digits=15, decimal_places=2)
+    description = models.TextField(blank=True, null=True)
+    linked_loan_repayment = models.ForeignKey(
+        "LoanRepayment", on_delete=models.SET_NULL, blank=True, null=True, related_name="voucher_entries"
+    )
+    created_receipt = models.ForeignKey(
+        Receipt, on_delete=models.SET_NULL, blank=True, null=True, related_name="voucher_entries"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        verbose_name = "Voucher Entry"
+        verbose_name_plural = "Voucher Entries"
+
+    def __str__(self):
+        return f"{self.voucher.voucher_number} - {self.member_account.account_number}"
+
+
 class Loan(models.Model):
     """
     Loan model for tracking all member loans.
@@ -784,6 +848,7 @@ class AuditLog(models.Model):
         ("member", "Member"),
         ("account", "Account"),
         ("receipt", "Receipt"),
+        ("voucher", "Voucher"),
         ("loan", "Loan"),
         ("fund", "Fund"),
         ("system", "System"),
