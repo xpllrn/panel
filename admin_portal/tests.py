@@ -11,7 +11,7 @@ from django.test import Client, TestCase
 from django.utils import timezone
 from django.urls import reverse
 
-from accounts.models import FundAccount, Loan, LoanRepayment, MemberAccount, Receipt, Voucher
+from accounts.models import FundAccount, LoanAccount, LoanApplication, LoanRepayment, MemberAccount, Transaction, Voucher
 
 User = get_user_model()
 
@@ -364,22 +364,36 @@ class MemberStatusLifecycleTests(TestCase):
         self.client.login(username="admin2", password="AdminPass123!")
 
     def test_inactive_blocked_when_pending_emi_exists(self):
-        loan = Loan.objects.create(
-            loan_number="LN-TEST-001",
+        app = LoanApplication.objects.create(
+            application_number="LA-TEST-ADM-001",
             user=self.member,
             loan_type="personal",
+            principal_amount=Decimal("50000"),
+            interest_rate=Decimal("12"),
+            tenure_months=12,
+            application_date=timezone.now().date(),
+            status="approved",
+            approval_date=timezone.now().date(),
+        )
+        loan = LoanAccount.objects.create(
+            loan_number="LN-TEST-001",
+            application=app,
+            user=self.member,
             status="active",
             principal_amount=Decimal("50000"),
             interest_rate=Decimal("12"),
+            interest_type="reducing",
             tenure_months=12,
             emi_amount=Decimal("5000"),
             total_payable=Decimal("60000"),
             total_paid=Decimal("0"),
             outstanding_balance=Decimal("50000"),
-            application_date=timezone.now().date(),
+            total_emis=12,
+            emis_paid=0,
+            emis_overdue=0,
         )
         LoanRepayment.objects.create(
-            loan=loan,
+            loan_account=loan,
             installment_number=1,
             due_date=timezone.now().date() - timedelta(days=20),
             amount_due=Decimal("5000"),
@@ -419,7 +433,7 @@ class MemberStatusLifecycleTests(TestCase):
         self.assertEqual(self.member.status, "resign")
         self.assertFalse(self.member.is_active)
         self.assertEqual(self.account.balance, Decimal("0.00"))
-        self.assertTrue(Receipt.objects.filter(user=self.member, transaction_type="debit").exists())
+        self.assertTrue(Transaction.objects.filter(user=self.member, transaction_type="debit").exists())
 
 
 class VoucherFlowTests(TestCase):
@@ -451,7 +465,7 @@ class VoucherFlowTests(TestCase):
 
     def test_voucher_create_and_transfer(self):
         response = self.client.post(
-            reverse("add_receipt"),
+            reverse("add_transaction"),
             {
                 "user_id": self.member.id,
                 "use_voucher": "1",
@@ -469,4 +483,4 @@ class VoucherFlowTests(TestCase):
         self.assertTrue(transfer.json()["success"])
         voucher = Voucher.objects.get(id=voucher_id)
         self.assertEqual(voucher.status, "transferred")
-        self.assertTrue(Receipt.objects.filter(user=self.member).exists())
+        self.assertTrue(Transaction.objects.filter(user=self.member).exists())

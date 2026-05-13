@@ -1,0 +1,530 @@
+/**
+ * Receipts Page Styles
+ * Page-shared styles (header, search, table, pagination, actions)
+ * are in page-layout.css
+ */
+
+/* Receipt number styling */
+.receipt-number {
+    font-family: monospace;
+    font-weight: 500;
+    color: var(--color-gray-800);
+}
+
+/* Amount column */
+.amount {
+    font-family: monospace;
+    font-weight: 500;
+    text-align: right;
+}
+
+/* Member ID subtitle */
+.user-member-id {
+    font-size: var(--font-size-xs);
+    color: var(--color-gray-500);
+}
+
+/* ========================================
+   Transaction Type Badges
+   ======================================== */
+.transaction-type-badge {
+    display: inline-block;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+}
+
+.transaction-type-badge.type-credit {
+    background: #d1fae5;
+    color: #047857;
+}
+
+.transaction-type-badge.type-debit {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.transaction-type-badge.type-transfer {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.transaction-type-badge.type-interest {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.transaction-type-badge.type-dividend {
+    background: #ddd6fe;
+    color: #7c3aed;
+}
+
+.transaction-type-badge.type-share_capital {
+    background: #fce7f3;
+    color: #be185d;
+}
+
+/* ========================================
+   Receipt View Modal
+   ======================================== */
+.modal-receipt {
+    max-width: 700px;
+}
+
+.modal-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+/* Bank Header */
+.receipt-bank-header {
+    text-align: center;
+    padding: var(--spacing-lg) 0;
+    border-bottom: 2px solid var(--color-gray-800);
+    margin-bottom: var(--spacing-lg);
+}
+
+.bank-name {
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    color: var(--color-gray-900);
+    letter-spacing: 0.05em;
+}
+
+.bank-subtitle {
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-600);
+    margin-top: var(--spacing-xs);
+}
+
+.bank-address {
+    font-size: var(--font-size-xs);
+    color: var(--color-gray-500);
+    margin-top: var(--spacing-xs);
+}
+
+.bank-contact {
+    font-size: var(--font-size-xs);
+    color: var(--color-gray-500);
+    margin-top: 2px;
+}
+
+/* Receipt Title Bar */
+.receipt-title-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--color-gray-300);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--spacing-md);
+    background: var(--color-gray-50);
+}
+
+.receipt-title-label {
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    color: var(--color-gray-800);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.receipt-title-number {
+    font-family: monospace;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-gray-700);
+}
+
+/* Receipt Meta Row */
+.receipt-meta-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: var(--spacing-lg);
+}
+
+.receipt-meta-item {
+    display: flex;
+    gap: var(--spacing-xs);
+}
+
+.receipt-meta-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-500);
+    font-weight: 500;
+}
+
+.receipt-meta-value {
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-800);
+    font-weight: 500;
+}
+
+/* Receipt Sections */
+.receipt-section {
+    border: 1px solid var(--color-gray-200);
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+}
+
+.receipt-section-title {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--color-gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--spacing-sm);
+    padding-bottom: var(--spacing-xs);
+    border-bottom: 1px solid var(--color-gray-100);
+}
+
+/* Details Grid */
+.receipt-details-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-sm) var(--spacing-lg);
+}
+
+.receipt-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.receipt-detail-label {
+    font-size: var(--font-size-xs);
+    color: var(--color-gray-500);
+}
+
+.receipt-detail-value {
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-800);
+    font-weight: 500;
+}
+
+/* Amount Box */
+.receipt-amount-box {
+    border: 1px solid var(--color-gray-200);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.receipt-amount-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-bottom: 1px solid var(--color-gray-100);
+}
+
+.receipt-amount-row:last-child {
+    border-bottom: none;
+}
+
+.receipt-amount-highlight {
+    background: var(--color-primary-light);
+}
+
+.receipt-amount-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-600);
+    font-weight: 500;
+}
+
+.receipt-amount-value {
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-800);
+    font-weight: 500;
+    font-family: monospace;
+}
+
+.receipt-amount-large {
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+    color: var(--color-primary-text);
+}
+
+/* Description */
+.receipt-description {
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-700);
+    line-height: 1.5;
+}
+
+/* Footer */
+.receipt-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: var(--spacing-xl) 0 var(--spacing-md);
+    margin-top: var(--spacing-lg);
+}
+
+.receipt-footer-left,
+.receipt-footer-right {
+    text-align: center;
+}
+
+.receipt-footer-label {
+    font-size: var(--font-size-xs);
+    color: var(--color-gray-500);
+    margin-bottom: var(--spacing-xs);
+}
+
+.receipt-footer-value {
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-800);
+    font-weight: 500;
+}
+
+.receipt-signature-line {
+    width: 180px;
+    border-bottom: 1px solid var(--color-gray-400);
+    margin-top: var(--spacing-xl);
+}
+
+/* Disclaimer */
+.receipt-disclaimer {
+    font-size: var(--font-size-xs);
+    color: var(--color-gray-400);
+    font-style: italic;
+    text-align: center;
+    margin-top: var(--spacing-lg);
+    padding-top: var(--spacing-md);
+    border-top: 1px solid var(--color-gray-100);
+}
+
+/* ========================================
+   Responsive
+   ======================================== */
+@media (max-width: 768px) {
+    .receipt-details-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .receipt-meta-row {
+        flex-direction: column;
+        gap: var(--spacing-xs);
+    }
+
+    .receipt-footer {
+        flex-direction: column;
+        gap: var(--spacing-lg);
+        align-items: center;
+    }
+}
+
+/* ========================================
+   Print Styles
+   ======================================== */
+@media print {
+    /* Hide everything except the receipt */
+    body * {
+        visibility: hidden;
+    }
+
+    #receipt-print-area,
+    #receipt-print-area * {
+        visibility: visible;
+    }
+
+    #receipt-print-area {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        padding: 20mm;
+        box-sizing: border-box;
+    }
+
+    /* Hide non-print elements */
+    .sidebar,
+    .page-header,
+    .search-info,
+    .data-table,
+    .pagination,
+    .modal-header,
+    .modal-footer,
+    .no-print {
+        display: none !important;
+    }
+
+    /* Modal styling for print */
+    .modal {
+        position: static;
+        background: none;
+    }
+
+    .modal-content {
+        box-shadow: none;
+        border: none;
+        padding: 0;
+        max-width: none;
+    }
+
+    /* Force print-friendly colors */
+    .receipt-bank-header {
+        border-bottom-color: #000;
+    }
+
+    .bank-name {
+        color: #000;
+    }
+
+    .receipt-title-bar {
+        background: #f5f5f5;
+        border-color: #000;
+    }
+
+    .receipt-section {
+        border-color: #ccc;
+    }
+
+    .receipt-amount-highlight {
+        background: #f0f0f0;
+    }
+
+    .receipt-amount-large {
+        color: #000;
+    }
+
+    .receipt-signature-line {
+        border-bottom-color: #000;
+    }
+
+    /* Page setup - margin: 0 removes browser header/footer (title, URL, date, page number) */
+    @page {
+        size: A4;
+        margin: 0;
+    }
+
+    /* Use padding on the print area instead since @page margin is 0 */
+    #receipt-print-area {
+        padding: 15mm;
+    }
+
+    /* Reset the html/body to avoid any extra spacing */
+    html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Hide the page title from showing in print */
+    title {
+        display: none;
+    }
+}
+
+/* Recent vouchers panel (transactions page) */
+.voucher-panel {
+    margin-top: 2rem;
+    padding: 1.25rem 1.35rem;
+    background: var(--color-white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--color-gray-200);
+}
+
+.voucher-panel-header {
+    margin-bottom: 1rem;
+}
+
+.voucher-panel-header h3 {
+    margin: 0 0 0.35rem;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--color-gray-800);
+}
+
+.voucher-panel-hint {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--color-gray-500);
+    line-height: 1.45;
+}
+
+.voucher-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border: 1px solid var(--color-gray-200);
+    border-radius: var(--radius-md);
+}
+
+.voucher-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+}
+
+.voucher-table thead th {
+    text-align: left;
+    padding: 0.55rem 0.75rem;
+    background: var(--color-gray-50, #f9fafb);
+    color: var(--color-gray-600);
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    border-bottom: 1px solid var(--color-gray-200);
+    white-space: nowrap;
+}
+
+.voucher-table tbody td {
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--color-gray-100);
+    vertical-align: middle;
+}
+
+.voucher-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.voucher-table tbody tr:hover {
+    background: var(--color-gray-50, #fafafa);
+}
+
+.voucher-num {
+    font-family: ui-monospace, monospace;
+    font-weight: 500;
+    color: var(--color-gray-800);
+}
+
+.voucher-date {
+    color: var(--color-gray-600);
+    white-space: nowrap;
+}
+
+.voucher-col-amount {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+.voucher-status {
+    display: inline-block;
+    padding: 0.15rem 0.45rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    background: var(--color-gray-100);
+    color: var(--color-gray-700);
+}
+
+.voucher-col-action {
+    min-width: 220px;
+}
+
+.voucher-action-cell {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.voucher-fund-select {
+    min-width: 160px;
+    flex: 1 1 140px;
+    max-width: 220px;
+}

@@ -3,23 +3,23 @@ Tests for the accounts app.
 Covers utility functions, model validators, and user model methods.
 """
 
+from datetime import date
+
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.test import TestCase, override_settings
-from django.urls import reverse
-
-from rest_framework.test import APIClient
+from django.test import TestCase
 
 from accounts.models import (
-    LoginOTPChallenge,
-    UserDevice,
+    FinancialPeriod,
+    ProfitAndLoss,
+    SocietyAccount,
     aadhar_validator,
     ifsc_validator,
     pan_validator,
     phone_validator,
     pincode_validator,
 )
-from accounts.utils import combine_name, split_full_name, validate_password_strength
+from accounts.utils import combine_name, persist_financial_snapshots, split_full_name, validate_password_strength
 
 User = get_user_model()
 
@@ -291,83 +291,30 @@ class UserModelTests(TestCase):
         self.assertEqual(new_user.role, "member")
 
 
-class OtpLoginFlowTests(TestCase):
-    """Tests for OTP login endpoints and device registration."""
+# OTP / device-registration tests removed alongside the member-portal and
+# android-app legacy archival. The view functions and models (LoginOTPChallenge,
+# UserDevice) stay dormant in `accounts/` for future revival.
 
-    def setUp(self):
-        self.client = APIClient()
-        self.user = User.objects.create_user(
-            username="otpuser",
-            email="otp@example.com",
-            password="TestPass123!",
-            role="member",
-            status="active",
+
+class PersistFinancialSnapshotsTests(TestCase):
+    """Phase 4: persisted P&L and society snapshot helpers."""
+
+    def test_persist_creates_and_reuses_rows(self):
+        fp = FinancialPeriod.objects.create(
+            label="FY24-25",
+            start_date=date(2024, 4, 1),
+            end_date=date(2025, 3, 31),
+            status="open",
             is_active=True,
         )
+        pl, soc, pl_updated = persist_financial_snapshots(fp)
+        self.assertTrue(pl_updated)
+        self.assertEqual(pl.financial_period_id, fp.id)
+        self.assertEqual(soc.financial_period_id, fp.id)
+        self.assertEqual(ProfitAndLoss.objects.filter(financial_period=fp).count(), 1)
+        self.assertEqual(SocietyAccount.objects.filter(financial_period=fp).count(), 1)
 
-    def test_login_start_creates_challenge(self):
-        response = self.client.post(
-            reverse("api:auth_login_start"),
-            {"username": "otpuser", "password": "TestPass123!"},
-            format="json",
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.data.get("success"))
-        self.assertTrue(LoginOTPChallenge.objects.filter(user=self.user).exists())
-
-    def test_verify_otp_rejects_invalid_code(self):
-        start = self.client.post(
-            reverse("api:auth_login_start"),
-            {"username": "otpuser", "password": "TestPass123!"},
-            format="json",
-        )
-        challenge_token = start.data["challenge_token"]
-        verify = self.client.post(
-            reverse("api:auth_verify_otp"),
-            {"challenge_token": challenge_token, "otp": "000000"},
-            format="json",
-        )
-        self.assertEqual(verify.status_code, 400)
-        self.assertFalse(verify.data.get("success"))
-
-    @override_settings(LOGIN_OTP_BYPASS_USERNAMES=["otpuser"], LOGIN_OTP_BYPASS_CODE="654321")
-    def test_bypass_user_can_login_without_email_otp_delivery(self):
-        self.user.email = ""
-        self.user.save(update_fields=["email"])
-
-        start = self.client.post(
-            reverse("api:auth_login_start"),
-            {"username": "otpuser", "password": "TestPass123!"},
-            format="json",
-        )
-        self.assertEqual(start.status_code, 200)
-        self.assertTrue(start.data.get("success"))
-        self.assertIn("challenge_token", start.data)
-
-        verify = self.client.post(
-            reverse("api:auth_verify_otp"),
-            {"challenge_token": start.data["challenge_token"], "otp": "654321"},
-            format="json",
-        )
-        self.assertEqual(verify.status_code, 200)
-        self.assertTrue(verify.data.get("success"))
-        self.assertIn("access", verify.data)
-        self.assertIn("refresh", verify.data)
-
-    def test_register_and_unregister_device(self):
-        self.client.force_authenticate(self.user)
-        register = self.client.post(
-            reverse("api:register_device_token"),
-            {"token": "test-device-token", "platform": "android"},
-            format="json",
-        )
-        self.assertEqual(register.status_code, 200)
-        self.assertTrue(UserDevice.objects.filter(user=self.user, token="test-device-token", is_active=True).exists())
-
-        unregister = self.client.post(
-            reverse("api:unregister_device_token"),
-            {"token": "test-device-token"},
-            format="json",
-        )
-        self.assertEqual(unregister.status_code, 200)
-        self.assertTrue(UserDevice.objects.filter(user=self.user, token="test-device-token", is_active=False).exists())
+        pl2, soc2, pl_updated2 = persist_financial_snapshots(fp)
+        self.assertTrue(pl_updated2)
+        self.assertEqual(pl2.id, pl.id)
+        self.assertEqual(soc2.id, soc.id)

@@ -4,6 +4,8 @@
 
 The Cooperative Society API provides programmatic access to all banking operations. It is built with Django REST Framework and supports JWT authentication, making it suitable for mobile apps, third-party integrations, and frontend SPAs.
 
+**Staff browser UI:** The server-rendered admin panel at `/home/` can run **without** a password when `WEB_LOGIN_DISABLED=True` (default in Docker compose). That setting does **not** affect this API: JWT and OTP flows below still apply to `/api/v1/…`.
+
 **Base URL:** `http://localhost:8000/api/v1/`
 **Interactive Docs (Swagger):** `http://localhost:8000/api/v1/docs/`
 **API Schema (OpenAPI 3.0):** `http://localhost:8000/api/v1/schema/`

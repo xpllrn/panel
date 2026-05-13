@@ -12,6 +12,10 @@ SECRET_KEY = config("SECRET_KEY")  # No default - must be set in .env
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config("DEBUG", default=False, cast=bool)  # Default to False for security
 
+# When True: staff HTML panel skips the login screen; each browser session is attached to the first staff user
+# (after setup). API routes under /api/ are unchanged (JWT). Django /admin/ still uses its own login.
+WEB_LOGIN_DISABLED = config("WEB_LOGIN_DISABLED", default=True, cast=bool)
+
 # Production default includes app.* (staff/member portal at /login/). Override in .env to add EC2 IP, www, etc.
 _default_allowed = (
     "localhost,127.0.0.1"
@@ -48,10 +52,10 @@ if not DEBUG:
 if DEBUG:
     _csrf_default = "http://localhost:8000,http://127.0.0.1:8000"
 else:
-    _csrf_default = (
-        "https://app.delhiaamnagrik.org,https://admin.delhiaamnagrik.org,https://api.delhiaamnagrik.org"
-    )
-CSRF_TRUSTED_ORIGINS = [x.strip() for x in config("CSRF_TRUSTED_ORIGINS", default=_csrf_default).split(",") if x.strip()]
+    _csrf_default = "https://app.delhiaamnagrik.org,https://admin.delhiaamnagrik.org,https://api.delhiaamnagrik.org"
+CSRF_TRUSTED_ORIGINS = [
+    x.strip() for x in config("CSRF_TRUSTED_ORIGINS", default=_csrf_default).split(",") if x.strip()
+]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -67,7 +71,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "accounts",
     "admin_portal",
-    "member_portal",
+    # `member_portal` moved to legacy/ — re-add here to revive the member-side UI.
 ]
 
 MIDDLEWARE = [
@@ -78,11 +82,12 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "accounts.middleware.AutoStaffLoginMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = "config.urls"
+ROOT_URLCONF = "config.urls_panel"
 
 TEMPLATES = [
     {
@@ -95,6 +100,8 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "admin_portal.context_processors.portal_fy",
+                "admin_portal.context_processors.web_auth_context",
             ],
         },
     },

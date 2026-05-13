@@ -298,7 +298,7 @@
                         var prefix = isCredit ? '+' : '-';
 
                         html += '<tr>';
-                        html += '<td>' + escapeHTML(t.receipt_number) + '</td>';
+                        html += '<td>' + escapeHTML(t.transaction_number) + '</td>';
                         html += '<td>' + escapeHTML(t.created_at) + '</td>';
                         html += '<td>' + escapeHTML(t.transaction_type_display) + '</td>';
                         html += '<td>' + escapeHTML(t.account_number) + '</td>';

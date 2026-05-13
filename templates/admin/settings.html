@@ -1,0 +1,432 @@
+{% extends 'admin/base.html' %}
+{% load static %}
+
+{% block title %}Settings · {% if portal_society_config %}{{ portal_society_config.society_name }}{% else %}Panels{% endif %}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/pages/settings.css' %}">
+{% endblock %}
+
+{% block body_attrs %} data-settings-tab="{{ active_tab|default:'general' }}"{% endblock %}
+
+{% block content %}
+<div class="settings-shell">
+    <header class="settings-header">
+        <h2 class="settings-title">Settings</h2>
+        <p class="settings-subtitle">Society profile, financial year, and products.</p>
+    </header>
+
+    <div class="settings-layout">
+        <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
+            <button type="button" class="settings-tab" data-tab="general" role="tab" aria-selected="false">
+                <span class="settings-tab-title">General</span>
+            </button>
+            <button type="button" class="settings-tab" data-tab="financial-year" role="tab" aria-selected="false">
+                <span class="settings-tab-title">Financial year</span>
+            </button>
+            <button type="button" class="settings-tab" data-tab="products" role="tab" aria-selected="false">
+                <span class="settings-tab-title">Products</span>
+            </button>
+        </nav>
+
+        <div class="settings-panels">
+            <!-- ============ GENERAL ============ -->
+            <section class="settings-panel" data-panel="general" role="tabpanel" aria-labelledby="tab-general">
+                <div class="settings-card">
+                    <div class="settings-card-header">
+                        <h3>Society profile</h3>
+                        <p class="settings-card-sub">Visible across the admin portal, login screen, and exported reports.</p>
+                    </div>
+                    <form method="post" enctype="multipart/form-data" class="settings-form">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="update_society_profile">
+                        <input type="hidden" name="tab" value="general">
+
+                        <div class="settings-form-grid">
+                            <label class="settings-field">
+                                <span class="settings-field-label">Society name</span>
+                                <input type="text" name="society_name" required maxlength="255"
+                                       value="{% if society_config %}{{ society_config.society_name }}{% endif %}"
+                                       placeholder="e.g. Delhi Aam Nagrik Society">
+                            </label>
+
+                            <label class="settings-field">
+                                <span class="settings-field-label">Late repayment penalty / day</span>
+                                <div class="settings-input-prefix">
+                                    <span class="settings-input-prefix-icon">₹</span>
+                                    <input type="number" step="0.01" min="0" name="late_payment_penalty_per_day" required
+                                           value="{% if society_config %}{{ society_config.late_payment_penalty_per_day }}{% else %}0.00{% endif %}">
+                                </div>
+                                <span class="settings-field-hint">Applied per day on overdue EMI installments.</span>
+                            </label>
+                        </div>
+
+                        <div class="settings-logo-row">
+                            <div class="settings-logo-preview" aria-hidden="true">
+                                {% if society_config and society_config.society_logo %}
+                                <img src="{{ society_config.society_logo.url }}" alt="">
+                                {% else %}
+                                <span class="settings-logo-placeholder">{% if society_config %}{{ society_config.society_name|slice:":1" }}{% else %}S{% endif %}</span>
+                                {% endif %}
+                            </div>
+                            <div class="settings-logo-controls">
+                                <span class="settings-field-label">Logo</span>
+                                <input type="file" name="society_logo" accept="image/png,image/jpeg,image/svg+xml,image/webp">
+                                <span class="settings-field-hint">PNG, JPG, SVG, or WebP. Displayed in the sidebar at 40×40.</span>
+                                {% if society_config and society_config.society_logo %}
+                                <label class="settings-checkbox">
+                                    <input type="checkbox" name="remove_logo">
+                                    <span>Remove current logo</span>
+                                </label>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="settings-form-actions">
+                            <button type="submit" class="btn btn-primary">Save changes</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <!-- ============ FINANCIAL YEAR ============ -->
+            <section class="settings-panel" data-panel="financial-year" role="tabpanel" aria-labelledby="tab-financial-year">
+                <div class="settings-card">
+                    <div class="settings-card-header">
+                        <h3>Active financial year</h3>
+                        <p class="settings-card-sub">Switching FY reloads the portal and reopens it on the chosen year.</p>
+                    </div>
+
+                    <p class="settings-fy-current">
+                        <span class="settings-fy-current-label">Currently open:</span>
+                        {% if working_fy %}
+                        <strong class="settings-fy-current-value">{{ working_fy.label }}</strong>
+                        <span class="settings-fy-current-range">{{ working_fy.start_date|date:"d M Y" }} – {{ working_fy.end_date|date:"d M Y" }}</span>
+                        {% else %}
+                        <strong class="settings-fy-current-value">Calendar FY (Apr – Mar)</strong>
+                        <span class="settings-fy-current-range">No periods defined yet.</span>
+                        {% endif %}
+                    </p>
+
+                    <form method="post" class="settings-fy-switch">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="select_working_fy">
+                        <input type="hidden" name="tab" value="financial-year">
+                        <input type="hidden" name="next" value="/home/">
+                        <label class="settings-field" style="margin:0;">
+                            <span class="settings-field-label">Switch active FY</span>
+                            <select name="working_period_id" id="fy-switch-select" class="settings-select">
+                                <option value="">Calendar FY (Apr–Mar)</option>
+                                {% for p in periods %}
+                                <option value="{{ p.id }}" {% if working_fy and working_fy.id == p.id %}selected{% endif %}>
+                                    {{ p.label }} · {{ p.start_date|date:"M Y" }}–{{ p.end_date|date:"M Y" }}{% if p.is_active %} · active{% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <button type="submit" class="btn btn-primary">Apply &amp; reload</button>
+                    </form>
+                </div>
+
+                <div class="settings-card">
+                    <div class="settings-card-header settings-card-header-row">
+                        <div>
+                            <h3>All financial years</h3>
+                            <p class="settings-card-sub">Define one row per fiscal year so reports, snapshots, and the FY switcher have something to point at.</p>
+                        </div>
+                        <button type="button" class="btn btn-secondary btn-sm" data-toggle="fy-create">Add period</button>
+                    </div>
+
+                    <form method="post" class="settings-form settings-form-inset" id="fy-create" hidden>
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="create_period">
+                        <input type="hidden" name="tab" value="financial-year">
+                        <div class="settings-form-grid">
+                            <label class="settings-field">
+                                <span class="settings-field-label">Label</span>
+                                <input type="text" name="label" required maxlength="20" placeholder="FY 2025-26">
+                            </label>
+                            <label class="settings-field">
+                                <span class="settings-field-label">Status</span>
+                                <select name="status">
+                                    <option value="open">Open</option>
+                                    <option value="continuing">Continuing</option>
+                                    <option value="closed">Closed</option>
+                                </select>
+                            </label>
+                            <label class="settings-field">
+                                <span class="settings-field-label">Start date</span>
+                                <input type="date" name="start_date" required>
+                            </label>
+                            <label class="settings-field">
+                                <span class="settings-field-label">End date</span>
+                                <input type="date" name="end_date" required>
+                            </label>
+                        </div>
+                        <label class="settings-checkbox">
+                            <input type="checkbox" name="is_active">
+                            <span>Make this the active period (clears active on others)</span>
+                        </label>
+                        <div class="settings-form-actions">
+                            <button type="submit" class="btn btn-primary">Create period</button>
+                            <button type="button" class="btn btn-link" data-toggle="fy-create">Cancel</button>
+                        </div>
+                    </form>
+
+                    <div class="settings-table-wrap">
+                        <table class="settings-table">
+                            <thead>
+                                <tr>
+                                    <th>Label</th>
+                                    <th>Range</th>
+                                    <th>Status</th>
+                                    <th>Active</th>
+                                    <th aria-label="Actions"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for p in periods %}
+                                <tr class="{% if p.is_active %}is-active{% endif %}">
+                                    <td><strong>{{ p.label }}</strong></td>
+                                    <td>{{ p.start_date|date:"d M Y" }} – {{ p.end_date|date:"d M Y" }}</td>
+                                    <td><span class="settings-chip">{{ p.get_status_display }}</span></td>
+                                    <td>
+                                        {% if p.is_active %}
+                                        <span class="settings-chip settings-chip-active">Active</span>
+                                        {% else %}
+                                        <span class="settings-chip settings-chip-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="settings-row-actions">
+                                        {% if not p.is_active %}
+                                        <form method="post" class="settings-inline-form">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="set_active">
+                                            <input type="hidden" name="period_id" value="{{ p.id }}">
+                                            <input type="hidden" name="tab" value="financial-year">
+                                            <button type="submit" class="btn btn-secondary btn-sm">Set active</button>
+                                        </form>
+                                        <form method="post" class="settings-inline-form" onsubmit="return confirm('Delete period {{ p.label }}?');">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="delete_period">
+                                            <input type="hidden" name="period_id" value="{{ p.id }}">
+                                            <input type="hidden" name="tab" value="financial-year">
+                                            <button type="submit" class="btn btn-link btn-sm settings-link-danger">Delete</button>
+                                        </form>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr><td colspan="5" class="settings-table-empty">No periods yet. Add one to start scoping reports.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============ PRODUCTS ============ -->
+            <section class="settings-panel" data-panel="products" role="tabpanel" aria-labelledby="tab-products">
+                <div class="settings-card">
+                    <div class="settings-card-header settings-card-header-row">
+                        <div>
+                            <h3>Deposit products</h3>
+                            <p class="settings-card-sub">FD, RD, savings, share capital, etc. Used on the Accounts page and member statements.</p>
+                        </div>
+                        <button type="button" class="btn btn-secondary btn-sm" data-toggle="account-create">Add product</button>
+                    </div>
+
+                    <form method="post" class="settings-form settings-form-inset" id="account-create" hidden>
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="create_account_type">
+                        <input type="hidden" name="tab" value="products">
+                        <div class="settings-form-grid">
+                            <label class="settings-field">
+                                <span class="settings-field-label">Product name</span>
+                                <input type="text" name="name" required maxlength="100" placeholder="Fixed Deposit">
+                            </label>
+                            <label class="settings-field">
+                                <span class="settings-field-label">Interest rate</span>
+                                <div class="settings-input-suffix">
+                                    <input type="number" step="0.01" min="0" name="interest_rate" required placeholder="7.50">
+                                    <span class="settings-input-suffix-icon">%</span>
+                                </div>
+                            </label>
+                        </div>
+                        <label class="settings-checkbox"><input type="checkbox" name="is_active" checked> <span>Active</span></label>
+                        <div class="settings-form-actions">
+                            <button type="submit" class="btn btn-primary">Add deposit product</button>
+                            <button type="button" class="btn btn-link" data-toggle="account-create">Cancel</button>
+                        </div>
+                    </form>
+
+                    {# Per-row forms live outside <table> and are linked via the HTML5 form="" attribute. #}
+                    {% for cfg in account_type_configs %}
+                    <form method="post" id="acct-edit-{{ cfg.id }}">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="update_account_type">
+                        <input type="hidden" name="item_id" value="{{ cfg.id }}">
+                        <input type="hidden" name="tab" value="products">
+                    </form>
+                    <form method="post" id="acct-delete-{{ cfg.id }}" onsubmit="return confirm('Delete {{ cfg.account_type }}?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="delete_account_type">
+                        <input type="hidden" name="item_id" value="{{ cfg.id }}">
+                        <input type="hidden" name="tab" value="products">
+                    </form>
+                    {% endfor %}
+
+                    <div class="settings-table-wrap">
+                        <table class="settings-table settings-table-products">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th class="settings-cell-narrow">Rate (%)</th>
+                                    <th class="settings-cell-narrow">Active</th>
+                                    <th aria-label="Actions"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for cfg in account_type_configs %}
+                                <tr>
+                                    <td><input form="acct-edit-{{ cfg.id }}" type="text" name="name" value="{{ cfg.account_type }}" required maxlength="100"></td>
+                                    <td><input form="acct-edit-{{ cfg.id }}" type="number" step="0.01" min="0" name="interest_rate" value="{{ cfg.interest_rate }}" required></td>
+                                    <td class="settings-cell-center"><input form="acct-edit-{{ cfg.id }}" type="checkbox" name="is_active" {% if cfg.is_active %}checked{% endif %} class="settings-switch"></td>
+                                    <td class="settings-row-actions">
+                                        <button form="acct-edit-{{ cfg.id }}" type="submit" class="btn btn-secondary btn-sm">Save</button>
+                                        <button form="acct-delete-{{ cfg.id }}" type="submit" class="btn btn-link btn-sm settings-link-danger">Remove</button>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr><td colspan="4" class="settings-table-empty">No deposit products yet.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="settings-card">
+                    <div class="settings-card-header settings-card-header-row">
+                        <div>
+                            <h3>Loan products</h3>
+                            <p class="settings-card-sub">Each loan type carries its own annual interest rate.</p>
+                        </div>
+                        <button type="button" class="btn btn-secondary btn-sm" data-toggle="loan-create">Add product</button>
+                    </div>
+
+                    <form method="post" class="settings-form settings-form-inset" id="loan-create" hidden>
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="create_loan_type">
+                        <input type="hidden" name="tab" value="products">
+                        <div class="settings-form-grid">
+                            <label class="settings-field">
+                                <span class="settings-field-label">Product name</span>
+                                <input type="text" name="name" required maxlength="100" placeholder="Personal Loan">
+                            </label>
+                            <label class="settings-field">
+                                <span class="settings-field-label">Interest rate</span>
+                                <div class="settings-input-suffix">
+                                    <input type="number" step="0.01" min="0" name="interest_rate" required placeholder="12.00">
+                                    <span class="settings-input-suffix-icon">%</span>
+                                </div>
+                            </label>
+                        </div>
+                        <label class="settings-checkbox"><input type="checkbox" name="is_active" checked> <span>Active</span></label>
+                        <div class="settings-form-actions">
+                            <button type="submit" class="btn btn-primary">Add loan product</button>
+                            <button type="button" class="btn btn-link" data-toggle="loan-create">Cancel</button>
+                        </div>
+                    </form>
+
+                    {% for cfg in loan_type_configs %}
+                    <form method="post" id="loan-edit-{{ cfg.id }}">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="update_loan_type">
+                        <input type="hidden" name="item_id" value="{{ cfg.id }}">
+                        <input type="hidden" name="tab" value="products">
+                    </form>
+                    <form method="post" id="loan-delete-{{ cfg.id }}" onsubmit="return confirm('Delete {{ cfg.loan_type }}?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="delete_loan_type">
+                        <input type="hidden" name="item_id" value="{{ cfg.id }}">
+                        <input type="hidden" name="tab" value="products">
+                    </form>
+                    {% endfor %}
+
+                    <div class="settings-table-wrap">
+                        <table class="settings-table settings-table-products">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th class="settings-cell-narrow">Rate (%)</th>
+                                    <th class="settings-cell-narrow">Active</th>
+                                    <th aria-label="Actions"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for cfg in loan_type_configs %}
+                                <tr>
+                                    <td><input form="loan-edit-{{ cfg.id }}" type="text" name="name" value="{{ cfg.loan_type }}" required maxlength="100"></td>
+                                    <td><input form="loan-edit-{{ cfg.id }}" type="number" step="0.01" min="0" name="interest_rate" value="{{ cfg.interest_rate }}" required></td>
+                                    <td class="settings-cell-center"><input form="loan-edit-{{ cfg.id }}" type="checkbox" name="is_active" {% if cfg.is_active %}checked{% endif %} class="settings-switch"></td>
+                                    <td class="settings-row-actions">
+                                        <button form="loan-edit-{{ cfg.id }}" type="submit" class="btn btn-secondary btn-sm">Save</button>
+                                        <button form="loan-delete-{{ cfg.id }}" type="submit" class="btn btn-link btn-sm settings-link-danger">Remove</button>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr><td colspan="4" class="settings-table-empty">No loan products yet.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    var VALID_TABS = ['general', 'financial-year', 'products'];
+    var initial = document.body.getAttribute('data-settings-tab') || 'general';
+
+    function tabFromHash() {
+        var h = (window.location.hash || '').replace('#', '');
+        return VALID_TABS.indexOf(h) >= 0 ? h : null;
+    }
+
+    function activateTab(name) {
+        if (VALID_TABS.indexOf(name) < 0) name = 'general';
+        document.querySelectorAll('.settings-tab').forEach(function(btn) {
+            var active = btn.getAttribute('data-tab') === name;
+            btn.classList.toggle('is-active', active);
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        document.querySelectorAll('.settings-panel').forEach(function(panel) {
+            panel.classList.toggle('is-active', panel.getAttribute('data-panel') === name);
+        });
+        if (window.location.hash !== '#' + name) {
+            history.replaceState(null, '', '#' + name);
+        }
+    }
+
+    document.querySelectorAll('.settings-tab').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            activateTab(btn.getAttribute('data-tab'));
+        });
+    });
+
+    document.querySelectorAll('[data-toggle]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var target = document.getElementById(btn.getAttribute('data-toggle'));
+            if (target) target.hidden = !target.hidden;
+        });
+    });
+
+    activateTab(tabFromHash() || initial);
+})();
+</script>
+{% endblock %}

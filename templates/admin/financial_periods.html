@@ -1,0 +1,213 @@
+{% extends 'admin/base.html' %}
+{% load static %}
+
+{% block title %}Financial periods - Admin Portal{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/pages/members.css' %}">
+<style>
+.fp-card { background: var(--color-white); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: 1.25rem; margin-bottom: 1.5rem; }
+.fp-card h3 { font-size: 0.95rem; margin: 0 0 1rem; }
+.fp-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.fp-form .form-group { margin-bottom: 0.75rem; }
+.fp-form label { display: block; font-size: 0.8rem; margin-bottom: 0.25rem; color: var(--color-gray-600); }
+.fp-form input { width: 100%; padding: 0.45rem 0.6rem; border: 1px solid var(--color-gray-300); border-radius: var(--radius-md); }
+.fp-row-active { background: #ecfdf5 !important; }
+.fp-flash { padding: 0.6rem 0.9rem; border-radius: var(--radius-md); font-size: 0.85rem; margin-bottom: 1rem; display: none; }
+.fp-flash.fp-flash-success { background: #ecfdf5; color: #047857; }
+.fp-flash.fp-flash-error { background: #fef2f2; color: #b91c1c; }
+.fp-status-pill { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
+.fp-status-open { background: #ecfeff; color: #0e7490; }
+.fp-status-closed { background: #f3f4f6; color: #4b5563; }
+.fp-status-continuing { background: #fffbeb; color: #b45309; }
+.fp-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.fp-empty { color: var(--color-gray-500); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2 class="page-title">Financial periods</h2>
+    <p class="page-subtitle" style="font-size: 0.85rem; color: var(--color-gray-600); max-width: 42rem;">
+        Open a new financial year, switch the active FY, or close the current one. Closing locks the P&amp;L snapshot
+        for the period so transactions can no longer change it.
+    </p>
+</div>
+
+<div id="fp-flash" class="fp-flash" role="status"></div>
+
+<div class="fp-card">
+    <h3>Open a new financial year</h3>
+    {% if active_period and active_period.status == 'open' %}
+    <p style="font-size: 0.82rem; color: var(--color-gray-600); margin: 0 0 0.75rem;">
+        The active period <strong>{{ active_period.label }}</strong> is still open. Opening a new period will demote it
+        to inactive (but it stays open and can be continued later).
+    </p>
+    {% endif %}
+    <form id="fp-open-form" class="fp-form" autocomplete="off">
+        {% csrf_token %}
+        <div class="form-group">
+            <label for="fp-name">Name</label>
+            <input type="text" id="fp-name" name="name" maxlength="20" required placeholder="e.g. FY 2025-26">
+        </div>
+        <div class="fp-grid-2">
+            <div class="form-group">
+                <label for="fp-start">Start date</label>
+                <input type="date" id="fp-start" name="start_date" required>
+            </div>
+            <div class="form-group">
+                <label for="fp-end">End date</label>
+                <input type="date" id="fp-end" name="end_date" required>
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm" id="fp-open-btn">Open period</button>
+    </form>
+</div>
+
+<div class="data-table">
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Range</th>
+                <th>Status</th>
+                <th>Active</th>
+                <th style="width: 220px;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in periods %}
+            <tr class="{% if p.is_active %}fp-row-active{% endif %}" data-period-id="{{ p.id }}">
+                <td><strong>{{ p.label }}</strong></td>
+                <td>{{ p.start_date|date:"d M Y" }} – {{ p.end_date|date:"d M Y" }}</td>
+                <td>
+                    <span class="fp-status-pill fp-status-{{ p.status }}">{{ p.get_status_display }}</span>
+                </td>
+                <td>{% if p.is_active %}Yes{% else %}No{% endif %}</td>
+                <td>
+                    <div class="fp-actions">
+                        {% if p.status != 'closed' and not p.is_active %}
+                        <button type="button" class="btn btn-secondary btn-sm fp-continue-btn"
+                            data-period-id="{{ p.id }}" data-label="{{ p.label }}">Continue</button>
+                        {% endif %}
+                        {% if p.status == 'open' %}
+                        <button type="button" class="btn btn-secondary btn-sm fp-close-btn"
+                            data-period-id="{{ p.id }}" data-label="{{ p.label }}">Close</button>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="fp-empty">No financial periods yet. Open one above (e.g. 1 Apr 2025 – 31 Mar 2026).</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+(function () {
+    var flash = document.getElementById('fp-flash');
+
+    function showFlash(message, isError) {
+        if (!flash) return;
+        flash.textContent = message;
+        flash.className = 'fp-flash ' + (isError ? 'fp-flash-error' : 'fp-flash-success');
+        flash.style.display = 'block';
+        if (!isError) {
+            setTimeout(function () { window.location.reload(); }, 700);
+        }
+    }
+
+    function csrfToken() {
+        if (typeof window.getCSRFToken === 'function') {
+            return window.getCSRFToken();
+        }
+        var input = document.querySelector('input[name=csrfmiddlewaretoken]');
+        return input ? input.value : '';
+    }
+
+    function postJSON(url, body) {
+        var data = new URLSearchParams();
+        if (body) {
+            Object.keys(body).forEach(function (k) { data.append(k, body[k]); });
+        }
+        return fetch(url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'X-CSRFToken': csrfToken(),
+                'X-Requested-With': 'XMLHttpRequest',
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: data.toString(),
+        }).then(function (resp) {
+            return resp.json().then(function (json) { return { ok: resp.ok, json: json }; });
+        });
+    }
+
+    var openForm = document.getElementById('fp-open-form');
+    if (openForm) {
+        openForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var btn = document.getElementById('fp-open-btn');
+            if (btn) btn.disabled = true;
+            postJSON('{% url "open_financial_period" %}', {
+                name: document.getElementById('fp-name').value.trim(),
+                start_date: document.getElementById('fp-start').value,
+                end_date: document.getElementById('fp-end').value,
+            }).then(function (result) {
+                if (result.json && result.json.success) {
+                    showFlash('Period opened.', false);
+                } else {
+                    if (btn) btn.disabled = false;
+                    showFlash((result.json && result.json.error) || 'Failed to open period.', true);
+                }
+            }).catch(function () {
+                if (btn) btn.disabled = false;
+                showFlash('Network error while opening period.', true);
+            });
+        });
+    }
+
+    Array.prototype.forEach.call(document.querySelectorAll('.fp-continue-btn'), function (btn) {
+        btn.addEventListener('click', function () {
+            var pid = btn.getAttribute('data-period-id');
+            var label = btn.getAttribute('data-label') || 'this period';
+            if (!confirm('Continue (re-activate) ' + label + '? Any currently-active period will be demoted.')) return;
+            btn.disabled = true;
+            postJSON('/finance/periods/' + pid + '/continue/').then(function (result) {
+                if (result.json && result.json.success) {
+                    showFlash('Period set as active.', false);
+                } else {
+                    btn.disabled = false;
+                    showFlash((result.json && result.json.error) || 'Failed to continue period.', true);
+                }
+            }).catch(function () {
+                btn.disabled = false;
+                showFlash('Network error while continuing period.', true);
+            });
+        });
+    });
+
+    Array.prototype.forEach.call(document.querySelectorAll('.fp-close-btn'), function (btn) {
+        btn.addEventListener('click', function () {
+            var pid = btn.getAttribute('data-period-id');
+            var label = btn.getAttribute('data-label') || 'this period';
+            if (!confirm('Close ' + label + '? This locks the P&L snapshot and cannot be undone.')) return;
+            btn.disabled = true;
+            postJSON('/finance/periods/' + pid + '/close/').then(function (result) {
+                if (result.json && result.json.success) {
+                    showFlash('Period closed and P&L locked.', false);
+                } else {
+                    btn.disabled = false;
+                    showFlash((result.json && result.json.error) || 'Failed to close period.', true);
+                }
+            }).catch(function () {
+                btn.disabled = false;
+                showFlash('Network error while closing period.', true);
+            });
+        });
+    });
+})();
+</script>
+{% endblock %}

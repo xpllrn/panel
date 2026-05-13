@@ -8,36 +8,85 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import F, Q, Sum
+from django.db.models import DecimalField, F, Q, Sum, Value
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
+from accounts.interest import InterestCalculatorService
 from accounts.models import (
+    AccountTypeConfiguration,
     AuditLog,
+    FeeCharge,
+    FeeSchedule,
+    FinancialPeriod,
     FundAccount,
     FundAllocationRule,
     FundTransaction,
+    Guarantor,
     InterestPayout,
-    Loan,
+    InterestReceivable,
+    LoanAccount,
+    LoanApplication,
     LoanRepayment,
+    LoanTypeConfiguration,
     MemberAccount,
-    Receipt,
+    ProfitAndLoss,
+    ShareCapital,
+    SocietyAccount,
+    SocietyConfiguration,
+    Transaction,
     User,
     Voucher,
     VoucherEntry,
 )
+from accounts.services import loans as loan_service
+from accounts.services import transactions as transaction_service
+from accounts.services.exceptions import ServiceError
 from accounts.utils import (
+    LoanListItem,
+    _get_client_ip,
+    active_financial_period,
     apply_fund_allocations,
+    ensure_member_submodels,
+    financial_period_overlapping,
+    format_current_address_display,
+    format_permanent_address_display,
     get_account_type_cashflow,
     get_financial_summary,
     log_action,
+    nominee_primary,
+    nominee_secondary,
+    persist_financial_snapshots,
     split_full_name,
+    sync_loan_interest_receivables,
+    user_active_share_capital_total,
+    user_active_share_count,
+    user_kyc,
+    user_primary_share_lot,
     validate_password_strength,
+)
+from admin_portal.portal_fy import (
+    PORTAL_FY_SESSION_KEY,
+    effective_fy_window,
+    report_dates_from_request,
+    resolve_portal_financial_period,
+    set_working_financial_period,
 )
 
 # Rate limiting cache for member creation (simple in-memory)
 _member_creation_timestamps = {}
+
+
+def _safe_same_origin_redirect_path(raw):
+    """Allow only relative same-site paths (avoid open redirects)."""
+    if not raw or not isinstance(raw, str):
+        return None
+    s = raw.strip()
+    if not s.startswith("/") or s.startswith("//"):
+        return None
+    return s
 
 
 def admin_required(view_func):
@@ -53,115 +102,56 @@ def admin_required(view_func):
 
 
 def _credit_transaction(transaction_type):
-    return transaction_type in ("credit", "interest", "dividend", "share_capital")
+    """Thin alias for `transaction_service.is_credit_transaction_type` (kept
+    for in-file readability)."""
+    return transaction_service.is_credit_transaction_type(transaction_type)
 
 
-def _next_receipt_number():
-    year = date.today().year
-    last_receipt = (
-        Receipt.objects.select_for_update().filter(receipt_number__startswith=f"RCP-{year}-").order_by("-receipt_number").first()
-    )
-    if not last_receipt:
-        return f"RCP-{year}-00001"
-    try:
-        seq = int(last_receipt.receipt_number.split("-")[-1]) + 1
-    except (ValueError, IndexError):
-        seq = 1
-    return f"RCP-{year}-{seq:05d}"
+def _next_transaction_number():
+    """Alias kept for any leftover callers in this file."""
+    return transaction_service.next_transaction_number()
 
 
 def _next_voucher_number():
-    year = date.today().year
-    last_voucher = (
-        Voucher.objects.select_for_update()
-        .filter(voucher_number__startswith=f"VCR-{year}-")
-        .order_by("-voucher_number")
-        .first()
-    )
-    if not last_voucher:
-        return f"VCR-{year}-00001"
-    try:
-        seq = int(last_voucher.voucher_number.split("-")[-1]) + 1
-    except (ValueError, IndexError):
-        seq = 1
-    return f"VCR-{year}-{seq:05d}"
+    """Alias kept for any leftover callers in this file."""
+    return transaction_service.next_voucher_number()
 
 
 def _has_unpaid_emi(user):
-    return LoanRepayment.objects.filter(
-        loan__user=user,
-        loan__status="active",
-    ).exclude(payment_status="paid").exists()
+    """Thin alias for `accounts.services.loans.has_unpaid_emi` (kept for
+    backwards-compat with the two callers in this file)."""
+    return loan_service.has_unpaid_emi(user)
 
 
-def _process_receipt_line(user, line, payment_mode, reference_number, remarks, created_by):
-    account = MemberAccount.objects.select_for_update().get(id=line["account_id"], user=user)
-    amount_decimal = Decimal(str(line["amount"]))
-    if amount_decimal <= 0:
-        raise ValueError("Each entry amount must be greater than zero")
-    transaction_type = line["transaction_type"]
-    if _credit_transaction(transaction_type):
-        balance_after = account.balance + amount_decimal
-        MemberAccount.objects.filter(id=account.id).update(
-            balance=F("balance") + amount_decimal,
-            last_transaction_date=date.today(),
-        )
-    else:
-        if amount_decimal > account.balance:
-            raise ValueError(
-                f"Insufficient balance for {account.account_number}. "
-                f"Available ₹{account.balance}, requested ₹{amount_decimal}."
-            )
-        balance_after = account.balance - amount_decimal
-        MemberAccount.objects.filter(id=account.id).update(
-            balance=F("balance") - amount_decimal,
-            last_transaction_date=date.today(),
-        )
-    receipt = Receipt.objects.create(
-        receipt_number=_next_receipt_number(),
-        user=user,
-        member_account=account,
-        transaction_type=transaction_type,
-        amount=amount_decimal,
-        description=(line.get("description") or "").strip() or None,
+def _default_account_rates():
+    return {
+        "fd": Decimal("7.50"),
+        "cd": Decimal("7.00"),
+        "rd": Decimal("7.00"),
+        "od": Decimal("12.00"),
+        "share": Decimal("0.00"),
+        "sukanya": Decimal("8.00"),
+        "suputra": Decimal("8.50"),
+    }
+
+
+def _process_transaction_line(user, line, payment_mode, reference_number, remarks, created_by):
+    """Thin wrapper kept for any leftover callers — delegates to
+    `transaction_service.post_transaction`.
+    """
+    return transaction_service.post_transaction(
+        member_account_id=line["account_id"],
+        transaction_type=line["transaction_type"],
+        amount=line.get("amount", 0),
+        description=line.get("description") or "",
         payment_mode=payment_mode,
-        reference_number=reference_number or None,
-        balance_after=balance_after,
-        created_by=created_by,
-        remarks=remarks or None,
+        reference_number=reference_number or "",
+        remarks=remarks or "",
+        loan_repayment_id=line.get("loan_repayment_id") or None,
+        actor=created_by,
+        audit=False,
+        audit_via="panel",
     )
-    loan_repayment_id = line.get("loan_repayment_id")
-    if loan_repayment_id:
-        try:
-            repayment = LoanRepayment.objects.select_for_update().get(
-                id=loan_repayment_id,
-                loan__user=user,
-                loan__status="active",
-            )
-            repayment.paid_date = date.today()
-            repayment.amount_paid = amount_decimal
-            repayment.payment_mode = payment_mode
-            repayment.reference_number = reference_number or None
-            repayment.payment_status = "paid" if amount_decimal >= repayment.amount_due else "partial"
-            repayment.receipt = receipt
-            repayment.save()
-            loan = repayment.loan
-            loan.total_paid = LoanRepayment.objects.filter(loan=loan, payment_status="paid").aggregate(total=Sum("amount_paid"))[
-                "total"
-            ] or Decimal("0.00")
-            loan.emis_paid = LoanRepayment.objects.filter(loan=loan, payment_status="paid").count()
-            loan.emis_overdue = LoanRepayment.objects.filter(loan=loan, payment_status="overdue").count()
-            loan.overdue_amount = LoanRepayment.objects.filter(loan=loan, payment_status="overdue").aggregate(
-                total=Sum("amount_due")
-            )["total"] or Decimal("0.00")
-            if not LoanRepayment.objects.filter(loan=loan).exclude(payment_status="paid").exists():
-                loan.status = "closed"
-                loan.closure_date = date.today()
-                loan.outstanding_balance = Decimal("0.00")
-            loan.save()
-        except LoanRepayment.DoesNotExist:
-            pass
-    return receipt
 
 
 def _apply_member_status_rules(user, new_status, previous_status=None):
@@ -217,17 +207,19 @@ def home_view(request):
             {"account_type": item["account_type"], "total": float(item["total"]) if item["total"] else 0.0}
         )
 
-    # Receipt/transaction stats
-    total_receipts = Receipt.objects.count()
-    today_receipts = Receipt.objects.filter(created_at__date=today).count()
+    # Transaction stats
+    total_transactions = Transaction.objects.count()
+    today_transactions = Transaction.objects.filter(created_at__date=today).count()
     today_credit = (
-        Receipt.objects.filter(created_at__date=today, transaction_type="credit").aggregate(total=Sum("amount"))[
+        Transaction.objects.filter(created_at__date=today, transaction_type="credit").aggregate(total=Sum("amount"))[
             "total"
         ]
         or 0
     )
     today_debit = (
-        Receipt.objects.filter(created_at__date=today, transaction_type="debit").aggregate(total=Sum("amount"))["total"]
+        Transaction.objects.filter(created_at__date=today, transaction_type="debit").aggregate(total=Sum("amount"))[
+            "total"
+        ]
         or 0
     )
 
@@ -237,13 +229,13 @@ def home_view(request):
     for i in range(29, -1, -1):
         day = today - timedelta(days=i)
         day_credits = (
-            Receipt.objects.filter(
+            Transaction.objects.filter(
                 created_at__date=day, transaction_type__in=["credit", "interest", "dividend", "share_capital"]
             ).aggregate(total=Sum("amount"))["total"]
             or 0
         )
         day_debits = (
-            Receipt.objects.filter(created_at__date=day, transaction_type__in=["debit", "transfer"]).aggregate(
+            Transaction.objects.filter(created_at__date=day, transaction_type__in=["debit", "transfer"]).aggregate(
                 total=Sum("amount")
             )["total"]
             or 0
@@ -273,32 +265,37 @@ def home_view(request):
             )
 
     # Recent 10 transactions
-    recent_transactions = Receipt.objects.select_related("user", "member_account").all().order_by("-created_at")[:10]
+    recent_transactions = (
+        Transaction.objects.select_related("user", "member_account").all().order_by("-created_at")[:10]
+    )
 
     # Overdue loan payments - get overdue repayments grouped by loan/member
     overdue_repayments = (
-        LoanRepayment.objects.filter(payment_status="overdue").select_related("loan", "loan__user").order_by("due_date")
+        LoanRepayment.objects.filter(payment_status="overdue")
+        .select_related("loan_account", "loan_account__user", "loan_account__application")
+        .order_by("due_date")
     )
 
-    # Build overdue data: group by loan, show earliest overdue + count
+    # Build overdue data: group by loan account, show earliest overdue + count
     overdue_loans = {}
     for rep in overdue_repayments:
-        loan_id = rep.loan_id
-        if loan_id not in overdue_loans:
-            overdue_loans[loan_id] = {
-                "loan_number": rep.loan.loan_number,
-                "loan_id": rep.loan.id,
-                "member_name": rep.loan.user.display_name,
-                "member_id": rep.loan.user.member_id or "",
-                "loan_type": rep.loan.get_loan_type_display(),
+        la_id = rep.loan_account_id
+        la = rep.loan_account
+        if la_id not in overdue_loans:
+            overdue_loans[la_id] = {
+                "loan_number": la.loan_number,
+                "loan_id": la.id,
+                "member_name": la.user.display_name,
+                "member_id": la.user.member_id or "",
+                "loan_type": la.get_loan_type_display(),
                 "emi_amount": float(rep.amount_due),
                 "oldest_due": rep.due_date.strftime("%b %d, %Y"),
                 "days_overdue": (today - rep.due_date).days,
                 "overdue_count": 0,
                 "total_overdue": 0.0,
             }
-        overdue_loans[loan_id]["overdue_count"] += 1
-        overdue_loans[loan_id]["total_overdue"] += float(rep.amount_due)
+        overdue_loans[la_id]["overdue_count"] += 1
+        overdue_loans[la_id]["total_overdue"] += float(rep.amount_due)
 
     # Sort by days overdue (most overdue first), limit to 10
     overdue_list = sorted(overdue_loans.values(), key=lambda x: -x["days_overdue"])[:10]
@@ -311,9 +308,8 @@ def home_view(request):
     # Net profit for current fiscal year (April-March)
     from accounts.utils import get_financial_summary
 
-    fiscal_year_start = date(today.year, 4, 1) if today.month >= 4 else date(today.year - 1, 4, 1)
-    fiscal_year_end = date(fiscal_year_start.year + 1, 3, 31)
-    financial_summary = get_financial_summary(fiscal_year_start, fiscal_year_end)
+    fw = effective_fy_window(request)
+    financial_summary = get_financial_summary(fw.start_date, fw.end_date)
     net_profit = financial_summary["net_profit"]
     gross_revenue = financial_summary["gross_revenue"]
 
@@ -326,8 +322,10 @@ def home_view(request):
             "total_accounts": total_accounts,
             "active_accounts": active_accounts,
             "total_deposits": total_deposits,
-            "total_receipts": total_receipts,
-            "today_receipts": today_receipts,
+            "total_transactions": total_transactions,
+            "today_transactions": today_transactions,
+            "total_receipts": total_transactions,
+            "today_receipts": today_transactions,
             "today_credit": today_credit,
             "today_debit": today_debit,
             "recent_transactions": recent_transactions,
@@ -514,23 +512,40 @@ def add_member_view(request):
 
                 user.member_id = f"MBR-{year}-{next_seq:05d}"
                 user.save()
+                ensure_member_submodels(user)
 
-                # Auto-create all account types for the new member
-                account_types = [
-                    ("fd", "Fixed Deposit", 7.5),
-                    ("cd", "Certificate of Deposit", 7.0),
-                    ("rd", "Recurring Deposit", 7.0),
-                    ("od", "Overdraft", 12.0),
-                    ("share", "Share Account", 0.0),
-                    ("sukanya", "Sukanya Yojana", 8.0),
-                    ("suputra", "Suputra Yojana", 8.5),
-                ]
+                # Auto-create configured account types for the new member.
+                account_label_map = dict(MemberAccount.ACCOUNT_TYPE_CHOICES)
+                configured_rows = list(
+                    AccountTypeConfiguration.objects.filter(is_active=True).order_by("display_order", "account_type")
+                )
+                account_types = []
+                if configured_rows:
+                    for cfg in configured_rows:
+                        account_types.append(
+                            (
+                                cfg.account_type,
+                                account_label_map.get(cfg.account_type, cfg.account_type.upper()),
+                                cfg.interest_rate,
+                            )
+                        )
+                else:
+                    for account_type, account_label in MemberAccount.ACCOUNT_TYPE_CHOICES:
+                        account_types.append(
+                            (
+                                account_type,
+                                account_label,
+                                _default_account_rates().get(account_type, Decimal("0.00")),
+                            )
+                        )
 
                 created_accounts = []
                 for account_type, account_name, default_rate in account_types:
-                    # Generate account number: TYPE-USERID-001
-                    # Note: Using user.id ensures uniqueness since each user gets one account per type
-                    account_number = f"{account_type.upper()}-{user.id:05d}-001"
+                    # Generate account number: PREFIX-USERID-001
+                    # Note: Using user.id ensures uniqueness since each user gets one account per configured type.
+                    prefix_raw = "".join(ch for ch in str(account_type).upper() if ch.isalnum())
+                    prefix = prefix_raw[:6] or "ACC"
+                    account_number = f"{prefix}-{user.id:05d}-001"
                     account = MemberAccount.objects.create(
                         user=user,
                         account_number=account_number,
@@ -548,7 +563,7 @@ def add_member_view(request):
                     "create",
                     "member",
                     user.id,
-                    f"Created member {username} ({user.display_name}) with 7 auto-generated accounts",
+                    f"Created member {username} ({user.display_name}) with {len(created_accounts)} auto-generated accounts",
                 )
 
                 # Log each account creation
@@ -628,7 +643,7 @@ def add_account_view(request):
             user_id = request.POST.get("user_id")
             account_type = request.POST.get("account_type")
             balance = request.POST.get("balance", "0")
-            interest_rate = request.POST.get("interest_rate", "0")
+            interest_rate = request.POST.get("interest_rate", "").strip()
             principal_amount = request.POST.get("principal_amount", "0")
             opening_date = request.POST.get("opening_date")
             maturity_date = request.POST.get("maturity_date") or None
@@ -644,6 +659,21 @@ def add_account_view(request):
                 return JsonResponse({"success": False, "error": "Account type is required"})
             if not opening_date:
                 return JsonResponse({"success": False, "error": "Opening date is required"})
+
+            active_account_types = set(
+                AccountTypeConfiguration.objects.filter(is_active=True).values_list("account_type", flat=True)
+            )
+            configured_rate = (
+                AccountTypeConfiguration.objects.filter(account_type=account_type, is_active=True)
+                .values_list("interest_rate", flat=True)
+                .first()
+            )
+            if active_account_types and account_type not in active_account_types:
+                return JsonResponse({"success": False, "error": "This account type is disabled in Settings"})
+            if not interest_rate and configured_rate is not None:
+                interest_rate = str(configured_rate)
+            if not interest_rate:
+                interest_rate = "0"
 
             # Validate user exists
             try:
@@ -834,38 +864,15 @@ def get_member_view(request, user_id):
     try:
         user = User.objects.get(id=user_id)
 
-        # Build current address string
-        current_address = ", ".join(
-            filter(
-                None,
-                [
-                    user.current_address_line1,
-                    user.current_address_line2,
-                    user.current_city,
-                    user.current_district,
-                    user.current_state,
-                    user.current_pincode,
-                ],
-            )
-        )
+        current_address = format_current_address_display(user)
+        permanent_address = format_permanent_address_display(user)
 
-        # Build permanent address string
-        if user.permanent_same_as_current:
-            permanent_address = "Same as current address"
-        else:
-            permanent_address = ", ".join(
-                filter(
-                    None,
-                    [
-                        user.permanent_address_line1,
-                        user.permanent_address_line2,
-                        user.permanent_city,
-                        user.permanent_district,
-                        user.permanent_state,
-                        user.permanent_pincode,
-                    ],
-                )
-            )
+        kyc = user_kyc(user)
+        primary_nom = nominee_primary(user)
+        alt_nom = nominee_secondary(user)
+        share_lot = user_primary_share_lot(user)
+        sc_total = user_active_share_capital_total(user)
+        n_shares = user_active_share_count(user)
 
         # Get member accounts summary
         accounts = MemberAccount.objects.filter(user=user, is_deleted=False).order_by("account_type")
@@ -918,27 +925,31 @@ def get_member_view(request, user_id):
                     "current_address": current_address or "",
                     "permanent_address": permanent_address or "",
                     # KYC
-                    "kyc_status": user.get_kyc_status_display() if user.kyc_status else "",
-                    "kyc_verified_date": user.kyc_verified_date.strftime("%b %d, %Y") if user.kyc_verified_date else "",
-                    "aadhar_number": user.aadhar_number or "",
-                    "pan_number": user.pan_number or "",
-                    "voter_id": user.voter_id or "",
-                    "passport_number": user.passport_number or "",
-                    "driving_license": user.driving_license or "",
+                    "kyc_status": kyc.get_kyc_status_display() if kyc else "",
+                    "kyc_verified_date": kyc.kyc_verified_date.strftime("%b %d, %Y")
+                    if kyc and kyc.kyc_verified_date
+                    else "",
+                    "aadhar_number": kyc.aadhaar_number or "" if kyc else "",
+                    "pan_number": kyc.pan_number or "" if kyc else "",
+                    "voter_id": kyc.voter_id or "" if kyc else "",
+                    "passport_number": kyc.passport_number or "" if kyc else "",
+                    "driving_license": kyc.driving_licence or "" if kyc else "",
                     # Nominee
-                    "nominee_name": user.nominee_name or "",
-                    "nominee_relationship": user.nominee_relationship or "",
-                    "nominee_dob": user.nominee_dob.strftime("%b %d, %Y") if user.nominee_dob else "",
-                    "nominee_contact": user.nominee_contact or "",
-                    "nominee_address": user.nominee_address or "",
-                    "alt_nominee_name": user.alt_nominee_name or "",
-                    "alt_nominee_relationship": user.alt_nominee_relationship or "",
+                    "nominee_name": primary_nom.name if primary_nom else "",
+                    "nominee_relationship": primary_nom.relationship or "" if primary_nom else "",
+                    "nominee_dob": primary_nom.dob.strftime("%b %d, %Y") if primary_nom and primary_nom.dob else "",
+                    "nominee_contact": primary_nom.contact or "" if primary_nom else "",
+                    "nominee_address": primary_nom.address or "" if primary_nom else "",
+                    "alt_nominee_name": alt_nom.name if alt_nom else "",
+                    "alt_nominee_relationship": alt_nom.relationship or "" if alt_nom else "",
                     # Shareholding
-                    "share_capital_amount": str(user.share_capital_amount),
-                    "number_of_shares": user.number_of_shares,
-                    "face_value_per_share": str(user.face_value_per_share),
-                    "share_certificate_number": user.share_certificate_number or "",
-                    "share_issue_date": user.share_issue_date.strftime("%b %d, %Y") if user.share_issue_date else "",
+                    "share_capital_amount": str(sc_total),
+                    "number_of_shares": n_shares,
+                    "face_value_per_share": str(share_lot.face_value_per_share) if share_lot else "0.00",
+                    "share_certificate_number": share_lot.certificate_number or "" if share_lot else "",
+                    "share_issue_date": share_lot.issue_date.strftime("%b %d, %Y")
+                    if share_lot and share_lot.issue_date
+                    else "",
                     "dividend_payable_balance": str(user.dividend_payable_balance),
                     "last_dividend_paid_date": user.last_dividend_paid_date.strftime("%b %d, %Y")
                     if user.last_dividend_paid_date
@@ -1038,7 +1049,7 @@ def edit_member_view(request, user_id):
                 _apply_member_status_rules(user, status, previous_status=previous_status)
                 user.save()
 
-                settlement_receipts = []
+                settlement_transactions = []
                 if status == "resign":
                     settlement_accounts = MemberAccount.objects.select_for_update().filter(
                         user=user,
@@ -1053,8 +1064,8 @@ def edit_member_view(request, user_id):
                             "amount": str(account.balance),
                             "description": "Member resignation settlement",
                         }
-                        settlement_receipts.append(
-                            _process_receipt_line(
+                        settlement_transactions.append(
+                            _process_transaction_line(
                                 user=user,
                                 line=line,
                                 payment_mode="cash",
@@ -1071,18 +1082,18 @@ def edit_member_view(request, user_id):
                 user.id,
                 f"Updated member {user.username} ({user.display_name}) with status {user.status}",
             )
-            if status == "resign" and settlement_receipts:
+            if status == "resign" and settlement_transactions:
                 log_action(
                     request,
                     "create",
-                    "receipt",
-                    settlement_receipts[-1].id,
-                    f"Generated {len(settlement_receipts)} resignation settlement receipts for {user.display_name}",
+                    "transaction",
+                    settlement_transactions[-1].id,
+                    f"Generated {len(settlement_transactions)} resignation settlement transactions for {user.display_name}",
                 )
             return JsonResponse(
                 {
                     "success": True,
-                    "settlement_receipts": [r.receipt_number for r in settlement_receipts],
+                    "settlement_transactions": [r.transaction_number for r in settlement_transactions],
                 }
             )
         except User.DoesNotExist:
@@ -1335,17 +1346,17 @@ def get_account_transactions_view(request, account_id):
         page = int(request.GET.get("page", 1))
         per_page = 20
 
-        receipts = Receipt.objects.filter(member_account=account).order_by("-created_at")
-        total = receipts.count()
+        transactions = Transaction.objects.filter(member_account=account).order_by("-created_at")
+        total = transactions.count()
         start = (page - 1) * per_page
         end = start + per_page
-        page_receipts = receipts[start:end]
+        page_transactions = transactions[start:end]
 
-        transactions = []
-        for r in page_receipts:
-            transactions.append(
+        txns = []
+        for r in page_transactions:
+            txns.append(
                 {
-                    "receipt_number": r.receipt_number,
+                    "transaction_number": r.transaction_number,
                     "date": r.created_at.strftime("%b %d, %Y") if r.created_at else "-",
                     "type": r.get_transaction_type_display(),
                     "type_raw": r.transaction_type,
@@ -1358,7 +1369,7 @@ def get_account_transactions_view(request, account_id):
         return JsonResponse(
             {
                 "success": True,
-                "transactions": transactions,
+                "transactions": txns,
                 "has_more": end < total,
                 "total": total,
                 "page": page,
@@ -1379,7 +1390,7 @@ def account_details_view(request, account_id):
     except MemberAccount.DoesNotExist:
         messages.error(request, "Account not found.")
         return redirect("/accounts/")
-    transactions = Receipt.objects.filter(member_account=account).order_by("-created_at")[:50]
+    transactions = Transaction.objects.filter(member_account=account).order_by("-created_at")[:50]
     return render(
         request,
         "admin/account_details.html",
@@ -1391,14 +1402,14 @@ def account_details_view(request, account_id):
 
 
 # ========================================
-# Receipt Views
+# Transaction Views
 # ========================================
 
 
 @login_required
 @admin_required
-def receipts_view(request):
-    """Receipts list view with pagination, search, and filters"""
+def transactions_view(request):
+    """Transaction list view with pagination, search, and filters"""
     page = request.GET.get("page", 1)
     query = request.GET.get("q", "").strip()
     transaction_type = request.GET.get("type", "").strip()
@@ -1408,12 +1419,12 @@ def receipts_view(request):
     per_page = 25
 
     # Base queryset with related data
-    receipts = Receipt.objects.select_related("user", "member_account", "created_by").all().order_by("-created_at")
+    receipts = Transaction.objects.select_related("user", "member_account", "created_by").all().order_by("-created_at")
 
     # Apply search filter
     if query:
         receipts = receipts.filter(
-            Q(receipt_number__icontains=query)
+            Q(transaction_number__icontains=query)
             | Q(user__first_name__icontains=query)
             | Q(user__last_name__icontains=query)
             | Q(user__member_id__icontains=query)
@@ -1443,12 +1454,12 @@ def receipts_view(request):
         receipts_page = paginator.page(paginator.num_pages)
 
     # Summary stats
-    total_receipts = Receipt.objects.count()
-    today_receipts = Receipt.objects.filter(created_at__date=timezone.now().date()).count()
+    total_receipts = Transaction.objects.count()
+    today_receipts = Transaction.objects.filter(created_at__date=timezone.now().date()).count()
 
     return render(
         request,
-        "admin/receipts.html",
+        "admin/transactions.html",
         {
             "receipts": receipts_page,
             "search_query": query,
@@ -1456,8 +1467,8 @@ def receipts_view(request):
             "selected_mode": payment_mode,
             "date_from": date_from,
             "date_to": date_to,
-            "transaction_type_choices": Receipt.TRANSACTION_TYPE_CHOICES,
-            "payment_mode_choices": Receipt.PAYMENT_MODE_CHOICES,
+            "transaction_type_choices": Transaction.TRANSACTION_TYPE_CHOICES,
+            "payment_mode_choices": Transaction.PAYMENT_MODE_CHOICES,
             "page_obj": receipts_page,
             "total_receipts": total_receipts,
             "today_receipts": today_receipts,
@@ -1475,16 +1486,16 @@ def receipts_view(request):
 
 @login_required
 @admin_required
-def get_receipt_view(request, receipt_id):
-    """Get receipt data for viewing"""
+def get_transaction_view(request, transaction_id):
+    """Get transaction data for viewing."""
     try:
-        receipt = Receipt.objects.select_related("user", "member_account", "created_by").get(id=receipt_id)
+        receipt = Transaction.objects.select_related("user", "member_account", "created_by").get(id=transaction_id)
         return JsonResponse(
             {
                 "success": True,
                 "receipt": {
                     "id": receipt.id,
-                    "receipt_number": receipt.receipt_number,
+                    "receipt_number": receipt.transaction_number,
                     "transaction_type": receipt.transaction_type,
                     "transaction_type_display": receipt.get_transaction_type_display(),
                     "amount": str(receipt.amount),
@@ -1500,17 +1511,7 @@ def get_receipt_view(request, receipt_id):
                     "member_name": receipt.user.display_name,
                     "member_id": receipt.user.member_id or "",
                     "member_mobile": receipt.user.mobile_primary or "",
-                    "member_address": ", ".join(
-                        filter(
-                            None,
-                            [
-                                receipt.user.current_address_line1,
-                                receipt.user.current_city,
-                                receipt.user.current_state,
-                                receipt.user.current_pincode,
-                            ],
-                        )
-                    ),
+                    "member_address": format_current_address_display(receipt.user),
                     # Account info
                     "account_number": receipt.member_account.account_number,
                     "account_type": receipt.member_account.account_type,
@@ -1520,159 +1521,108 @@ def get_receipt_view(request, receipt_id):
                 },
             }
         )
-    except Receipt.DoesNotExist:
-        return JsonResponse({"success": False, "error": "Receipt not found"})
+    except Transaction.DoesNotExist:
+        return JsonResponse({"success": False, "error": "Transaction not found"})
     except Exception as e:
         return JsonResponse({"success": False, "error": str(e)})
 
 
 @login_required
 @admin_required
-def add_receipt_view(request):
-    """Create one or more receipts, or stage voucher entries."""
+def add_transaction_view(request):
+    """Create one or more transactions, or stage voucher entries (delegates to
+    `services.transactions.post_voucher` / `post_transactions_bulk`)."""
     if request.method != "POST":
         return JsonResponse({"success": False, "error": "Invalid request method"})
+
+    user_id = request.POST.get("user_id")
+    if not user_id:
+        return JsonResponse({"success": False, "error": "Member is required"})
+
+    payment_mode = request.POST.get("payment_mode", "cash")
+    reference_number = request.POST.get("reference_number", "").strip()
+    remarks = request.POST.get("remarks", "").strip()
+    use_voucher = request.POST.get("use_voucher", "").lower() in ("1", "true", "yes", "on")
+    # A4: vouchers are opt-in; the operator chooses via the use_voucher checkbox.
+
+    voucher_type = request.POST.get("voucher_type", "receipt").strip() or "receipt"
+    fund_id = request.POST.get("fund_id", "").strip() or None
+    account_entries_raw = request.POST.get("account_entries", "").strip()
+    if not account_entries_raw:
+        return JsonResponse({"success": False, "error": "At least one account entry is required"})
+
     try:
-        user_id = request.POST.get("user_id")
-        if not user_id:
-            return JsonResponse({"success": False, "error": "Member is required"})
-        try:
-            user = User.objects.get(id=user_id)
-        except User.DoesNotExist:
-            return JsonResponse({"success": False, "error": "Member not found"})
-
-        payment_mode = request.POST.get("payment_mode", "cash")
-        reference_number = request.POST.get("reference_number", "").strip()
-        remarks = request.POST.get("remarks", "").strip()
-        use_voucher = request.POST.get("use_voucher", "").lower() in ("1", "true", "yes", "on")
-        if payment_mode == "cash":
-            use_voucher = True
-
-        voucher_type = request.POST.get("voucher_type", "voucher").strip() or "voucher"
-        fund_id = request.POST.get("fund_id", "").strip()
-        account_entries_raw = request.POST.get("account_entries", "").strip()
-
-        if not account_entries_raw:
-            return JsonResponse({"success": False, "error": "At least one account entry is required"})
-
         account_entries = json.loads(account_entries_raw)
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid account entries payload"})
 
-        if not isinstance(account_entries, list) or not account_entries:
-            return JsonResponse({"success": False, "error": "At least one account entry is required"})
+    ip = _get_client_ip(request)
 
+    try:
         if use_voucher:
-            if voucher_type not in ("voucher", "contra_voucher"):
-                voucher_type = "voucher"
-            with transaction.atomic():
-                voucher = Voucher.objects.create(
-                    voucher_number=_next_voucher_number(),
-                    user=user,
-                    voucher_type=voucher_type,
-                    total_amount=Decimal("0.00"),
-                    payment_mode=payment_mode,
-                    reference_number=reference_number or None,
-                    remarks=remarks or None,
-                    created_by=request.user,
-                )
-                total_amount = Decimal("0.00")
-                for line in account_entries:
-                    line_type = (line.get("transaction_type") or "").strip()
-                    if line_type == "loan_emi":
-                        line["transaction_type"] = "credit"
-                    account = MemberAccount.objects.get(id=line.get("account_id"), user=user, is_deleted=False)
-                    line_amount = Decimal(str(line.get("amount", "0")))
-                    if line_amount <= 0:
-                        return JsonResponse({"success": False, "error": "Each voucher line amount must be positive"})
-                    if line["transaction_type"] not in dict(Receipt.TRANSACTION_TYPE_CHOICES):
-                        return JsonResponse({"success": False, "error": f"Invalid transaction type: {line['transaction_type']}"})
-                    VoucherEntry.objects.create(
-                        voucher=voucher,
-                        member_account=account,
-                        transaction_type=line.get("transaction_type", "credit"),
-                        amount=line_amount,
-                        description=(line.get("description") or "").strip() or None,
-                        linked_loan_repayment_id=line.get("loan_repayment_id") or None,
-                    )
-                    total_amount += line_amount
-                voucher.total_amount = total_amount
-                voucher.save(update_fields=["total_amount"])
-            log_action(
-                request,
-                "create",
-                "voucher",
-                voucher.id,
-                f"Created voucher {voucher.voucher_number} with {voucher.entries.count()} line(s) for {user.display_name}",
+            voucher = transaction_service.post_voucher(
+                user_id=user_id,
+                voucher_type=voucher_type,
+                lines=account_entries,
+                payment_mode=payment_mode,
+                reference_number=reference_number,
+                remarks=remarks,
+                actor=request.user,
+                ip_address=ip,
+                audit_via="panel",
             )
             return JsonResponse({"success": True, "voucher_id": voucher.id, "voucher_number": voucher.voucher_number})
 
-        created_receipts = []
-        with transaction.atomic():
-            for line in account_entries:
-                line_type = (line.get("transaction_type") or "").strip()
-                if line_type == "loan_emi":
-                    line["transaction_type"] = "credit"
-                if line.get("transaction_type") not in dict(Receipt.TRANSACTION_TYPE_CHOICES):
-                    return JsonResponse({"success": False, "error": "Invalid transaction type in entry"})
-                receipt = _process_receipt_line(
-                    user=user,
-                    line=line,
-                    payment_mode=payment_mode,
-                    reference_number=reference_number,
-                    remarks=remarks,
-                    created_by=request.user,
-                )
-                created_receipts.append(receipt)
-                if receipt.transaction_type == "interest":
-                    try:
-                        apply_fund_allocations(
-                            request,
-                            "loan_interest",
-                            receipt.amount,
-                            f"Loan interest: {user.display_name} - {receipt.member_account.account_number}",
-                            source_member=user,
-                        )
-                    except Exception:
-                        pass
-            if fund_id:
-                fund = FundAccount.objects.select_for_update().get(id=fund_id, is_deleted=False, is_active=True)
-                total_amount = sum((item.amount for item in created_receipts), Decimal("0.00"))
-                FundAccount.objects.filter(id=fund.id).update(balance=F("balance") + total_amount)
-                fund.refresh_from_db(fields=["balance"])
-                FundTransaction.objects.create(
-                    fund=fund,
-                    transaction_type="credit",
-                    amount=total_amount,
-                    description=f"Receipt settlement from {user.display_name}",
-                    payment_mode="internal",
-                    reference_number=reference_number or None,
-                    balance_after=fund.balance,
-                    source_member=user,
-                    created_by=request.user,
-                )
-
-        log_action(
-            request,
-            "create",
-            "receipt",
-            created_receipts[-1].id,
-            f"Created {len(created_receipts)} receipt line(s) for {user.display_name}",
+        result = transaction_service.post_transactions_bulk(
+            user_id=user_id,
+            lines=account_entries,
+            payment_mode=payment_mode,
+            reference_number=reference_number,
+            remarks=remarks,
+            fund_id=fund_id,
+            actor=request.user,
+            ip_address=ip,
+            audit_via="panel",
         )
-        return JsonResponse(
-            {
-                "success": True,
-                "receipt_id": created_receipts[0].id,
-                "receipt_ids": [item.id for item in created_receipts],
-            }
-        )
+    except ServiceError as e:
+        return JsonResponse({"success": False, "error": e.message})
     except Exception as e:
         return JsonResponse({"success": False, "error": str(e)})
+
+    created_receipts = result["transactions"]
+
+    # Best-effort loan-interest fund allocation per interest-type line.
+    # Adapter concern for now because `apply_fund_allocations` still takes a
+    # `request` (will move into the service layer when Phase B4 overhauls fees).
+    for receipt in created_receipts:
+        if receipt.transaction_type == "interest":
+            try:
+                apply_fund_allocations(
+                    request,
+                    "loan_interest",
+                    receipt.amount,
+                    f"Loan interest: {receipt.user.display_name} - {receipt.member_account.account_number}",
+                    source_member=receipt.user,
+                )
+            except Exception:
+                pass
+
+    return JsonResponse(
+        {
+            "success": True,
+            "receipt_id": created_receipts[0].id,
+            "receipt_ids": [item.id for item in created_receipts],
+        }
+    )
 
 
 @login_required
 @admin_required
 def vouchers_view(request):
     """List pending and transferred vouchers for receipts page."""
-    vouchers = Voucher.objects.select_related("user", "created_by", "transferred_to_fund").prefetch_related("entries")[:100]
+    vouchers = Voucher.objects.select_related("user", "created_by", "transferred_to_fund").prefetch_related("entries")[
+        :100
+    ]
     data = []
     for voucher in vouchers:
         data.append(
@@ -1687,7 +1637,7 @@ def vouchers_view(request):
                 "voucher_type": voucher.voucher_type,
                 "voucher_type_display": voucher.get_voucher_type_display(),
                 "line_count": voucher.entries.count(),
-                "created_at": voucher.created_at.strftime("%b %d, %Y %I:%M %p"),
+                "created_at": voucher.created_at.strftime("%d %b %Y, %H:%M"),
                 "fund_name": voucher.transferred_to_fund.name if voucher.transferred_to_fund else "",
             }
         )
@@ -1718,7 +1668,7 @@ def transfer_voucher_to_fund_view(request, voucher_id):
                     "description": entry.description,
                     "loan_repayment_id": entry.linked_loan_repayment_id,
                 }
-                receipt = _process_receipt_line(
+                receipt = _process_transaction_line(
                     user=voucher.user,
                     line=line,
                     payment_mode=voucher.payment_mode,
@@ -1726,8 +1676,8 @@ def transfer_voucher_to_fund_view(request, voucher_id):
                     remarks=voucher.remarks or "",
                     created_by=request.user,
                 )
-                entry.created_receipt = receipt
-                entry.save(update_fields=["created_receipt"])
+                entry.created_transaction = receipt
+                entry.save(update_fields=["created_transaction"])
                 receipts.append(receipt)
             FundAccount.objects.filter(id=fund.id).update(balance=F("balance") + voucher.total_amount)
             fund.refresh_from_db(fields=["balance"])
@@ -1782,21 +1732,21 @@ def get_member_accounts_view(request, user_id):
         ]
 
         pending_repayments = (
-            LoanRepayment.objects.filter(loan__user=user, loan__status="active")
+            LoanRepayment.objects.filter(loan_account__user=user, loan_account__status="active")
             .exclude(payment_status="paid")
-            .select_related("loan", "loan__disbursement_account")
+            .select_related("loan_account", "loan_account__disbursement_account")
             .order_by("due_date")[:20]
         )
         pending_emi_data = [
             {
                 "id": repayment.id,
-                "loan_id": repayment.loan.id,
-                "loan_number": repayment.loan.loan_number,
+                "loan_id": repayment.loan_account.id,
+                "loan_number": repayment.loan_account.loan_number,
                 "installment_number": repayment.installment_number,
                 "amount_due": str(repayment.amount_due),
                 "due_date": repayment.due_date.strftime("%Y-%m-%d"),
                 "status": repayment.payment_status,
-                "account_id": repayment.loan.disbursement_account_id or "",
+                "account_id": repayment.loan_account.disbursement_account_id or "",
             }
             for repayment in pending_repayments
         ]
@@ -1814,7 +1764,7 @@ def get_member_transactions_view(request, user_id):
         page = int(request.GET.get("page", 1))
         per_page = 15
 
-        receipts = Receipt.objects.select_related("member_account").filter(user=user).order_by("-created_at")
+        receipts = Transaction.objects.select_related("member_account").filter(user=user).order_by("-created_at")
 
         total = receipts.count()
         start = (page - 1) * per_page
@@ -1824,7 +1774,7 @@ def get_member_transactions_view(request, user_id):
         results = [
             {
                 "id": r.id,
-                "receipt_number": r.receipt_number,
+                "transaction_number": r.transaction_number,
                 "transaction_type": r.transaction_type,
                 "transaction_type_display": r.get_transaction_type_display(),
                 "amount": str(r.amount),
@@ -1850,43 +1800,72 @@ def get_member_transactions_view(request, user_id):
 
 
 # ========================================
-# Loan Views
+# Loan Views (Phase 3: LoanApplication + LoanAccount)
 # ========================================
+
+LOAN_LIST_STATUS_CHOICES = [
+    ("pending", "Pending Approval"),
+    ("rejected", "Rejected"),
+    ("active", "Active"),
+    ("closed", "Closed"),
+    ("defaulted", "Defaulted"),
+    ("written_off", "Written Off"),
+]
 
 
 @login_required
 @admin_required
 def loans_view(request):
-    """Loans list view with pagination, search, and filters"""
+    """Loans list: open applications (pending/rejected) + loan accounts."""
     page = request.GET.get("page", 1)
     query = request.GET.get("q", "").strip()
     loan_type = request.GET.get("type", "").strip()
     status = request.GET.get("status", "").strip()
     per_page = 25
 
-    # Base queryset with related data
-    loans = Loan.objects.select_related("user", "approved_by", "created_by").all().order_by("-created_at")
+    accounts_qs = LoanAccount.objects.select_related("application", "user", "disbursement_account", "created_by").all()
+    open_apps_qs = (
+        LoanApplication.objects.filter(status__in=["pending", "rejected"])
+        .select_related("user", "created_by")
+        .exclude(pk__in=LoanAccount.objects.values_list("application_id", flat=True))
+    )
 
-    # Apply search filter
+    if loan_type:
+        accounts_qs = accounts_qs.filter(application__loan_type=loan_type)
+        open_apps_qs = open_apps_qs.filter(loan_type=loan_type)
+
+    if status:
+        if status in ("active", "closed", "defaulted", "written_off"):
+            accounts_qs = accounts_qs.filter(status=status)
+            open_apps_qs = open_apps_qs.none()
+        elif status in ("pending", "rejected"):
+            accounts_qs = accounts_qs.none()
+            open_apps_qs = open_apps_qs.filter(status=status)
+        else:
+            accounts_qs = accounts_qs.none()
+            open_apps_qs = open_apps_qs.none()
+
     if query:
-        loans = loans.filter(
+        accounts_qs = accounts_qs.filter(
             Q(loan_number__icontains=query)
+            | Q(user__first_name__icontains=query)
+            | Q(user__last_name__icontains=query)
+            | Q(user__member_id__icontains=query)
+            | Q(application__guarantor_name__icontains=query)
+        )
+        open_apps_qs = open_apps_qs.filter(
+            Q(application_number__icontains=query)
             | Q(user__first_name__icontains=query)
             | Q(user__last_name__icontains=query)
             | Q(user__member_id__icontains=query)
             | Q(guarantor_name__icontains=query)
         )
 
-    # Apply loan type filter
-    if loan_type:
-        loans = loans.filter(loan_type=loan_type)
+    rows = [LoanListItem(account=a) for a in accounts_qs.order_by("-created_at")]
+    rows.extend(LoanListItem(application=a) for a in open_apps_qs.order_by("-created_at"))
+    rows.sort(key=lambda r: r.created_at, reverse=True)
 
-    # Apply status filter
-    if status:
-        loans = loans.filter(status=status)
-
-    # Paginate
-    paginator = Paginator(loans, per_page)
+    paginator = Paginator(rows, per_page)
     try:
         loans_page = paginator.page(page)
     except PageNotAnInteger:
@@ -1894,11 +1873,35 @@ def loans_view(request):
     except EmptyPage:
         loans_page = paginator.page(paginator.num_pages)
 
-    # Summary stats
-    total_loans = Loan.objects.count()
-    active_loans = Loan.objects.filter(status="active").count()
-    total_disbursed = Loan.objects.filter(status="active").aggregate(total=Sum("principal_amount"))["total"] or 0
-    total_outstanding = Loan.objects.filter(status="active").aggregate(total=Sum("outstanding_balance"))["total"] or 0
+    _open_application_count = LoanApplication.objects.exclude(
+        pk__in=LoanAccount.objects.values_list("application_id", flat=True)
+    ).count()
+    total_loans = LoanAccount.objects.count() + _open_application_count
+    active_loans = LoanAccount.objects.filter(status="active").count()
+    total_disbursed = LoanAccount.objects.filter(status="active").aggregate(total=Sum("principal_amount"))["total"] or 0
+    total_outstanding = (
+        LoanAccount.objects.filter(status="active").aggregate(total=Sum("outstanding_balance"))["total"] or 0
+    )
+    loan_label_map = dict(LoanApplication.LOAN_TYPE_CHOICES)
+    configured_loan_types = list(
+        LoanTypeConfiguration.objects.filter(is_active=True).order_by("display_order", "loan_type")
+    )
+    if configured_loan_types:
+        loan_type_create_options = [
+            {
+                "value": cfg.loan_type,
+                "label": loan_label_map.get(cfg.loan_type, cfg.loan_type.title()),
+                "default_rate": str(cfg.interest_rate),
+            }
+            for cfg in configured_loan_types
+        ]
+    else:
+        loan_type_create_options = [
+            {"value": value, "label": label, "default_rate": ""} for value, label in LoanApplication.LOAN_TYPE_CHOICES
+        ]
+    penalty_per_day = SocietyConfiguration.objects.order_by("id").values_list(
+        "late_payment_penalty_per_day", flat=True
+    ).first() or Decimal("0.00")
 
     return render(
         request,
@@ -1908,13 +1911,15 @@ def loans_view(request):
             "search_query": query,
             "selected_type": loan_type,
             "selected_status": status,
-            "loan_type_choices": Loan.LOAN_TYPE_CHOICES,
-            "status_choices": Loan.STATUS_CHOICES,
+            "loan_type_choices": LoanApplication.LOAN_TYPE_CHOICES,
+            "status_choices": LOAN_LIST_STATUS_CHOICES,
             "page_obj": loans_page,
             "total_loans": total_loans,
             "active_loans": active_loans,
             "total_disbursed": total_disbursed,
             "total_outstanding": total_outstanding,
+            "loan_type_create_options": loan_type_create_options,
+            "late_penalty_per_day": penalty_per_day,
         },
     )
 
@@ -1922,10 +1927,85 @@ def loans_view(request):
 @login_required
 @admin_required
 def get_loan_view(request, loan_id):
-    """Get loan data for viewing - includes repayments schedule"""
+    """Get loan application or loan account JSON for the modal. Use ?kind=application|account."""
+    kind = request.GET.get("kind", "account").strip()
     try:
-        loan = Loan.objects.select_related("user", "disbursement_account", "approved_by", "created_by").get(id=loan_id)
+        if kind == "application":
+            app = LoanApplication.objects.select_related("user", "approved_by", "created_by").get(id=loan_id)
+            emi = app.calculate_emi()
+            principal = app.principal_amount
+            rate = app.interest_rate
+            tenure = app.tenure_months
+            if rate > 0:
+                if app.interest_type == "flat":
+                    total_interest = principal * rate * Decimal(str(tenure)) / Decimal("1200")
+                    total_payable = (principal + total_interest).quantize(Decimal("0.01"))
+                else:
+                    total_payable = (emi * Decimal(str(tenure))).quantize(Decimal("0.01"))
+            else:
+                total_payable = principal
+            return JsonResponse(
+                {
+                    "success": True,
+                    "loan": {
+                        "list_kind": "application",
+                        "id": app.id,
+                        "loan_number": app.application_number,
+                        "loan_type": app.loan_type,
+                        "loan_type_display": app.get_loan_type_display(),
+                        "status": app.status,
+                        "status_display": app.get_status_display(),
+                        "member_name": app.user.display_name,
+                        "member_id": app.user.member_id or "",
+                        "user_id": app.user.id,
+                        "principal_amount": str(app.principal_amount),
+                        "interest_rate": str(app.interest_rate),
+                        "interest_type": app.interest_type,
+                        "interest_type_display": app.get_interest_type_display(),
+                        "tenure_months": app.tenure_months,
+                        "emi_amount": str(emi),
+                        "total_payable": str(total_payable),
+                        "total_paid": "0.00",
+                        "outstanding_balance": str(app.principal_amount),
+                        "overdue_amount": "0.00",
+                        "completion_percentage": 0,
+                        "application_date": app.application_date.strftime("%b %d, %Y") if app.application_date else "",
+                        "approval_date": app.approval_date.strftime("%b %d, %Y") if app.approval_date else "",
+                        "disbursement_date": "",
+                        "first_emi_date": "",
+                        "last_emi_date": "",
+                        "closure_date": "",
+                        "total_emis": app.tenure_months,
+                        "emis_paid": 0,
+                        "emis_overdue": 0,
+                        "guarantor_name": app.guarantor_name or "",
+                        "guarantor_member_id": app.guarantor_member_id or "",
+                        "guarantor_relationship": app.guarantor_relationship or "",
+                        "guarantor_contact": app.guarantor_contact or "",
+                        "collateral_type": app.collateral_type or "",
+                        "collateral_value": str(app.collateral_value) if app.collateral_value else "",
+                        "collateral_description": app.collateral_description or "",
+                        "disbursement_account_number": "",
+                        "purpose": app.purpose or "",
+                        "remarks": app.remarks or "",
+                        "approved_by_name": app.approved_by.display_name if app.approved_by else "",
+                        "created_by_name": app.created_by.display_name if app.created_by else "",
+                        "created_at": app.created_at.strftime("%b %d, %Y") if app.created_at else "",
+                        "repayments": [],
+                    },
+                }
+            )
 
+        loan = LoanAccount.objects.select_related(
+            "application",
+            "user",
+            "disbursement_account",
+            "created_by",
+            "application__approved_by",
+            "application__created_by",
+        ).get(id=loan_id)
+        app = loan.application
+        g = loan.guarantors.order_by("id").first()
         repayments = loan.repayments.all().order_by("installment_number")
         repayments_data = [
             {
@@ -1949,17 +2029,16 @@ def get_loan_view(request, loan_id):
             {
                 "success": True,
                 "loan": {
+                    "list_kind": "account",
                     "id": loan.id,
                     "loan_number": loan.loan_number,
-                    "loan_type": loan.loan_type,
+                    "loan_type": app.loan_type,
                     "loan_type_display": loan.get_loan_type_display(),
                     "status": loan.status,
                     "status_display": loan.get_status_display(),
-                    # Member
                     "member_name": loan.user.display_name,
                     "member_id": loan.user.member_id or "",
                     "user_id": loan.user.id,
-                    # Financial
                     "principal_amount": str(loan.principal_amount),
                     "interest_rate": str(loan.interest_rate),
                     "interest_type": loan.interest_type,
@@ -1971,42 +2050,39 @@ def get_loan_view(request, loan_id):
                     "outstanding_balance": str(loan.outstanding_balance),
                     "overdue_amount": str(loan.overdue_amount),
                     "completion_percentage": loan.completion_percentage,
-                    # Dates
-                    "application_date": loan.application_date.strftime("%b %d, %Y") if loan.application_date else "",
-                    "approval_date": loan.approval_date.strftime("%b %d, %Y") if loan.approval_date else "",
+                    "application_date": app.application_date.strftime("%b %d, %Y") if app.application_date else "",
+                    "approval_date": app.approval_date.strftime("%b %d, %Y") if app.approval_date else "",
                     "disbursement_date": loan.disbursement_date.strftime("%b %d, %Y") if loan.disbursement_date else "",
                     "first_emi_date": loan.first_emi_date.strftime("%b %d, %Y") if loan.first_emi_date else "",
                     "last_emi_date": loan.last_emi_date.strftime("%b %d, %Y") if loan.last_emi_date else "",
                     "closure_date": loan.closure_date.strftime("%b %d, %Y") if loan.closure_date else "",
-                    # EMI tracking
                     "total_emis": loan.total_emis,
                     "emis_paid": loan.emis_paid,
                     "emis_overdue": loan.emis_overdue,
-                    # Guarantor
-                    "guarantor_name": loan.guarantor_name or "",
-                    "guarantor_member_id": loan.guarantor_member_id or "",
-                    "guarantor_relationship": loan.guarantor_relationship or "",
-                    "guarantor_contact": loan.guarantor_contact or "",
-                    # Collateral
-                    "collateral_type": loan.collateral_type or "",
-                    "collateral_value": str(loan.collateral_value) if loan.collateral_value else "",
-                    "collateral_description": loan.collateral_description or "",
-                    # Disbursement account
+                    "guarantor_name": (g.name if g else (app.guarantor_name or "")),
+                    "guarantor_member_id": (
+                        (g.user.member_id if g and g.user else None) or app.guarantor_member_id or ""
+                    ),
+                    "guarantor_relationship": (g.relationship if g else app.guarantor_relationship) or "",
+                    "guarantor_contact": (g.contact if g else app.guarantor_contact) or "",
+                    "collateral_type": loan.collateral_type or app.collateral_type or "",
+                    "collateral_value": str(loan.collateral_value or app.collateral_value or "")
+                    if (loan.collateral_value or app.collateral_value)
+                    else "",
+                    "collateral_description": loan.collateral_description or app.collateral_description or "",
                     "disbursement_account_number": loan.disbursement_account.account_number
                     if loan.disbursement_account
                     else "",
-                    # Internal
-                    "purpose": loan.purpose or "",
-                    "remarks": loan.remarks or "",
-                    "approved_by_name": loan.approved_by.display_name if loan.approved_by else "",
+                    "purpose": app.purpose or "",
+                    "remarks": loan.remarks or app.remarks or "",
+                    "approved_by_name": app.approved_by.display_name if app.approved_by else "",
                     "created_by_name": loan.created_by.display_name if loan.created_by else "",
                     "created_at": loan.created_at.strftime("%b %d, %Y") if loan.created_at else "",
-                    # Repayments
                     "repayments": repayments_data,
                 },
             }
         )
-    except Loan.DoesNotExist:
+    except (LoanApplication.DoesNotExist, LoanAccount.DoesNotExist):
         return JsonResponse({"success": False, "error": "Loan not found"})
     except Exception as e:
         return JsonResponse({"success": False, "error": str(e)})
@@ -2015,134 +2091,39 @@ def get_loan_view(request, loan_id):
 @login_required
 @admin_required
 def add_loan_view(request):
-    """Create a new loan application"""
-    if request.method == "POST":
-        try:
-            user_id = request.POST.get("user_id")
-            loan_type = request.POST.get("loan_type")
-            principal_amount = request.POST.get("principal_amount")
-            interest_rate = request.POST.get("interest_rate")
-            interest_type = request.POST.get("interest_type", "reducing")
-            tenure_months = request.POST.get("tenure_months")
-            purpose = request.POST.get("purpose", "").strip()
-            remarks = request.POST.get("remarks", "").strip()
+    """Create a new loan application (delegates to `services.loans.create_loan_application`)."""
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "Invalid request method"})
 
-            # Guarantor
-            guarantor_name = request.POST.get("guarantor_name", "").strip()
-            guarantor_member_id = request.POST.get("guarantor_member_id", "").strip()
-            guarantor_relationship = request.POST.get("guarantor_relationship", "").strip()
-            guarantor_contact = request.POST.get("guarantor_contact", "").strip()
+    try:
+        app = loan_service.create_loan_application(
+            user_id=request.POST.get("user_id"),
+            loan_type=request.POST.get("loan_type"),
+            principal_amount=request.POST.get("principal_amount"),
+            interest_rate=request.POST.get("interest_rate"),
+            interest_type=request.POST.get("interest_type", "reducing"),
+            tenure_months=request.POST.get("tenure_months"),
+            purpose=request.POST.get("purpose", ""),
+            remarks=request.POST.get("remarks", ""),
+            guarantor_name=request.POST.get("guarantor_name", ""),
+            guarantor_member_id=request.POST.get("guarantor_member_id", ""),
+            guarantor_relationship=request.POST.get("guarantor_relationship", ""),
+            guarantor_contact=request.POST.get("guarantor_contact", ""),
+            collateral_type=request.POST.get("collateral_type", ""),
+            collateral_value=request.POST.get("collateral_value") or None,
+            collateral_description=request.POST.get("collateral_description", ""),
+            processing_fee=request.POST.get("processing_fee") or Decimal("0"),
+            disbursement_account_id=request.POST.get("disbursement_account_id") or None,
+            actor=request.user,
+            ip_address=_get_client_ip(request),
+            audit_via="panel",
+        )
+    except ServiceError as e:
+        return JsonResponse({"success": False, "error": e.message})
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)})
 
-            # Collateral
-            collateral_type = request.POST.get("collateral_type", "").strip()
-            collateral_value = request.POST.get("collateral_value") or None
-            collateral_description = request.POST.get("collateral_description", "").strip()
-
-            # Validate required fields
-            if not user_id:
-                return JsonResponse({"success": False, "error": "Member is required"})
-            if not loan_type:
-                return JsonResponse({"success": False, "error": "Loan type is required"})
-            if not principal_amount:
-                return JsonResponse({"success": False, "error": "Loan amount is required"})
-            if not interest_rate:
-                return JsonResponse({"success": False, "error": "Interest rate is required"})
-            if not tenure_months:
-                return JsonResponse({"success": False, "error": "Tenure is required"})
-
-            try:
-                user = User.objects.get(id=user_id)
-            except User.DoesNotExist:
-                return JsonResponse({"success": False, "error": "Member not found"})
-
-            principal = Decimal(str(principal_amount))
-            rate = Decimal(str(interest_rate))
-            tenure = int(tenure_months)
-
-            # Calculate EMI
-            if rate > 0:
-                monthly_rate = rate / Decimal("1200")
-                if interest_type == "flat":
-                    total_interest = principal * rate * Decimal(str(tenure)) / Decimal("1200")
-                    emi = (principal + total_interest) / Decimal(str(tenure))
-                    total_payable = principal + total_interest
-                else:
-                    # Reducing balance EMI formula
-                    factor = (1 + monthly_rate) ** tenure
-                    emi = (principal * monthly_rate * factor) / (factor - 1)
-                    total_payable = emi * Decimal(str(tenure))
-            else:
-                emi = principal / Decimal(str(tenure))
-                total_payable = principal
-
-            emi = emi.quantize(Decimal("0.01"))
-            total_payable = total_payable.quantize(Decimal("0.01"))
-
-            # Auto-generate loan number
-            max_retries = 5
-            for attempt in range(max_retries):
-                try:
-                    with transaction.atomic():
-                        year = date.today().year
-                        last_loan = (
-                            Loan.objects.select_for_update()
-                            .filter(loan_number__startswith=f"LN-{year}-")
-                            .order_by("-loan_number")
-                            .first()
-                        )
-                        if last_loan:
-                            try:
-                                last_seq = int(last_loan.loan_number.split("-")[-1])
-                                next_seq = last_seq + 1
-                            except (ValueError, IndexError):
-                                next_seq = 1
-                        else:
-                            next_seq = 1
-
-                        loan_number = f"LN-{year}-{next_seq:05d}"
-
-                        loan = Loan.objects.create(
-                            loan_number=loan_number,
-                            user=user,
-                            loan_type=loan_type,
-                            principal_amount=principal,
-                            interest_rate=rate,
-                            interest_type=interest_type,
-                            tenure_months=tenure,
-                            emi_amount=emi,
-                            total_payable=total_payable,
-                            outstanding_balance=principal,
-                            total_emis=tenure,
-                            application_date=date.today(),
-                            purpose=purpose or None,
-                            remarks=remarks or None,
-                            guarantor_name=guarantor_name or None,
-                            guarantor_member_id=guarantor_member_id or None,
-                            guarantor_relationship=guarantor_relationship or None,
-                            guarantor_contact=guarantor_contact or None,
-                            collateral_type=collateral_type or None,
-                            collateral_value=Decimal(str(collateral_value)) if collateral_value else None,
-                            collateral_description=collateral_description or None,
-                            created_by=request.user,
-                        )
-
-                    log_action(
-                        request,
-                        "create",
-                        "loan",
-                        loan.id,
-                        f"Created loan {loan_number} for {user.display_name} - {loan.get_loan_type_display()} Rs.{principal}",
-                    )
-                    return JsonResponse({"success": True, "loan_id": loan.id})
-                except IntegrityError:
-                    if attempt == max_retries - 1:
-                        raise
-                    continue
-
-        except Exception as e:
-            return JsonResponse({"success": False, "error": str(e)})
-
-    return JsonResponse({"success": False, "error": "Invalid request method"})
+    return JsonResponse({"success": True, "loan_id": app.id, "list_kind": "application"})
 
 
 @login_required
@@ -2225,40 +2206,14 @@ def get_audit_log_view(request, log_id):
 @admin_required
 def reports_view(request):
     """Financial reports page with profit calculation and portfolio analysis."""
-    # Period selector
-    period = request.GET.get("period", "year")
-    year = int(request.GET.get("year", date.today().year))
-    month = int(request.GET.get("month", date.today().month))
-    month_key = request.GET.get("month_key", "").strip()
-    account_type_filter = request.GET.get("account_type", "").strip()
-
-    if month_key:
-        try:
-            month_year, month_num = month_key.split("-")
-            year = int(month_year)
-            month = int(month_num)
-            period = "month"
-        except (ValueError, TypeError):
-            month_key = ""
-
-    if period == "month":
-        import calendar
-
-        start_date = date(year, month, 1)
-        last_day = calendar.monthrange(year, month)[1]
-        end_date = date(year, month, last_day)
-    elif period == "quarter":
-        quarter = int(request.GET.get("quarter", (date.today().month - 1) // 3 + 1))
-        start_month = (quarter - 1) * 3 + 1
-        import calendar
-
-        end_month = start_month + 2
-        start_date = date(year, start_month, 1)
-        last_day = calendar.monthrange(year, end_month)[1]
-        end_date = date(year, end_month, last_day)
-    else:  # year
-        start_date = date(year, 4, 1)  # Indian fiscal year: April 1
-        end_date = date(year + 1, 3, 31)
+    rd = report_dates_from_request(request)
+    period = rd["period"]
+    start_date = rd["start_date"]
+    end_date = rd["end_date"]
+    year = rd["year"]
+    month = rd["month"]
+    month_key = rd["month_key"]
+    account_type_filter = rd["account_type_filter"]
 
     summary = get_financial_summary(start_date, end_date)
     account_type_cashflow = get_account_type_cashflow(months=6, account_type=account_type_filter or None)
@@ -2291,7 +2246,7 @@ def reports_view(request):
     fund_balances = FundAccount.objects.filter(is_deleted=False, is_active=True)
 
     # NPA summary
-    npa_loans = [loan for loan in Loan.objects.filter(status="active") if loan.is_npa]
+    npa_loans = [la for la in LoanAccount.objects.filter(status="active") if la.is_npa]
     npa_summary = {}
     for loan in npa_loans:
         cat = loan.npa_category or "substandard"
@@ -2316,13 +2271,32 @@ def reports_view(request):
         is_deleted=False, status="active", maturity_date__range=(today + timedelta(days=61), today + timedelta(days=90))
     ).select_related("user")
 
-    # Dividend summary
-    total_share_capital = User.objects.filter(is_deleted=False, status="active", share_capital_amount__gt=0).aggregate(
-        total=Sum("share_capital_amount")
-    )["total"] or Decimal("0.00")
-    eligible_dividend_members = User.objects.filter(
-        is_deleted=False, status="active", eligible_for_dividend=True, share_capital_amount__gt=0
-    ).count()
+    # Dividend summary (aggregated from ShareCapital lots)
+    total_share_capital = ShareCapital.objects.filter(
+        user__is_deleted=False,
+        user__status="active",
+        status="issued",
+        redemption_date__isnull=True,
+    ).aggregate(total=Sum("total_value"))["total"] or Decimal("0.00")
+    eligible_dividend_members = (
+        User.objects.filter(
+            is_deleted=False,
+            status="active",
+            eligible_for_dividend=True,
+            share_holdings__status="issued",
+            share_holdings__redemption_date__isnull=True,
+        )
+        .distinct()
+        .count()
+    )
+
+    report_fp = financial_period_overlapping(start_date, end_date)
+    snapshot_pl = None
+    snapshot_society = None
+    if report_fp:
+        snapshot_pl = ProfitAndLoss.objects.filter(financial_period=report_fp).first()
+        snapshot_society = SocietyAccount.objects.filter(financial_period=report_fp).first()
+    financial_periods = FinancialPeriod.objects.order_by("-start_date")[:80]
 
     context = {
         "summary": summary,
@@ -2344,9 +2318,397 @@ def reports_view(request):
         "selected_account_type": account_type_filter,
         "account_type_choices": MemberAccount.ACCOUNT_TYPE_CHOICES,
         "month": month,
-        "month_key": month_key or f"{year:04d}-{month:02d}",
+        "month_key": month_key,
+        "selected_quarter": rd["selected_quarter"],
+        "fy_month_options": rd["fy_month_options"],
+        "fy_quarters": rd["fy_quarters"],
+        "working_fy": rd["working_fy"],
+        "fy_window": rd["fy_window"],
+        "using_session_fy": rd["using_session_fy"],
+        "fy_year_label": rd["fy_year_label"],
+        "report_financial_period": report_fp,
+        "snapshot_pl": snapshot_pl,
+        "snapshot_society": snapshot_society,
+        "financial_periods": financial_periods,
     }
     return render(request, "admin/reports.html", context)
+
+
+@login_required
+@admin_required
+def reports_save_financial_snapshot_view(request):
+    """Persist P&L and society snapshot for a financial period (portal JSON)."""
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "Invalid request method"}, status=405)
+    try:
+        fp_id = request.POST.get("financial_period_id", "").strip()
+        if fp_id.isdigit():
+            fp = get_object_or_404(FinancialPeriod, pk=int(fp_id))
+        else:
+            fp = active_financial_period()
+            if not fp:
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "error": "No active financial period. Create one under Settings or pass financial_period_id.",
+                    },
+                    status=400,
+                )
+
+        pl_row, soc_row, pl_updated = persist_financial_snapshots(fp, calculated_by=request.user)
+        log_action(
+            request,
+            "create",
+            "system",
+            None,
+            f"Saved financial snapshot for {fp.label} (P&L updated={pl_updated}).",
+        )
+        return JsonResponse(
+            {
+                "success": True,
+                "message": f"Snapshot saved for {fp.label}.",
+                "profit_and_loss_updated": pl_updated,
+                "net_surplus": str(soc_row.net_surplus),
+                "total_income": str(pl_row.total_income),
+            }
+        )
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@login_required
+@admin_required
+def reports_sync_receivables_view(request):
+    """Sync loan interest receivables from unpaid EMIs (portal JSON)."""
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "Invalid request method"}, status=405)
+    try:
+        from django.utils.dateparse import parse_date
+
+        as_of = date.today()
+        raw = request.POST.get("as_of_date", "").strip()
+        if raw:
+            parsed = parse_date(raw)
+            if not parsed:
+                return JsonResponse({"success": False, "error": "Invalid as_of_date; use YYYY-MM-DD"}, status=400)
+            as_of = parsed
+
+        fp = None
+        fp_raw = request.POST.get("financial_period_id", "").strip()
+        if fp_raw.isdigit():
+            fp = get_object_or_404(FinancialPeriod, pk=int(fp_raw))
+
+        n = sync_loan_interest_receivables(as_of_date=as_of, financial_period=fp)
+        log_action(
+            request,
+            "update",
+            "system",
+            None,
+            f"Synced loan interest receivables as of {as_of} ({n} installments).",
+        )
+        return JsonResponse(
+            {
+                "success": True,
+                "message": f"Processed {n} unpaid installment(s) due on or before {as_of}.",
+                "installments_considered": n,
+            }
+        )
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@login_required
+@admin_required
+def finance_fees_view(request):
+    """Fee schedules and posted charges (read-only register)."""
+    schedules = FeeSchedule.objects.all().order_by("-effective_date", "fee_type")
+    q = request.GET.get("q", "").strip()
+    charges = FeeCharge.objects.select_related("fee_schedule", "user", "loan_account").order_by("-created_at")
+    if q:
+        charges = charges.filter(
+            Q(user__first_name__icontains=q)
+            | Q(user__last_name__icontains=q)
+            | Q(user__member_id__icontains=q)
+            | Q(fee_schedule__name__icontains=q)
+        )
+    page = request.GET.get("page", 1)
+    per_page = 30
+    paginator = Paginator(charges, per_page)
+    try:
+        charges_page = paginator.page(page)
+    except PageNotAnInteger:
+        charges_page = paginator.page(1)
+    except EmptyPage:
+        charges_page = paginator.page(paginator.num_pages)
+
+    return render(
+        request,
+        "admin/finance_fees.html",
+        {
+            "schedules": schedules,
+            "charges_page": charges_page,
+            "search_query": q,
+        },
+    )
+
+
+@login_required
+@admin_required
+def finance_receivables_view(request):
+    """Interest receivable register."""
+    qs = InterestReceivable.objects.select_related("loan_account", "financial_period", "loan_account__user").order_by(
+        "-due_date", "-created_at"
+    )
+    st = request.GET.get("status", "").strip()
+    if st:
+        qs = qs.filter(status=st)
+    page = request.GET.get("page", 1)
+    per_page = 40
+    paginator = Paginator(qs, per_page)
+    try:
+        page_obj = paginator.page(page)
+    except PageNotAnInteger:
+        page_obj = paginator.page(1)
+    except EmptyPage:
+        page_obj = paginator.page(paginator.num_pages)
+
+    return render(
+        request,
+        "admin/finance_receivables.html",
+        {"page_obj": page_obj, "status_filter": st},
+    )
+
+
+_VALID_SETTINGS_TABS = {"general", "financial-year", "products"}
+
+
+def _settings_redirect(tab="general", next_path=None):
+    """Redirect back to settings (preserving tab) or to a safe next path."""
+    if next_path:
+        return redirect(next_path)
+    tab = tab if tab in _VALID_SETTINGS_TABS else "general"
+    return redirect(f"/settings/?tab={tab}")
+
+
+def _parse_decimal(raw, default=Decimal("0")):
+    try:
+        return Decimal((raw or "").strip() or "0")
+    except Exception:
+        return default
+
+
+@login_required
+@admin_required
+def settings_view(request):
+    """Settings hub: General profile, Financial Year, and Products (interest rates)."""
+    from django.contrib import messages
+    from django.utils.dateparse import parse_date
+
+    requested_tab = request.GET.get("tab") or request.POST.get("tab") or "general"
+    if requested_tab not in _VALID_SETTINGS_TABS:
+        requested_tab = "general"
+
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+
+        # ---- General tab ----------------------------------------------------
+        if action == "update_society_profile":
+            society_name = request.POST.get("society_name", "").strip()
+            penalty_raw = request.POST.get("late_payment_penalty_per_day", "").strip()
+            remove_logo = request.POST.get("remove_logo") == "on"
+            if not society_name:
+                messages.error(request, "Society name is required.")
+                return _settings_redirect("general")
+            penalty_value = _parse_decimal(penalty_raw)
+            if penalty_value < 0:
+                messages.error(request, "Penalty per day cannot be negative.")
+                return _settings_redirect("general")
+            config, _ = SocietyConfiguration.objects.get_or_create(
+                pk=1,
+                defaults={
+                    "society_name": society_name,
+                    "late_payment_penalty_per_day": penalty_value,
+                },
+            )
+            config.society_name = society_name
+            config.late_payment_penalty_per_day = penalty_value
+            logo = request.FILES.get("society_logo")
+            if logo:
+                config.society_logo = logo
+            elif remove_logo and config.society_logo:
+                config.society_logo.delete(save=False)
+                config.society_logo = None
+            config.save()
+            log_action(request, "update", "system", config.id, "Updated society profile")
+            messages.success(request, "General settings saved.")
+            return _settings_redirect("general")
+
+        # ---- Financial Year tab --------------------------------------------
+        if action == "select_working_fy":
+            pid = request.POST.get("working_period_id", "").strip()
+            next_path = _safe_same_origin_redirect_path(request.POST.get("next", ""))
+            if pid.isdigit():
+                get_object_or_404(FinancialPeriod, pk=int(pid))
+                set_working_financial_period(request, int(pid))
+                fp = FinancialPeriod.objects.get(pk=int(pid))
+                FinancialPeriod.objects.exclude(pk=fp.pk).update(is_active=False)
+                fp.is_active = True
+                fp.save(update_fields=["is_active"])
+                messages.success(request, f"Working financial year set to {fp.label}.")
+            else:
+                set_working_financial_period(request, None)
+                messages.success(request, "Working FY cleared. Using calendar Apr–Mar from today.")
+            return _settings_redirect("financial-year", next_path=next_path)
+
+        if action == "set_active":
+            pid = request.POST.get("period_id", "")
+            if pid.isdigit():
+                fp = get_object_or_404(FinancialPeriod, pk=int(pid))
+                FinancialPeriod.objects.exclude(pk=fp.pk).update(is_active=False)
+                fp.is_active = True
+                fp.save(update_fields=["is_active"])
+                set_working_financial_period(request, fp.pk)
+                messages.success(request, f"Active period is now {fp.label}.")
+            return _settings_redirect("financial-year")
+
+        if action == "delete_period":
+            pid = request.POST.get("period_id", "")
+            if pid.isdigit():
+                fp = get_object_or_404(FinancialPeriod, pk=int(pid))
+                if fp.is_active:
+                    messages.error(request, "Cannot delete the active period. Activate another period first.")
+                else:
+                    label = fp.label
+                    fp.delete()
+                    messages.success(request, f"Deleted period {label}.")
+            return _settings_redirect("financial-year")
+
+        if action == "create_period":
+            label = request.POST.get("label", "").strip()
+            sd = parse_date(request.POST.get("start_date", ""))
+            ed = parse_date(request.POST.get("end_date", ""))
+            status_val = request.POST.get("status", "open")
+            make_active = request.POST.get("is_active") == "on"
+            if not label or not sd or not ed:
+                messages.error(request, "Label, start date, and end date are required.")
+                return _settings_redirect("financial-year")
+            if ed < sd:
+                messages.error(request, "End date must be on or after start date.")
+                return _settings_redirect("financial-year")
+            fp = FinancialPeriod.objects.create(
+                label=label,
+                start_date=sd,
+                end_date=ed,
+                status=status_val if status_val in dict(FinancialPeriod.STATUS_CHOICES) else "open",
+                is_active=make_active,
+                created_by=request.user,
+            )
+            if make_active:
+                FinancialPeriod.objects.exclude(pk=fp.pk).update(is_active=False)
+                set_working_financial_period(request, fp.pk)
+            log_action(request, "create", "system", fp.id, f"Created financial period {fp.label}")
+            messages.success(request, f"Created period {fp.label}.")
+            return _settings_redirect("financial-year")
+
+        # ---- Products tab --------------------------------------------------
+        if action in {"create_account_type", "update_account_type", "delete_account_type"}:
+            return _handle_product_action(
+                request,
+                model=AccountTypeConfiguration,
+                name_field="account_type",
+                action=action,
+                tab="products",
+            )
+
+        if action in {"create_loan_type", "update_loan_type", "delete_loan_type"}:
+            return _handle_product_action(
+                request,
+                model=LoanTypeConfiguration,
+                name_field="loan_type",
+                action=action,
+                tab="products",
+            )
+
+        messages.error(request, "Unknown settings action.")
+        return _settings_redirect(requested_tab)
+
+    periods = FinancialPeriod.objects.order_by("-start_date")
+    working = resolve_portal_financial_period(request)
+    session_override = request.session.get(PORTAL_FY_SESSION_KEY)
+    society_config = SocietyConfiguration.objects.order_by("id").first()
+    account_type_configs = AccountTypeConfiguration.objects.order_by("display_order", "account_type")
+    loan_type_configs = LoanTypeConfiguration.objects.order_by("display_order", "loan_type")
+    return render(
+        request,
+        "admin/settings.html",
+        {
+            "periods": periods,
+            "working_fy": working,
+            "session_fy_override": session_override,
+            "society_config": society_config,
+            "account_type_configs": account_type_configs,
+            "loan_type_configs": loan_type_configs,
+            "active_tab": requested_tab,
+        },
+    )
+
+
+def _handle_product_action(request, *, model, name_field, action, tab):
+    """Shared CRUD handler for AccountTypeConfiguration / LoanTypeConfiguration."""
+    from django.contrib import messages
+
+    if action.startswith("delete"):
+        item_id = request.POST.get("item_id", "")
+        if item_id.isdigit():
+            obj = get_object_or_404(model, pk=int(item_id))
+            label = getattr(obj, name_field)
+            obj.delete()
+            messages.success(request, f"Removed product {label}.")
+        return _settings_redirect(tab)
+
+    name = (request.POST.get("name") or "").strip()
+    rate_raw = (request.POST.get("interest_rate") or "").strip()
+    is_active = request.POST.get("is_active") == "on"
+
+    if not name:
+        messages.error(request, "Product name is required.")
+        return _settings_redirect(tab)
+    if len(name) > 100:
+        messages.error(request, "Product name must be 100 characters or fewer.")
+        return _settings_redirect(tab)
+    rate = _parse_decimal(rate_raw, default=Decimal("-1"))
+    if rate < 0:
+        messages.error(request, f"Invalid interest rate for {name}.")
+        return _settings_redirect(tab)
+
+    if action.startswith("create"):
+        if model.objects.filter(**{name_field: name}).exists():
+            messages.error(request, f"A product named “{name}” already exists.")
+            return _settings_redirect(tab)
+        last_order = model.objects.order_by("-display_order").values_list("display_order", flat=True).first() or 0
+        model.objects.create(
+            **{name_field: name},
+            interest_rate=rate,
+            is_active=is_active,
+            display_order=last_order + 1,
+        )
+        messages.success(request, f"Added product {name}.")
+        return _settings_redirect(tab)
+
+    item_id = request.POST.get("item_id", "")
+    if not item_id.isdigit():
+        messages.error(request, "Missing product id.")
+        return _settings_redirect(tab)
+    obj = get_object_or_404(model, pk=int(item_id))
+    if model.objects.filter(**{name_field: name}).exclude(pk=obj.pk).exists():
+        messages.error(request, f"Another product is already named “{name}”.")
+        return _settings_redirect(tab)
+    setattr(obj, name_field, name)
+    obj.interest_rate = rate
+    obj.is_active = is_active
+    obj.save()
+    messages.success(request, f"Updated product {name}.")
+    return _settings_redirect(tab)
 
 
 @login_required
@@ -2354,48 +2716,129 @@ def reports_view(request):
 def database_view(request):
     """Database schema overview page for admins."""
     model_counts = [
-        {"name": "User", "table": User._meta.db_table, "count": User.objects.count(), "purpose": "Members/Admins and profile data"},
+        {
+            "name": "User",
+            "table": User._meta.db_table,
+            "count": User.objects.count(),
+            "purpose": "Members/Admins and profile data",
+        },
         {
             "name": "MemberAccount",
             "table": MemberAccount._meta.db_table,
             "count": MemberAccount.objects.count(),
             "purpose": "Deposit/share/OD account ledgers",
         },
-        {"name": "Receipt", "table": Receipt._meta.db_table, "count": Receipt.objects.count(), "purpose": "Posted transactions"},
-        {"name": "Voucher", "table": Voucher._meta.db_table, "count": Voucher.objects.count(), "purpose": "Staged vouchers"},
+        {
+            "name": "Transaction",
+            "table": Transaction._meta.db_table,
+            "count": Transaction.objects.count(),
+            "purpose": "Posted transactions",
+        },
+        {
+            "name": "Voucher",
+            "table": Voucher._meta.db_table,
+            "count": Voucher.objects.count(),
+            "purpose": "Staged vouchers",
+        },
         {
             "name": "VoucherEntry",
             "table": VoucherEntry._meta.db_table,
             "count": VoucherEntry.objects.count(),
             "purpose": "Line items under voucher",
         },
-        {"name": "Loan", "table": Loan._meta.db_table, "count": Loan.objects.count(), "purpose": "Loan contracts"},
+        {
+            "name": "LoanApplication",
+            "table": LoanApplication._meta.db_table,
+            "count": LoanApplication.objects.count(),
+            "purpose": "Loan applications",
+        },
+        {
+            "name": "LoanAccount",
+            "table": LoanAccount._meta.db_table,
+            "count": LoanAccount.objects.count(),
+            "purpose": "Active loan book",
+        },
+        {
+            "name": "Guarantor",
+            "table": Guarantor._meta.db_table,
+            "count": Guarantor.objects.count(),
+            "purpose": "Loan guarantors",
+        },
         {
             "name": "LoanRepayment",
             "table": LoanRepayment._meta.db_table,
             "count": LoanRepayment.objects.count(),
             "purpose": "EMI schedule and payments",
         },
-        {"name": "FundAccount", "table": FundAccount._meta.db_table, "count": FundAccount.objects.count(), "purpose": "Society funds"},
+        {
+            "name": "FundAccount",
+            "table": FundAccount._meta.db_table,
+            "count": FundAccount.objects.count(),
+            "purpose": "Society funds",
+        },
         {
             "name": "FundTransaction",
             "table": FundTransaction._meta.db_table,
             "count": FundTransaction.objects.count(),
             "purpose": "Fund ledger entries",
         },
-        {"name": "AuditLog", "table": AuditLog._meta.db_table, "count": AuditLog.objects.count(), "purpose": "Audit trail"},
+        {
+            "name": "AuditLog",
+            "table": AuditLog._meta.db_table,
+            "count": AuditLog.objects.count(),
+            "purpose": "Audit trail",
+        },
+        {
+            "name": "FinancialPeriod",
+            "table": FinancialPeriod._meta.db_table,
+            "count": FinancialPeriod.objects.count(),
+            "purpose": "Fiscal years for snapshots",
+        },
+        {
+            "name": "FeeSchedule",
+            "table": FeeSchedule._meta.db_table,
+            "count": FeeSchedule.objects.count(),
+            "purpose": "Configurable fees",
+        },
+        {
+            "name": "FeeCharge",
+            "table": FeeCharge._meta.db_table,
+            "count": FeeCharge.objects.count(),
+            "purpose": "Posted fee instances",
+        },
+        {
+            "name": "InterestReceivable",
+            "table": InterestReceivable._meta.db_table,
+            "count": InterestReceivable.objects.count(),
+            "purpose": "Loan interest receivable",
+        },
+        {
+            "name": "ProfitAndLoss",
+            "table": ProfitAndLoss._meta.db_table,
+            "count": ProfitAndLoss.objects.count(),
+            "purpose": "Persisted P&L snapshots",
+        },
+        {
+            "name": "SocietyAccount",
+            "table": SocietyAccount._meta.db_table,
+            "count": SocietyAccount.objects.count(),
+            "purpose": "Society balance sheet snapshots",
+        },
     ]
 
     relationships = [
         {"from": "User", "to": "MemberAccount", "label": "1:N"},
-        {"from": "User", "to": "Receipt", "label": "1:N"},
-        {"from": "MemberAccount", "to": "Receipt", "label": "1:N"},
+        {"from": "User", "to": "Transaction", "label": "1:N"},
+        {"from": "MemberAccount", "to": "Transaction", "label": "1:N"},
         {"from": "User", "to": "Voucher", "label": "1:N"},
         {"from": "Voucher", "to": "VoucherEntry", "label": "1:N"},
         {"from": "MemberAccount", "to": "VoucherEntry", "label": "1:N"},
-        {"from": "User", "to": "Loan", "label": "1:N"},
-        {"from": "Loan", "to": "LoanRepayment", "label": "1:N"},
-        {"from": "Receipt", "to": "LoanRepayment", "label": "1:N"},
+        {"from": "User", "to": "LoanApplication", "label": "1:N"},
+        {"from": "User", "to": "LoanAccount", "label": "1:N"},
+        {"from": "LoanApplication", "to": "LoanAccount", "label": "1:1"},
+        {"from": "LoanAccount", "to": "Guarantor", "label": "1:N"},
+        {"from": "LoanAccount", "to": "LoanRepayment", "label": "1:N"},
+        {"from": "Transaction", "to": "LoanRepayment", "label": "1:N"},
         {"from": "FundAccount", "to": "FundTransaction", "label": "1:N"},
         {"from": "User", "to": "AuditLog", "label": "1:N"},
     ]
@@ -2404,10 +2847,12 @@ def database_view(request):
         "graph LR",
         'U["User"]',
         'MA["MemberAccount"]',
-        'R["Receipt"]',
+        'R["Transaction"]',
         'V["Voucher"]',
         'VE["VoucherEntry"]',
-        'L["Loan"]',
+        'LA1["LoanApplication"]',
+        'LA2["LoanAccount"]',
+        'G["Guarantor"]',
         'LR["LoanRepayment"]',
         'F["FundAccount"]',
         'FT["FundTransaction"]',
@@ -2418,8 +2863,11 @@ def database_view(request):
         "U -->|1:N| V",
         "V -->|1:N| VE",
         "MA -->|1:N| VE",
-        "U -->|1:N| L",
-        "L -->|1:N| LR",
+        "U -->|1:N| LA1",
+        "U -->|1:N| LA2",
+        "LA1 -->|1:1| LA2",
+        "LA2 -->|1:N| G",
+        "LA2 -->|1:N| LR",
         "R -->|1:N| LR",
         "F -->|1:N| FT",
         "U -->|1:N| AL",
@@ -2444,16 +2892,19 @@ def distribute_profit_view(request):
         try:
             from accounts.utils import get_financial_summary
 
-            year = int(request.POST.get("year", date.today().year))
-            start_date = date(year, 4, 1)
-            end_date = date(year + 1, 3, 31)
+            fw = effective_fy_window(request)
+            start_date, end_date = fw.start_date, fw.end_date
+            y0, y1 = start_date.year, end_date.year
 
             summary = get_financial_summary(start_date, end_date)
             net_profit = summary["net_profit"]
 
             if net_profit <= 0:
                 return JsonResponse(
-                    {"success": False, "error": f"No distributable profit for FY {year}-{year + 1}. Net: ₹{net_profit}"}
+                    {
+                        "success": False,
+                        "error": f"No distributable profit for {getattr(fw, 'label', 'FY')} ({y0}-{y1}). Net: ₹{net_profit}",
+                    }
                 )
 
             # Apply annual_profit allocation rules
@@ -2463,7 +2914,7 @@ def distribute_profit_view(request):
                 request,
                 "annual_profit",
                 net_profit,
-                f"Annual profit distribution for FY {year}-{year + 1}",
+                f"Annual profit distribution for {getattr(fw, 'label', 'FY')} ({y0}-{y1})",
             )
 
             if not transactions:
@@ -2480,7 +2931,7 @@ def distribute_profit_view(request):
                 "create",
                 "fund",
                 None,
-                f"Distributed annual profit ₹{net_profit} for FY {year}-{year + 1}. "
+                f"Distributed annual profit ₹{net_profit} for {getattr(fw, 'label', 'FY')} ({y0}-{y1}). "
                 f"Allocated ₹{total_allocated} across {len(transactions)} funds.",
             )
 
@@ -2502,7 +2953,8 @@ def distribute_dividend_view(request):
     """Calculate and distribute dividends to eligible members based on share capital."""
     if request.method == "POST":
         try:
-            year = int(request.POST.get("year", date.today().year))
+            fw = effective_fy_window(request)
+            y0, y1 = fw.start_date.year, fw.end_date.year
             dividend_rate = request.POST.get("dividend_rate")
 
             if not dividend_rate:
@@ -2512,12 +2964,26 @@ def distribute_dividend_view(request):
             if dividend_rate <= 0 or dividend_rate > 100:
                 return JsonResponse({"success": False, "error": "Dividend rate must be between 0.01 and 100"})
 
-            # Get eligible members with share capital
-            eligible_members = User.objects.filter(
-                is_deleted=False,
-                status="active",
-                eligible_for_dividend=True,
-                share_capital_amount__gt=0,
+            eligible_members = (
+                User.objects.filter(
+                    is_deleted=False,
+                    status="active",
+                    eligible_for_dividend=True,
+                )
+                .annotate(
+                    share_capital_total=Coalesce(
+                        Sum(
+                            "share_holdings__total_value",
+                            filter=Q(
+                                share_holdings__status="issued",
+                                share_holdings__redemption_date__isnull=True,
+                            ),
+                        ),
+                        Value(0),
+                        output_field=DecimalField(max_digits=14, decimal_places=2),
+                    )
+                )
+                .filter(share_capital_total__gt=0)
             )
 
             if not eligible_members.exists():
@@ -2528,8 +2994,7 @@ def distribute_dividend_view(request):
 
             with transaction.atomic():
                 for member in eligible_members:
-                    # Dividend = share_capital * rate / 100
-                    dividend_amount = (member.share_capital_amount * dividend_rate / Decimal("100")).quantize(
+                    dividend_amount = (member.share_capital_total * dividend_rate / Decimal("100")).quantize(
                         Decimal("0.01")
                     )
 
@@ -2557,7 +3022,7 @@ def distribute_dividend_view(request):
                         fund=dividend_fund,
                         transaction_type="debit",
                         amount=total_distributed,
-                        description=f"Dividend distribution FY {year}-{year + 1} @ {dividend_rate}%",
+                        description=f"Dividend distribution {getattr(fw, 'label', 'FY')} ({y0}-{y1}) @ {dividend_rate}%",
                         payment_mode="internal",
                         balance_after=new_balance,
                         trigger_event="manual",
@@ -2569,7 +3034,7 @@ def distribute_dividend_view(request):
                     "create",
                     "fund",
                     None,
-                    f"Distributed dividend @ {dividend_rate}% for FY {year}-{year + 1}. "
+                    f"Distributed dividend @ {dividend_rate}% for {getattr(fw, 'label', 'FY')} ({y0}-{y1}). "
                     f"₹{total_distributed} to {member_count} members.",
                 )
 
@@ -2622,10 +3087,9 @@ def post_interest_view(request):
                     if days <= 0:
                         continue
 
-                    # Daily interest = balance * rate / 100 / 365
-                    interest_amount = (
-                        account.balance * account.interest_rate * Decimal(str(days)) / Decimal("36500")
-                    ).quantize(Decimal("0.01"))
+                    interest_amount = InterestCalculatorService.daily_simple_interest(
+                        account.balance, account.interest_rate, days
+                    )
 
                     if interest_amount <= 0:
                         continue
@@ -2636,37 +3100,30 @@ def post_interest_view(request):
                         last_interest_calc_date=period_end,
                     )
 
-                    # Create InterestPayout record
-                    InterestPayout.objects.create(
-                        account=account,
-                        amount=interest_amount,
-                        period_start=calc_start,
-                        period_end=period_end,
-                        created_by=request.user,
-                    )
-
-                    # Create a receipt for the interest credit
-                    last_receipt = Receipt.objects.order_by("-id").first()
-                    if last_receipt and last_receipt.receipt_number:
-                        try:
-                            last_num = int(last_receipt.receipt_number.replace("RCT", ""))
-                            new_receipt_number = f"RCT{last_num + 1:06d}"
-                        except (ValueError, IndexError):
-                            new_receipt_number = f"RCT{Receipt.objects.count() + 1:06d}"
-                    else:
-                        new_receipt_number = "RCT000001"
-
+                    new_transaction_number = _next_transaction_number()
                     new_balance = account.balance + interest_amount
-                    Receipt.objects.create(
+                    txn = Transaction.objects.create(
                         user=account.user,
                         member_account=account,
-                        receipt_number=new_receipt_number,
+                        transaction_number=new_transaction_number,
                         transaction_type="interest",
                         amount=interest_amount,
                         description=f"Interest credit for {calc_start.strftime('%b %d')} - {period_end.strftime('%b %d, %Y')} @ {account.interest_rate}%",
                         payment_mode="internal",
                         balance_after=new_balance,
                         created_by=request.user,
+                    )
+
+                    fp = resolve_portal_financial_period(request) or active_financial_period()
+                    InterestPayout.objects.create(
+                        account=account,
+                        amount=interest_amount,
+                        period_start=calc_start,
+                        period_end=period_end,
+                        created_by=request.user,
+                        transaction=txn,
+                        financial_period=fp,
+                        status="credited",
                     )
 
                     # Update account balance
@@ -2707,27 +3164,17 @@ def export_report_view(request):
 
     from accounts.utils import get_financial_summary
 
-    period = request.GET.get("period", "year")
-    year = int(request.GET.get("year", date.today().year))
-
+    rd = report_dates_from_request(request)
+    start_date = rd["start_date"]
+    end_date = rd["end_date"]
+    period = rd["period"]
     if period == "month":
-        month = int(request.GET.get("month", date.today().month))
-        start_date = date(year, month, 1)
-        last_day = calendar.monthrange(year, month)[1]
-        end_date = date(year, month, last_day)
-        filename = f"financial_report_{year}_{month:02d}.csv"
+        filename = f"financial_report_{start_date.year}_{start_date.month:02d}.csv"
     elif period == "quarter":
-        quarter = int(request.GET.get("quarter", (date.today().month - 1) // 3 + 1))
-        start_month = (quarter - 1) * 3 + 1
-        end_month = start_month + 2
-        start_date = date(year, start_month, 1)
-        last_day = calendar.monthrange(year, end_month)[1]
-        end_date = date(year, end_month, last_day)
-        filename = f"financial_report_{year}_Q{quarter}.csv"
+        filename = f"financial_report_Q{rd['selected_quarter']}_{start_date.year}.csv"
     else:
-        start_date = date(year, 4, 1)
-        end_date = date(year + 1, 3, 31)
-        filename = f"financial_report_FY{year}_{year + 1}.csv"
+        safe_lbl = getattr(rd["fy_window"], "label", "FY").replace(" ", "_")
+        filename = f"financial_report_{safe_lbl}.csv"
 
     summary = get_financial_summary(start_date, end_date)
 
@@ -2854,7 +3301,7 @@ def export_members_view(request):
                 m.date_of_birth.strftime("%Y-%m-%d") if m.date_of_birth else "",
                 m.get_gender_display() if m.gender else "",
                 m.occupation or "",
-                m.get_kyc_status_display(),
+                (user_kyc(m).get_kyc_status_display() if user_kyc(m) else ""),
             ]
         )
 
@@ -2930,8 +3377,8 @@ def export_accounts_view(request):
 
 @login_required
 @admin_required
-def export_receipts_view(request):
-    """Export receipts list to Excel"""
+def export_transactions_view(request):
+    """Export transactions list to Excel."""
     import openpyxl
     from openpyxl.styles import Font
 
@@ -2957,12 +3404,12 @@ def export_receipts_view(request):
         cell.font = Font(bold=True)
 
     receipts = (
-        Receipt.objects.select_related("user", "member_account", "created_by").all().order_by("-created_at")[:5000]
+        Transaction.objects.select_related("user", "member_account", "created_by").all().order_by("-created_at")[:5000]
     )
     for r in receipts:
         ws.append(
             [
-                r.receipt_number,
+                r.transaction_number,
                 r.user.display_name,
                 r.user.member_id or "",
                 r.member_account.account_number if r.member_account else "",
@@ -2980,7 +3427,7 @@ def export_receipts_view(request):
         max_length = max(len(str(cell.value or "")) for cell in col)
         ws.column_dimensions[col[0].column_letter].width = min(max_length + 2, 40)
 
-    log_action(request, "export", "receipt", None, "Exported receipts list to Excel")
+    log_action(request, "export", "transaction", None, "Exported receipts list to Excel")
 
     response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     response["Content-Disposition"] = 'attachment; filename="receipts.xlsx"'
@@ -3021,26 +3468,65 @@ def export_loans_view(request):
     for cell in ws[1]:
         cell.font = Font(bold=True)
 
-    loans = Loan.objects.select_related("user").all().order_by("-created_at")
-    for loan in loans:
+    for ac in LoanAccount.objects.select_related("application", "user").order_by("-created_at"):
+        app = ac.application
         ws.append(
             [
-                loan.loan_number,
-                loan.user.display_name,
-                loan.user.member_id or "",
-                loan.get_loan_type_display(),
-                loan.get_status_display(),
-                float(loan.principal_amount),
-                float(loan.interest_rate),
-                loan.get_interest_type_display(),
-                loan.tenure_months,
-                float(loan.emi_amount),
-                float(loan.total_payable),
-                float(loan.total_paid),
-                float(loan.outstanding_balance),
-                loan.application_date.strftime("%Y-%m-%d") if loan.application_date else "",
-                loan.approval_date.strftime("%Y-%m-%d") if loan.approval_date else "",
-                loan.disbursement_date.strftime("%Y-%m-%d") if loan.disbursement_date else "",
+                ac.loan_number,
+                ac.user.display_name,
+                ac.user.member_id or "",
+                ac.get_loan_type_display(),
+                ac.get_status_display(),
+                float(ac.principal_amount),
+                float(ac.interest_rate),
+                ac.get_interest_type_display(),
+                ac.tenure_months,
+                float(ac.emi_amount),
+                float(ac.total_payable),
+                float(ac.total_paid),
+                float(ac.outstanding_balance),
+                app.application_date.strftime("%Y-%m-%d") if app.application_date else "",
+                app.approval_date.strftime("%Y-%m-%d") if app.approval_date else "",
+                ac.disbursement_date.strftime("%Y-%m-%d") if ac.disbursement_date else "",
+            ]
+        )
+    open_apps = (
+        LoanApplication.objects.exclude(pk__in=LoanAccount.objects.values_list("application_id", flat=True))
+        .select_related("user")
+        .order_by("-created_at")
+    )
+    for app in open_apps:
+        emi = app.calculate_emi()
+        if app.interest_rate > 0:
+            if app.interest_type == "flat":
+                total_pay = float(
+                    (
+                        app.principal_amount
+                        + app.principal_amount * app.interest_rate * Decimal(str(app.tenure_months)) / Decimal("1200")
+                    ).quantize(Decimal("0.01"))
+                )
+            else:
+                total_pay = float((emi * Decimal(str(app.tenure_months))).quantize(Decimal("0.01")))
+        else:
+            total_pay = float(app.principal_amount)
+        ws.append(
+            [
+                app.application_number,
+                app.user.display_name,
+                app.user.member_id or "",
+                app.get_loan_type_display(),
+                app.get_status_display(),
+                float(app.principal_amount),
+                float(app.interest_rate),
+                app.get_interest_type_display(),
+                app.tenure_months,
+                float(emi),
+                total_pay,
+                0.0,
+                float(app.principal_amount),
+                app.application_date.strftime("%Y-%m-%d") if app.application_date else "",
+                app.approval_date.strftime("%Y-%m-%d") if app.approval_date else "",
+                "",
             ]
         )
 
@@ -3059,282 +3545,49 @@ def export_loans_view(request):
 @login_required
 @admin_required
 def approve_loan_view(request, loan_id):
-    """Approve a pending loan and generate repayment schedule"""
-    if request.method == "POST":
-        try:
-            from decimal import Decimal
+    """Approve a pending LoanApplication (delegates to `services.loans.approve_loan_application`)."""
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "Invalid request method"})
 
-            loan = Loan.objects.get(id=loan_id)
+    try:
+        acct = loan_service.approve_loan_application(
+            application_id=loan_id,
+            disbursement_date=request.POST.get("disbursement_date"),
+            actor=request.user,
+            ip_address=_get_client_ip(request),
+            audit_via="panel",
+        )
+    except ServiceError as e:
+        return JsonResponse({"success": False, "error": e.message})
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)})
 
-            if loan.status != "pending":
-                return JsonResponse({"success": False, "error": "Only pending loans can be approved"})
-
-            # Segregation of duties: creator cannot approve their own loan
-            if loan.created_by == request.user:
-                return JsonResponse(
-                    {"success": False, "error": "You cannot approve a loan you created. Another admin must approve it."}
-                )
-
-            disbursement_date_str = request.POST.get("disbursement_date")
-            if not disbursement_date_str:
-                return JsonResponse({"success": False, "error": "Disbursement date is required"})
-
-            from datetime import datetime
-
-            disbursement_date = datetime.strptime(disbursement_date_str, "%Y-%m-%d").date()
-
-            # Update loan status
-            loan.status = "active"
-            loan.approval_date = date.today()
-            loan.disbursement_date = disbursement_date
-            loan.approved_by = request.user
-
-            # Calculate first EMI date (1 month after disbursement)
-            if disbursement_date.month == 12:
-                first_emi_month = 1
-                first_emi_year = disbursement_date.year + 1
-            else:
-                first_emi_month = disbursement_date.month + 1
-                first_emi_year = disbursement_date.year
-
-            # Handle month-end edge cases (e.g., Jan 31 -> Feb 28)
-            import calendar
-
-            max_day = calendar.monthrange(first_emi_year, first_emi_month)[1]
-            first_emi_day = min(disbursement_date.day, max_day)
-            first_emi_date = date(first_emi_year, first_emi_month, first_emi_day)
-            loan.first_emi_date = first_emi_date
-
-            # Generate repayment schedule
-            remaining = loan.principal_amount
-            monthly_rate = loan.interest_rate / Decimal("1200")
-            emi = loan.emi_amount
-            current_date = first_emi_date
-
-            repayments = []
-            for i in range(1, loan.tenure_months + 1):
-                interest = (remaining * monthly_rate).quantize(Decimal("0.01"))
-                principal_component = emi - interest
-
-                # Last EMI adjustment for rounding
-                if i == loan.tenure_months:
-                    principal_component = remaining
-                    interest = emi - principal_component
-                    if interest < 0:
-                        interest = Decimal("0")
-                        emi_adjusted = principal_component
-                    else:
-                        emi_adjusted = emi
-                else:
-                    emi_adjusted = emi
-
-                remaining_after = remaining - principal_component
-                if remaining_after < 0:
-                    remaining_after = Decimal("0")
-
-                repayments.append(
-                    LoanRepayment(
-                        loan=loan,
-                        installment_number=i,
-                        due_date=current_date,
-                        amount_due=emi_adjusted,
-                        principal_component=principal_component,
-                        interest_component=interest,
-                        balance_after=remaining_after,
-                        payment_status="upcoming",
-                    )
-                )
-
-                remaining = remaining_after
-
-                # Next EMI date
-                if current_date.month == 12:
-                    next_month = 1
-                    next_year = current_date.year + 1
-                else:
-                    next_month = current_date.month + 1
-                    next_year = current_date.year
-
-                max_day = calendar.monthrange(next_year, next_month)[1]
-                next_day = min(first_emi_date.day, max_day)
-                current_date = date(next_year, next_month, next_day)
-
-            # Set last EMI date
-            if repayments:
-                loan.last_emi_date = repayments[-1].due_date
-
-            loan.save()
-            LoanRepayment.objects.bulk_create(repayments)
-
-            log_action(
-                request,
-                "approve",
-                "loan",
-                loan.id,
-                f"Approved loan {loan.loan_number} - \u20b9{loan.principal_amount} for {loan.user.display_name}",
-            )
-            return JsonResponse({"success": True})
-        except Loan.DoesNotExist:
-            return JsonResponse({"success": False, "error": "Loan not found"})
-        except Exception as e:
-            return JsonResponse({"success": False, "error": str(e)})
-
-    return JsonResponse({"success": False, "error": "Invalid request method"})
+    return JsonResponse({"success": True, "loan_account_id": acct.id})
 
 
 @login_required
 @admin_required
 def record_emi_payment_view(request, loan_id):
-    """Record an EMI payment for a loan"""
-    if request.method == "POST":
-        try:
-            installment_number = request.POST.get("installment_number")
-            amount_paid = request.POST.get("amount_paid")
-            payment_mode = request.POST.get("payment_mode", "cash")
+    """Record an EMI payment (delegates to `services.loans.record_emi_payment`)."""
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "Invalid request method"})
 
-            if not installment_number:
-                return JsonResponse({"success": False, "error": "Installment number is required"})
-            if not amount_paid:
-                return JsonResponse({"success": False, "error": "Payment amount is required"})
+    try:
+        loan_service.record_emi_payment(
+            loan_account_id=loan_id,
+            installment_number=request.POST.get("installment_number"),
+            amount_paid=request.POST.get("amount_paid"),
+            payment_mode=request.POST.get("payment_mode", "cash"),
+            actor=request.user,
+            ip_address=_get_client_ip(request),
+            audit_via="panel",
+        )
+    except ServiceError as e:
+        return JsonResponse({"success": False, "error": e.message})
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)})
 
-            amount = Decimal(str(amount_paid))
-            if amount <= 0:
-                return JsonResponse({"success": False, "error": "Payment amount must be greater than zero"})
-
-            # Retry loop for duplicate receipt numbers
-            max_retries = 5
-            for attempt in range(max_retries):
-                try:
-                    with transaction.atomic():
-                        # Lock the loan row
-                        loan = Loan.objects.select_for_update().get(id=loan_id)
-
-                        if loan.status != "active":
-                            return JsonResponse({"success": False, "error": "Only active loans can receive payments"})
-
-                        try:
-                            repayment = LoanRepayment.objects.select_for_update().get(
-                                loan=loan, installment_number=int(installment_number)
-                            )
-                        except LoanRepayment.DoesNotExist:
-                            return JsonResponse({"success": False, "error": "Installment not found"})
-
-                        if repayment.payment_status == "paid":
-                            return JsonResponse({"success": False, "error": "This installment is already paid"})
-
-                        # Calculate late penalty (2% per month on overdue amount)
-                        penalty = Decimal("0.00")
-                        if repayment.due_date < date.today():
-                            days_late = (date.today() - repayment.due_date).days
-                            months_late = max(1, days_late / 30)
-                            penalty = (
-                                repayment.amount_due * Decimal("2") * Decimal(str(months_late)) / Decimal("100")
-                            ).quantize(Decimal("0.01"))
-
-                        repayment.paid_date = date.today()
-                        repayment.amount_paid = amount
-                        repayment.penalty = penalty
-                        repayment.payment_mode = payment_mode
-                        repayment.payment_status = "paid" if amount >= repayment.amount_due else "partial"
-
-                        # Create a receipt for the EMI payment
-                        member_account = loan.disbursement_account
-                        if not member_account:
-                            # Fallback: use user's first active account
-                            member_account = MemberAccount.objects.filter(user=loan.user, status="active").first()
-
-                        if member_account:
-                            # Lock the account for balance update
-                            member_account = MemberAccount.objects.select_for_update().get(id=member_account.id)
-
-                            # Auto-generate receipt number atomically
-                            year = date.today().year
-                            last_receipt = (
-                                Receipt.objects.select_for_update()
-                                .filter(receipt_number__startswith=f"RCP-{year}-")
-                                .order_by("-receipt_number")
-                                .first()
-                            )
-                            if last_receipt:
-                                try:
-                                    last_seq = int(last_receipt.receipt_number.split("-")[-1])
-                                    next_seq = last_seq + 1
-                                except (ValueError, IndexError):
-                                    next_seq = 1
-                            else:
-                                next_seq = 1
-                            receipt_number = f"RCP-{year}-{next_seq:05d}"
-
-                            # Update account balance with F() expression
-                            new_balance = member_account.balance + amount
-                            MemberAccount.objects.filter(id=member_account.id).update(
-                                balance=F("balance") + amount,
-                                last_transaction_date=date.today(),
-                            )
-
-                            receipt = Receipt.objects.create(
-                                receipt_number=receipt_number,
-                                user=loan.user,
-                                member_account=member_account,
-                                transaction_type="credit",
-                                amount=amount,
-                                description=f"Loan EMI #{installment_number} - {loan.loan_number}",
-                                payment_mode=payment_mode,
-                                balance_after=new_balance,
-                                created_by=request.user,
-                            )
-                            repayment.receipt = receipt
-
-                        repayment.save()
-
-                        # Update loan totals
-                        loan.total_paid = loan.total_paid + amount
-                        loan.outstanding_balance = loan.outstanding_balance - repayment.principal_component
-                        if loan.outstanding_balance < 0:
-                            loan.outstanding_balance = Decimal("0")
-                        loan.emis_paid = LoanRepayment.objects.filter(loan=loan, payment_status="paid").count()
-
-                        # Mark any upcoming EMIs past due date as overdue
-                        LoanRepayment.objects.filter(
-                            loan=loan, payment_status="upcoming", due_date__lt=date.today()
-                        ).update(payment_status="overdue")
-
-                        loan.emis_overdue = LoanRepayment.objects.filter(loan=loan, payment_status="overdue").count()
-
-                        # Update overdue_amount dynamically
-                        loan.overdue_amount = LoanRepayment.objects.filter(
-                            loan=loan, payment_status="overdue"
-                        ).aggregate(total=Sum("amount_due"))["total"] or Decimal("0")
-
-                        # Check if all EMIs paid
-                        unpaid = LoanRepayment.objects.filter(loan=loan).exclude(payment_status="paid").count()
-                        if unpaid == 0:
-                            loan.status = "closed"
-                            loan.closure_date = date.today()
-                            loan.outstanding_balance = Decimal("0")
-
-                        loan.save()
-
-                    # If we get here, the transaction succeeded
-                    log_action(
-                        request,
-                        "update",
-                        "loan",
-                        loan_id,
-                        f"Recorded EMI #{installment_number} payment of \u20b9{amount} for loan {loan.loan_number}",
-                    )
-                    return JsonResponse({"success": True})
-                except IntegrityError:
-                    if attempt == max_retries - 1:
-                        raise
-                    continue
-
-        except Loan.DoesNotExist:
-            return JsonResponse({"success": False, "error": "Loan not found"})
-        except Exception as e:
-            return JsonResponse({"success": False, "error": str(e)})
-
-    return JsonResponse({"success": False, "error": "Invalid request method"})
+    return JsonResponse({"success": True})
 
 
 # ========================================
@@ -3923,3 +4176,132 @@ def delete_allocation_rule_view(request, rule_id):
             return JsonResponse({"success": False, "error": str(e)})
 
     return JsonResponse({"success": False, "error": "Invalid request method"})
+
+
+# ============================================================================
+# Financial Periods (Phase A5)
+# ----------------------------------------------------------------------------
+# Promoted the orphan `templates/admin/financial_periods.html` to /finance/periods/.
+# Business logic lives in `accounts.services.financial_period`; these views
+# just translate POST forms into service calls and surface ServiceError
+# messages as JSON for the inline-JS modal flow.
+# ============================================================================
+
+from django.utils.dateparse import parse_date as _parse_date_fp  # noqa: E402
+
+from accounts.models import FinancialPeriod as _FinancialPeriod  # noqa: E402
+from accounts.services import financial_period as _fp_service  # noqa: E402
+from accounts.services.exceptions import ConflictError as _FPConflictError  # noqa: E402
+from accounts.services.exceptions import NotFoundError as _FPNotFoundError  # noqa: E402
+from accounts.services.exceptions import PermissionDeniedError as _FPPermissionDeniedError  # noqa: E402
+from accounts.services.exceptions import ServiceError as _FPServiceError  # noqa: E402
+from accounts.utils import _get_client_ip as _fp_client_ip  # noqa: E402
+
+
+def _fp_service_error_status(exc):
+    """Map a `ServiceError` subclass to an HTTP status code for JSON responses."""
+    if isinstance(exc, _FPNotFoundError):
+        return 404
+    if isinstance(exc, _FPPermissionDeniedError):
+        return 403
+    if isinstance(exc, _FPConflictError):
+        return 409
+    return 400
+
+
+@login_required
+@admin_required
+def financial_periods_view(request):
+    """List page for financial periods at `/finance/periods/`."""
+    periods = _FinancialPeriod.objects.all().order_by("-start_date")
+    active_period = _fp_service.active()
+    can_open_new = active_period is None or active_period.status == "closed"
+    return render(
+        request,
+        "admin/financial_periods.html",
+        {
+            "periods": periods,
+            "active_period": active_period,
+            "can_open_new": can_open_new,
+        },
+    )
+
+
+@login_required
+@admin_required
+def open_financial_period_view(request):
+    """POST handler: open a new FY (calls `services.financial_period.open_period`)."""
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "Invalid request method"}, status=405)
+    name = (request.POST.get("name") or request.POST.get("label") or "").strip()
+    start_date = _parse_date_fp((request.POST.get("start_date") or "").strip())
+    end_date = _parse_date_fp((request.POST.get("end_date") or "").strip())
+    try:
+        period = _fp_service.open_period(
+            name=name,
+            start_date=start_date,
+            end_date=end_date,
+            actor=request.user,
+            ip_address=_fp_client_ip(request),
+            audit_via="panel",
+        )
+    except _FPServiceError as exc:
+        return JsonResponse(
+            {"success": False, "error": exc.message},
+            status=_fp_service_error_status(exc),
+        )
+    return JsonResponse({"success": True, "period_id": period.id, "label": period.label, "status": period.status})
+
+
+@login_required
+@admin_required
+def continue_financial_period_view(request, pk):
+    """POST handler: re-activate a non-closed period."""
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "Invalid request method"}, status=405)
+    try:
+        period = _fp_service.continue_period(
+            period_id=pk,
+            actor=request.user,
+            ip_address=_fp_client_ip(request),
+            audit_via="panel",
+        )
+    except _FPServiceError as exc:
+        return JsonResponse(
+            {"success": False, "error": exc.message},
+            status=_fp_service_error_status(exc),
+        )
+    return JsonResponse({"success": True, "period_id": period.id, "label": period.label, "is_active": period.is_active})
+
+
+@login_required
+@admin_required
+def close_financial_period_view(request, pk):
+    """POST handler: close a period and lock its P&L snapshot."""
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "Invalid request method"}, status=405)
+    try:
+        result = _fp_service.close_period(
+            period_id=pk,
+            actor=request.user,
+            ip_address=_fp_client_ip(request),
+            audit_via="panel",
+        )
+    except _FPServiceError as exc:
+        return JsonResponse(
+            {"success": False, "error": exc.message},
+            status=_fp_service_error_status(exc),
+        )
+    period = result["period"]
+    pnl = result["pnl"]
+    society_account = result["society_account"]
+    return JsonResponse(
+        {
+            "success": True,
+            "period_id": period.id,
+            "label": period.label,
+            "status": period.status,
+            "profit_and_loss_id": pnl.id if pnl else None,
+            "society_account_id": society_account.id if society_account else None,
+        }
+    )

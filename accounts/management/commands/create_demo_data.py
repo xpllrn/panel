@@ -5,7 +5,18 @@ from decimal import Decimal
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from accounts.models import Loan, LoanRepayment, MemberAccount, Receipt, User
+from accounts.models import (
+    LoanAccount,
+    LoanApplication,
+    LoanRepayment,
+    MemberAccount,
+    MemberAddress,
+    MemberKYC,
+    MemberNominee,
+    ShareCapital,
+    Transaction,
+    User,
+)
 
 # Indian first names
 FIRST_NAMES_MALE = [
@@ -175,9 +186,10 @@ class Command(BaseCommand):
             # Delete non-staff, non-superuser users and their accounts/receipts/loans
             demo_users = User.objects.filter(is_staff=False, is_superuser=False)
             count = demo_users.count()
-            LoanRepayment.objects.filter(loan__user__in=demo_users).delete()
-            Loan.objects.filter(user__in=demo_users).delete()
-            Receipt.objects.filter(user__in=demo_users).delete()
+            LoanRepayment.objects.filter(loan_account__user__in=demo_users).delete()
+            LoanAccount.objects.filter(user__in=demo_users).delete()
+            LoanApplication.objects.filter(user__in=demo_users).delete()
+            Transaction.objects.filter(user__in=demo_users).delete()
             MemberAccount.objects.filter(user__in=demo_users).delete()
             demo_users.delete()
             self.stdout.write(self.style.WARNING(f"Deleted {count} existing demo users and their data"))
@@ -333,26 +345,47 @@ class Command(BaseCommand):
                 ),
                 mobile_primary=mobile_primary,
                 preferred_comm_mode=random.choice(["sms", "email", "whatsapp"]),
-                current_address_line1=f"{street_num}, {random.choice(streets)}",
-                current_city=city,
-                current_district=city,
-                current_state=state,
-                current_pincode=pincode,
-                permanent_same_as_current=True,
+                risk_category=random.choice(["low", "low", "low", "medium", "high"]),
+                role="member",
+            )
+            MemberKYC.objects.create(
+                user=user,
                 kyc_status=kyc_status,
                 kyc_verified_date=date_of_joining + timedelta(days=random.randint(1, 30))
                 if kyc_status == "verified"
                 else None,
-                aadhar_number=aadhar_number,
+                aadhaar_number=aadhar_number,
                 pan_number=pan_number,
-                risk_category=random.choice(["low", "low", "low", "medium", "high"]),
+            )
+            MemberAddress.objects.create(
+                user=user,
+                address_type="current",
+                address_line1=f"{street_num}, {random.choice(streets)}",
+                city=city,
+                district=city,
+                state=state,
+                pincode=pincode,
+                country="India",
+            )
+            MemberAddress.objects.create(
+                user=user,
+                address_type="permanent",
+                same_as_current=True,
+                country="India",
+            )
+            MemberNominee.objects.create(
+                user=user,
+                is_primary=True,
+                name=nominee_name,
+                relationship=nominee_rel,
+            )
+            ShareCapital.objects.create(
+                user=user,
                 number_of_shares=num_shares,
                 face_value_per_share=face_value,
-                share_capital_amount=Decimal(num_shares) * face_value,
-                share_issue_date=date_of_joining,
-                nominee_name=nominee_name,
-                nominee_relationship=nominee_rel,
-                role="member",
+                issue_date=date_of_joining,
+                status="issued",
+                certificate_number=f"CERT-{member_id}",
             )
             users.append(user)
 
@@ -469,10 +502,11 @@ class Command(BaseCommand):
                 interest = (principal_amount * interest_rate * months_elapsed) / (Decimal("12") * Decimal("100"))
                 balance = principal_amount + interest
 
-            # Nominee (use member's nominee or different one)
-            if random.random() < 0.7:
-                nominee_name = user.nominee_name
-                nominee_relationship = user.nominee_relationship
+            # Nominee (use member's primary nominee or different one)
+            primary_nom = user.nominees.filter(is_primary=True).first()
+            if random.random() < 0.7 and primary_nom:
+                nominee_name = primary_nom.name
+                nominee_relationship = primary_nom.relationship
             else:
                 nom_first = random.choice(FIRST_NAMES_MALE + FIRST_NAMES_FEMALE)
                 nominee_name = f"{nom_first} {user.last_name}"
@@ -638,8 +672,8 @@ class Command(BaseCommand):
             description = random.choice(descriptions.get(transaction_type, ["Transaction"]))
             remarks = random.choice(remarks_list)
 
-            receipt = Receipt.objects.create(
-                receipt_number=receipt_number,
+            receipt = Transaction.objects.create(
+                transaction_number=receipt_number,
                 user=user,
                 member_account=account,
                 transaction_type=transaction_type,
@@ -654,7 +688,7 @@ class Command(BaseCommand):
 
             # Manually set created_at to spread dates (timezone-aware)
             aware_date = timezone.make_aware(timezone.datetime(created_at.year, created_at.month, created_at.day))
-            Receipt.objects.filter(id=receipt.id).update(created_at=aware_date)
+            Transaction.objects.filter(id=receipt.id).update(created_at=aware_date)
 
             receipts.append(receipt)
 
@@ -664,6 +698,7 @@ class Command(BaseCommand):
         """Create ~35 demo loans with repayment schedules."""
         loans = []
         loan_counter = 0
+        app_counter = 0
         year = date.today().year
         today = date.today()
 
@@ -759,10 +794,6 @@ class Command(BaseCommand):
             config = loan_type_config[loan_type]
             min_amt, max_amt, min_rate, max_rate, min_tenure, max_tenure = config
 
-            # Generate loan number
-            loan_counter += 1
-            loan_number = f"LN-{year}-{loan_counter:05d}"
-
             # Financial details
             principal_amount = Decimal(str(round(random.uniform(min_amt, max_amt), -2)))
             interest_rate = Decimal(str(round(random.uniform(min_rate, max_rate), 2)))
@@ -805,13 +836,6 @@ class Command(BaseCommand):
                 first_emi_date = disbursement_date + timedelta(days=30)
                 last_emi_date = first_emi_date + timedelta(days=30 * (tenure_months - 1))
 
-            if status == "rejected":
-                # No approval, no disbursement
-                total_emis = 0
-
-            if status == "pending":
-                total_emis = 0
-
             # Guarantor info (~60% of loans)
             guarantor_name = None
             guarantor_member_id = None
@@ -844,29 +868,32 @@ class Command(BaseCommand):
 
             purpose = random.choice(loan_purposes.get(loan_type, ["General purpose"]))
 
-            loan = Loan.objects.create(
-                loan_number=loan_number,
+            app_counter += 1
+            application_number = f"LA-{year}-{app_counter:05d}"
+
+            if status in ("active", "closed", "defaulted"):
+                app_status = "approved"
+            elif status == "rejected":
+                app_status = "rejected"
+            else:
+                app_status = "pending"
+
+            application = LoanApplication.objects.create(
+                application_number=application_number,
                 user=user,
                 loan_type=loan_type,
-                status=status,
                 principal_amount=principal_amount,
                 interest_rate=interest_rate,
                 interest_type=interest_type,
                 tenure_months=tenure_months,
-                emi_amount=emi_amount,
-                total_payable=total_payable,
-                total_paid=total_paid,
-                outstanding_balance=outstanding_balance,
-                overdue_amount=overdue_amount,
                 application_date=application_date,
-                approval_date=approval_date,
-                disbursement_date=disbursement_date,
-                first_emi_date=first_emi_date,
-                last_emi_date=last_emi_date,
-                closure_date=closure_date,
-                total_emis=total_emis,
-                emis_paid=emis_paid,
-                emis_overdue=emis_overdue,
+                status=app_status,
+                approval_date=approval_date if app_status == "approved" else None,
+                rejected_reason=(
+                    random.choice(["Insufficient documentation", "Credit policy", "Incomplete KYC"])
+                    if app_status == "rejected"
+                    else None
+                ),
                 guarantor_name=guarantor_name,
                 guarantor_member_id=guarantor_member_id,
                 guarantor_relationship=guarantor_relationship,
@@ -874,23 +901,52 @@ class Command(BaseCommand):
                 collateral_type=collateral_type,
                 collateral_value=collateral_value,
                 collateral_description=collateral_description,
-                disbursement_account=disbursement_account,
                 purpose=purpose,
                 remarks=random.choice(["", "", "", "Urgent requirement", "Regular member", "Referred by manager"]),
-                approved_by=admin_user if status not in ("pending", "rejected") else None,
+                approved_by=admin_user if app_status == "approved" else None,
                 created_by=admin_user,
             )
 
-            # Generate repayment schedule for active/closed/defaulted loans
-            if status in ("active", "closed", "defaulted") and first_emi_date:
-                self._generate_repayments(loan, status, today)
+            if status in ("active", "closed", "defaulted"):
+                loan_counter += 1
+                loan_number = f"LN-{year}-{loan_counter:05d}"
+                loan_ac = LoanAccount.objects.create(
+                    loan_number=loan_number,
+                    application=application,
+                    user=user,
+                    status=status,
+                    principal_amount=principal_amount,
+                    interest_rate=interest_rate,
+                    interest_type=interest_type,
+                    tenure_months=tenure_months,
+                    emi_amount=emi_amount,
+                    total_payable=total_payable,
+                    total_paid=total_paid,
+                    outstanding_balance=outstanding_balance,
+                    overdue_amount=overdue_amount,
+                    disbursement_date=disbursement_date,
+                    first_emi_date=first_emi_date,
+                    last_emi_date=last_emi_date,
+                    closure_date=closure_date,
+                    total_emis=total_emis,
+                    emis_paid=emis_paid,
+                    emis_overdue=emis_overdue,
+                    collateral_type=collateral_type,
+                    collateral_value=collateral_value,
+                    collateral_description=collateral_description,
+                    disbursement_account=disbursement_account,
+                    created_by=admin_user,
+                )
+                if first_emi_date:
+                    self._generate_repayments(loan_ac, status, today)
 
-            loans.append(loan)
+            loans.append(application)
 
         return loans
 
-    def _generate_repayments(self, loan, status, today):
-        """Generate LoanRepayment records for a loan."""
+    def _generate_repayments(self, loan_ac, status, today):
+        """Generate LoanRepayment records for a loan account."""
+        loan = loan_ac
         remaining_principal = loan.principal_amount
         monthly_rate = loan.interest_rate / Decimal("1200")
         total_paid = Decimal("0.00")
@@ -959,7 +1015,7 @@ class Command(BaseCommand):
             balance_after = max(Decimal("0.00"), remaining_principal)
 
             LoanRepayment.objects.create(
-                loan=loan,
+                loan_account=loan,
                 installment_number=installment,
                 due_date=due_date,
                 paid_date=paid_date,
@@ -975,7 +1031,7 @@ class Command(BaseCommand):
             )
 
         # Update loan totals
-        overdue_emis = LoanRepayment.objects.filter(loan=loan, payment_status="overdue")
+        overdue_emis = LoanRepayment.objects.filter(loan_account=loan, payment_status="overdue")
         overdue_amount = sum(r.amount_due for r in overdue_emis)
 
         outstanding = loan.total_payable - total_paid
@@ -984,7 +1040,7 @@ class Command(BaseCommand):
             closure_date = loan.first_emi_date + timedelta(days=30 * loan.tenure_months + random.randint(0, 5))
             outstanding = Decimal("0.00")
 
-        Loan.objects.filter(id=loan.id).update(
+        LoanAccount.objects.filter(id=loan.id).update(
             total_paid=total_paid,
             outstanding_balance=max(Decimal("0.00"), outstanding),
             overdue_amount=overdue_amount,

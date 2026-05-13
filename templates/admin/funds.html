@@ -614,7 +614,7 @@ function transferPendingVoucher(voucherId) {
     formData.append('fund_id', select.value);
     formData.append('csrfmiddlewaretoken', window.CSRF_TOKEN);
 
-    fetch('/receipts/vouchers/' + voucherId + '/transfer/', {
+    fetch('/transactions/vouchers/' + voucherId + '/transfer/', {
         method: 'POST',
         headers: { 'X-CSRFToken': window.CSRF_TOKEN },
         body: formData

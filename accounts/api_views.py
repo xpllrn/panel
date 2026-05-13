@@ -9,7 +9,9 @@ from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
-from django.db.models import F, Sum
+from django.db.models import DecimalField, F, Q, Sum, Value
+from django.db.models.functions import Coalesce
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from rest_framework import status
@@ -27,27 +29,39 @@ from accounts.email_utils import (
     send_password_change_alert,
     send_phone_changed_alert,
 )
+from accounts.interest import InterestCalculatorService
 from accounts.models import (
     AuditLog,
+    FeeCharge,
+    FeeSchedule,
+    FinancialPeriod,
     FundAccount,
     FundAllocationRule,
     FundTransaction,
     InterestPayout,
-    Loan,
+    InterestReceivable,
+    LoanAccount,
+    LoanApplication,
     LoanRepayment,
     LoginOTPChallenge,
     MemberAccount,
     Notification,
-    Receipt,
+    ProfitAndLoss,
+    SocietyAccount,
+    Transaction,
     User,
     UserDevice,
 )
 from accounts.notification_service import dispatch_user_notification, send_member_test_push
 from accounts.serializers import (
     AuditLogSerializer,
+    FeeChargeSerializer,
+    FeeScheduleSerializer,
     FundAccountSerializer,
     FundAllocationRuleSerializer,
     FundTransactionSerializer,
+    InterestReceivableSerializer,
+    LoanApplicationDetailSerializer,
     LoanCreateSerializer,
     LoanDetailSerializer,
     LoanListSerializer,
@@ -56,13 +70,35 @@ from accounts.serializers import (
     MemberAccountSerializer,
     MemberProfileSerializer,
     NotificationSerializer,
-    ReceiptCreateSerializer,
-    ReceiptSerializer,
+    ProfitAndLossSerializer,
+    SocietyAccountSerializer,
+    TransactionCreateSerializer,
+    TransactionSerializer,
     UserCreateSerializer,
     UserDetailSerializer,
     UserListSerializer,
+    loan_merged_list_dict,
 )
-from accounts.utils import apply_fund_allocations, log_action, mask_email_for_display, validate_password_strength
+from accounts.services import loans as loan_service
+from accounts.services import transactions as transaction_service
+from accounts.services.exceptions import (
+    ConflictError,
+    NotFoundError,
+    PermissionDeniedError,
+    ServiceError,
+)
+from accounts.utils import (
+    LoanListItem,
+    _get_client_ip,
+    active_financial_period,
+    apply_fund_allocations,
+    log_action,
+    mask_email_for_display,
+    persist_financial_snapshots,
+    sync_loan_interest_receivables,
+    user_active_share_capital_total,
+    validate_password_strength,
+)
 
 # ========================================
 # Auth Endpoints
@@ -89,7 +125,7 @@ def api_info(request):
                 "members": "/api/v1/admin/members/",
                 "accounts": "/api/v1/admin/accounts/",
                 "loans": "/api/v1/admin/loans/",
-                "receipts": "/api/v1/admin/receipts/",
+                "transactions": "/api/v1/admin/transactions/",
                 "funds": "/api/v1/admin/funds/",
                 "reports": "/api/v1/admin/reports/summary/",
                 "audit-logs": "/api/v1/admin/audit-logs/",
@@ -355,11 +391,7 @@ def auth_resend_otp_view(request):
     return Response(
         {
             "success": True,
-            "message": (
-                "Review OTP challenge refreshed."
-                if bypass_enabled_for_user
-                else "OTP resent successfully."
-            ),
+            "message": ("Review OTP challenge refreshed." if bypass_enabled_for_user else "OTP resent successfully."),
             "expires_in_seconds": otp_expiry_minutes * 60,
             "email_masked": mask_email_for_display(challenge.user.email) if challenge.user.email else "",
         }
@@ -502,7 +534,8 @@ def admin_members_detail(request, user_id):
         MemberAccount.objects.filter(user=user, is_deleted=False), many=True
     ).data
     data["active_loans"] = LoanListSerializer(
-        Loan.objects.filter(user=user, status__in=["active", "approved"]), many=True
+        LoanAccount.objects.filter(user=user, status="active").select_related("application", "user"),
+        many=True,
     ).data
 
     return Response(data)
@@ -617,8 +650,8 @@ def admin_accounts_detail(request, account_id):
         return Response({"error": "Account not found"}, status=status.HTTP_404_NOT_FOUND)
 
     data = MemberAccountSerializer(account).data
-    data["recent_transactions"] = ReceiptSerializer(
-        Receipt.objects.filter(member_account=account).order_by("-created_at")[:20], many=True
+    data["recent_transactions"] = TransactionSerializer(
+        Transaction.objects.filter(member_account=account).order_by("-created_at")[:20], many=True
     ).data
     return Response(data)
 
@@ -663,15 +696,15 @@ def admin_accounts_delete(request, account_id):
 
 
 # ========================================
-# Admin: Receipts / Transactions
+# Admin: Transactions
 # ========================================
 
 
 @api_view(["GET"])
 @permission_classes([IsAdmin])
-def admin_receipts_list(request):
-    """List all receipts/transactions."""
-    qs = Receipt.objects.select_related("user", "member_account").order_by("-created_at")
+def admin_transactions_list(request):
+    """List all transactions."""
+    qs = Transaction.objects.select_related("user", "member_account").order_by("-created_at")
 
     txn_type = request.query_params.get("type", "")
     if txn_type:
@@ -685,111 +718,64 @@ def admin_receipts_list(request):
 
     paginator = PageNumberPagination()
     page = paginator.paginate_queryset(qs, request)
-    serializer = ReceiptSerializer(page, many=True)
+    serializer = TransactionSerializer(page, many=True)
     return paginator.get_paginated_response(serializer.data)
 
 
 @api_view(["POST"])
 @permission_classes([IsAdmin])
-def admin_receipts_create(request):
-    """Create a receipt (deposit/withdrawal)."""
-    serializer = ReceiptCreateSerializer(data=request.data)
+def admin_transactions_create(request):
+    """Create a transaction (delegates to `services.transactions.post_transaction`)."""
+    serializer = TransactionCreateSerializer(data=request.data)
     if not serializer.is_valid():
         return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
     data = serializer.validated_data
-    amount = data["amount"]
-    txn_type = data["transaction_type"]
-
     try:
-        with transaction.atomic():
-            account = MemberAccount.objects.select_for_update().get(id=data["member_account"], is_deleted=False)
+        txn = transaction_service.post_transaction(
+            member_account_id=data["member_account"],
+            transaction_type=data["transaction_type"],
+            amount=data["amount"],
+            description=data.get("description", ""),
+            payment_mode=data.get("payment_mode", "cash"),
+            reference_number=data.get("reference_number", ""),
+            actor=request.user,
+            ip_address=_get_client_ip(request),
+            audit_via="api",
+        )
+    except ServiceError as e:
+        return _service_error_to_response(e)
 
-            # Validate withdrawal
-            if txn_type in ("debit", "transfer") and account.balance < amount:
-                return Response({"error": "Insufficient balance"}, status=status.HTTP_400_BAD_REQUEST)
+    dispatch_user_notification(
+        user=txn.user,
+        title="Transaction Update",
+        message=(
+            f"{txn.transaction_type.title()} of \u20b9{txn.amount} "
+            f"posted to account {txn.member_account.account_number}."
+        ),
+        notification_type="transaction",
+        metadata={
+            "transaction_id": txn.id,
+            "transaction_number": txn.transaction_number,
+            "account_id": txn.member_account_id,
+            "transaction_type": txn.transaction_type,
+            "amount": str(txn.amount),
+        },
+        email_template="payment_success",
+    )
 
-            # Update balance
-            if txn_type in ("credit", "interest", "dividend", "share_capital"):
-                new_balance = account.balance + amount
-                MemberAccount.objects.filter(id=account.id).update(
-                    balance=F("balance") + amount, last_transaction_date=date.today()
-                )
-            else:
-                new_balance = account.balance - amount
-                MemberAccount.objects.filter(id=account.id).update(
-                    balance=F("balance") - amount, last_transaction_date=date.today()
-                )
-
-            # Generate receipt number
-            year = date.today().year
-            last_receipt = (
-                Receipt.objects.select_for_update()
-                .filter(receipt_number__startswith=f"RCP-{year}-")
-                .order_by("-receipt_number")
-                .first()
-            )
-            if last_receipt:
-                try:
-                    last_seq = int(last_receipt.receipt_number.split("-")[-1])
-                    next_seq = last_seq + 1
-                except (ValueError, IndexError):
-                    next_seq = 1
-            else:
-                next_seq = 1
-
-            receipt = Receipt.objects.create(
-                receipt_number=f"RCP-{year}-{next_seq:05d}",
-                user=account.user,
-                member_account=account,
-                transaction_type=txn_type,
-                amount=amount,
-                description=data.get("description", ""),
-                payment_mode=data.get("payment_mode", "cash"),
-                reference_number=data.get("reference_number", ""),
-                balance_after=new_balance,
-                created_by=request.user,
-            )
-
-            log_action(
-                request,
-                "create",
-                "receipt",
-                receipt.id,
-                f"Created receipt via API: {receipt.receipt_number} - {txn_type} ₹{amount}",
-            )
-
-            dispatch_user_notification(
-                user=account.user,
-                title="Transaction Update",
-                message=f"{txn_type.title()} of ₹{amount} posted to account {account.account_number}.",
-                notification_type="transaction",
-                metadata={
-                    "receipt_id": receipt.id,
-                    "receipt_number": receipt.receipt_number,
-                    "account_id": account.id,
-                    "transaction_type": txn_type,
-                    "amount": str(amount),
-                },
-                email_template="payment_success",
-            )
-
-        return Response(ReceiptSerializer(receipt).data, status=status.HTTP_201_CREATED)
-    except MemberAccount.DoesNotExist:
-        return Response({"error": "Account not found"}, status=status.HTTP_404_NOT_FOUND)
-    except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    return Response(TransactionSerializer(txn).data, status=status.HTTP_201_CREATED)
 
 
 @api_view(["GET"])
 @permission_classes([IsAdmin])
-def admin_receipts_detail(request, receipt_id):
-    """Get receipt detail."""
+def admin_transactions_detail(request, transaction_id):
+    """Get transaction detail."""
     try:
-        receipt = Receipt.objects.select_related("user", "member_account").get(id=receipt_id)
-    except Receipt.DoesNotExist:
-        return Response({"error": "Receipt not found"}, status=status.HTTP_404_NOT_FOUND)
-    return Response(ReceiptSerializer(receipt).data)
+        txn = Transaction.objects.select_related("user", "member_account").get(id=transaction_id)
+    except Transaction.DoesNotExist:
+        return Response({"error": "Transaction not found"}, status=status.HTTP_404_NOT_FOUND)
+    return Response(TransactionSerializer(txn).data)
 
 
 # ========================================
@@ -800,376 +786,229 @@ def admin_receipts_detail(request, receipt_id):
 @api_view(["GET"])
 @permission_classes([IsAdmin])
 def admin_loans_list(request):
-    """List all loans."""
-    qs = Loan.objects.select_related("user").order_by("-created_at")
+    """List loan accounts and open applications (merged)."""
+    accounts_qs = LoanAccount.objects.select_related("application", "user").all()
+    open_apps_qs = (
+        LoanApplication.objects.filter(status__in=["pending", "rejected"])
+        .select_related("user")
+        .exclude(pk__in=LoanAccount.objects.values_list("application_id", flat=True))
+    )
 
     loan_status = request.query_params.get("status", "")
     if loan_status:
-        qs = qs.filter(status=loan_status)
+        if loan_status in ("active", "closed", "defaulted", "written_off"):
+            accounts_qs = accounts_qs.filter(status=loan_status)
+            open_apps_qs = open_apps_qs.none()
+        elif loan_status in ("pending", "rejected"):
+            accounts_qs = accounts_qs.none()
+            open_apps_qs = open_apps_qs.filter(status=loan_status)
+        else:
+            accounts_qs = accounts_qs.none()
+            open_apps_qs = open_apps_qs.none()
 
     loan_type = request.query_params.get("type", "")
     if loan_type:
-        qs = qs.filter(loan_type=loan_type)
+        accounts_qs = accounts_qs.filter(application__loan_type=loan_type)
+        open_apps_qs = open_apps_qs.filter(loan_type=loan_type)
 
     user_id = request.query_params.get("user", "")
     if user_id:
-        qs = qs.filter(user_id=user_id)
+        accounts_qs = accounts_qs.filter(user_id=user_id)
+        open_apps_qs = open_apps_qs.filter(user_id=user_id)
+
+    rows = [LoanListItem(account=a) for a in accounts_qs.order_by("-created_at")]
+    rows.extend(LoanListItem(application=a) for a in open_apps_qs.order_by("-created_at"))
+    rows.sort(key=lambda r: r.created_at, reverse=True)
 
     from rest_framework.pagination import PageNumberPagination
 
     paginator = PageNumberPagination()
-    page = paginator.paginate_queryset(qs, request)
-    serializer = LoanListSerializer(page, many=True)
-    return paginator.get_paginated_response(serializer.data)
+    page = paginator.paginate_queryset(rows, request)
+    data = [loan_merged_list_dict(r) for r in page]
+    return paginator.get_paginated_response(data)
+
+
+def _service_error_to_response(exc):
+    """Translate a `ServiceError` into an HTTP `Response`.
+
+    Maps exception subclass → status code:
+        NotFoundError         → 404
+        PermissionDeniedError → 403
+        ConflictError         → 409 (includes FinancialPeriodError)
+        ValidationError       → 400 (default for any other ServiceError)
+    """
+    if isinstance(exc, NotFoundError):
+        code = status.HTTP_404_NOT_FOUND
+    elif isinstance(exc, PermissionDeniedError):
+        code = status.HTTP_403_FORBIDDEN
+    elif isinstance(exc, ConflictError):
+        code = status.HTTP_409_CONFLICT
+    else:
+        code = status.HTTP_400_BAD_REQUEST
+    return Response({"error": exc.message}, status=code)
 
 
 @api_view(["POST"])
 @permission_classes([IsAdmin])
 def admin_loans_create(request):
-    """Create a new loan application."""
+    """Create a new loan application (delegates to `services.loans.create_loan_application`)."""
     serializer = LoanCreateSerializer(data=request.data)
     if not serializer.is_valid():
         return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
     data = serializer.validated_data
-
     try:
-        member = User.objects.get(id=data["user"], is_deleted=False)
-    except User.DoesNotExist:
-        return Response({"error": "Member not found"}, status=status.HTTP_404_NOT_FOUND)
+        app = loan_service.create_loan_application(
+            user_id=data.get("user"),
+            loan_type=data.get("loan_type"),
+            principal_amount=data.get("principal_amount"),
+            interest_rate=data.get("interest_rate"),
+            interest_type=data.get("interest_type", "reducing"),
+            tenure_months=data.get("tenure_months"),
+            purpose=data.get("purpose") or "",
+            guarantor_name=data.get("guarantor_name") or "",
+            guarantor_member_id=data.get("guarantor_member_id") or "",
+            guarantor_contact=data.get("guarantor_contact") or "",
+            collateral_type=data.get("collateral_type") or "",
+            collateral_value=data.get("collateral_value"),
+            processing_fee=data.get("processing_fee") or Decimal("0"),
+            disbursement_account_id=data.get("disbursement_account"),
+            actor=request.user,
+            ip_address=_get_client_ip(request),
+            audit_via="api",
+        )
+    except ServiceError as e:
+        return _service_error_to_response(e)
 
-    # Generate loan number
-    year = date.today().year
-    last_loan = Loan.objects.filter(loan_number__startswith=f"LN-{year}").order_by("-loan_number").first()
-    if last_loan:
-        try:
-            last_seq = int(last_loan.loan_number.split("-")[-1])
-            next_seq = last_seq + 1
-        except (ValueError, IndexError):
-            next_seq = 1
-    else:
-        next_seq = 1
-
-    # Calculate EMI
-    principal = data["principal_amount"]
-    rate = data["interest_rate"]
-    tenure = data["tenure_months"]
-    monthly_rate = rate / Decimal("1200")
-    if monthly_rate > 0:
-        factor = (1 + monthly_rate) ** tenure
-        emi = (principal * monthly_rate * factor / (factor - 1)).quantize(Decimal("0.01"))
-    else:
-        emi = (principal / tenure).quantize(Decimal("0.01"))
-
-    total_payable = (emi * tenure).quantize(Decimal("0.01"))
-
-    disbursement_account = None
-    if data.get("disbursement_account"):
-        try:
-            disbursement_account = MemberAccount.objects.get(
-                id=data["disbursement_account"], user=member, is_deleted=False
-            )
-        except MemberAccount.DoesNotExist:
-            pass
-
-    loan = Loan.objects.create(
-        loan_number=f"LN-{year}-{next_seq:05d}",
-        user=member,
-        loan_type=data["loan_type"],
-        principal_amount=principal,
-        interest_rate=rate,
-        interest_type=data.get("interest_type", "reducing"),
-        tenure_months=tenure,
-        emi_amount=emi,
-        total_payable=total_payable,
-        outstanding_balance=principal,
-        total_emis=tenure,
-        processing_fee=data.get("processing_fee", Decimal("0")),
-        application_date=date.today(),
-        disbursement_account=disbursement_account,
-        purpose=data.get("purpose", ""),
-        guarantor_name=data.get("guarantor_name", ""),
-        guarantor_member_id=data.get("guarantor_member_id", ""),
-        guarantor_contact=data.get("guarantor_contact", ""),
-        collateral_type=data.get("collateral_type", ""),
-        collateral_value=data.get("collateral_value"),
-        created_by=request.user,
-    )
-
-    log_action(request, "create", "loan", loan.id, f"Created loan via API: {loan.loan_number} - ₹{principal}")
-    return Response(LoanDetailSerializer(loan).data, status=status.HTTP_201_CREATED)
+    return Response(LoanApplicationDetailSerializer(app).data, status=status.HTTP_201_CREATED)
 
 
 @api_view(["GET"])
 @permission_classes([IsAdmin])
 def admin_loans_detail(request, loan_id):
-    """Get loan detail with repayment schedule."""
-    try:
-        loan = Loan.objects.select_related("user").get(id=loan_id)
-    except Loan.DoesNotExist:
-        return Response({"error": "Loan not found"}, status=status.HTTP_404_NOT_FOUND)
+    """Get loan application or account detail. Use ?kind=application|account to disambiguate."""
+    kind = request.query_params.get("kind", "").strip()
 
-    data = LoanDetailSerializer(loan).data
-    data["repayments"] = LoanRepaymentSerializer(
-        LoanRepayment.objects.filter(loan=loan).order_by("installment_number"), many=True
-    ).data
-    return Response(data)
+    if kind == "application":
+        try:
+            app = LoanApplication.objects.select_related("user", "approved_by", "created_by").get(id=loan_id)
+        except LoanApplication.DoesNotExist:
+            return Response({"error": "Loan not found"}, status=status.HTTP_404_NOT_FOUND)
+        data = LoanApplicationDetailSerializer(app).data
+        data["repayments"] = []
+        return Response(data)
+
+    ac_select = (
+        "application",
+        "user",
+        "disbursement_account",
+        "created_by",
+        "application__approved_by",
+        "application__created_by",
+    )
+
+    if kind == "account":
+        try:
+            ac = LoanAccount.objects.select_related(*ac_select).get(id=loan_id)
+        except LoanAccount.DoesNotExist:
+            return Response({"error": "Loan not found"}, status=status.HTTP_404_NOT_FOUND)
+        data = LoanDetailSerializer(ac).data
+        data["repayments"] = LoanRepaymentSerializer(
+            LoanRepayment.objects.filter(loan_account=ac).order_by("installment_number"), many=True
+        ).data
+        return Response(data)
+
+    try:
+        ac = LoanAccount.objects.select_related(*ac_select).get(id=loan_id)
+        data = LoanDetailSerializer(ac).data
+        data["repayments"] = LoanRepaymentSerializer(
+            LoanRepayment.objects.filter(loan_account=ac).order_by("installment_number"), many=True
+        ).data
+        return Response(data)
+    except LoanAccount.DoesNotExist:
+        pass
+
+    try:
+        app = LoanApplication.objects.select_related("user", "approved_by", "created_by").get(id=loan_id)
+        data = LoanApplicationDetailSerializer(app).data
+        data["repayments"] = []
+        return Response(data)
+    except LoanApplication.DoesNotExist:
+        return Response({"error": "Loan not found"}, status=status.HTTP_404_NOT_FOUND)
 
 
 @api_view(["POST"])
 @permission_classes([IsAdmin])
 def admin_loans_approve(request, loan_id):
-    """Approve a pending loan and generate repayment schedule."""
+    """Approve a pending LoanApplication (delegates to `services.loans.approve_loan_application`)."""
     try:
-        loan = Loan.objects.get(id=loan_id)
-    except Loan.DoesNotExist:
-        return Response({"error": "Loan not found"}, status=status.HTTP_404_NOT_FOUND)
-
-    if loan.status != "pending":
-        return Response({"error": "Only pending loans can be approved"}, status=status.HTTP_400_BAD_REQUEST)
-
-    # Segregation of duties
-    if loan.created_by == request.user:
-        return Response(
-            {"error": "You cannot approve a loan you created. Another admin must approve it."},
-            status=status.HTTP_403_FORBIDDEN,
+        acct = loan_service.approve_loan_application(
+            application_id=loan_id,
+            disbursement_date=request.data.get("disbursement_date"),
+            actor=request.user,
+            ip_address=_get_client_ip(request),
+            audit_via="api",
         )
-
-    disbursement_date_str = request.data.get("disbursement_date")
-    if not disbursement_date_str:
-        return Response({"error": "disbursement_date is required"}, status=status.HTTP_400_BAD_REQUEST)
-
-    from datetime import datetime
-
-    disbursement_date = datetime.strptime(str(disbursement_date_str), "%Y-%m-%d").date()
-
-    import calendar
-
-    loan.status = "active"
-    loan.approval_date = date.today()
-    loan.disbursement_date = disbursement_date
-    loan.approved_by = request.user
-
-    # Calculate first EMI date
-    if disbursement_date.month == 12:
-        first_emi_month, first_emi_year = 1, disbursement_date.year + 1
-    else:
-        first_emi_month, first_emi_year = disbursement_date.month + 1, disbursement_date.year
-
-    max_day = calendar.monthrange(first_emi_year, first_emi_month)[1]
-    first_emi_day = min(disbursement_date.day, max_day)
-    first_emi_date = date(first_emi_year, first_emi_month, first_emi_day)
-    loan.first_emi_date = first_emi_date
-
-    # Generate repayment schedule
-    remaining = loan.principal_amount
-    monthly_rate = loan.interest_rate / Decimal("1200")
-    emi = loan.emi_amount
-    current_date = first_emi_date
-
-    repayments = []
-    for i in range(1, loan.tenure_months + 1):
-        interest = (remaining * monthly_rate).quantize(Decimal("0.01"))
-        principal_component = emi - interest
-
-        if i == loan.tenure_months:
-            principal_component = remaining
-            interest = max(emi - principal_component, Decimal("0"))
-
-        remaining_after = max(remaining - principal_component, Decimal("0"))
-
-        repayments.append(
-            LoanRepayment(
-                loan=loan,
-                installment_number=i,
-                due_date=current_date,
-                amount_due=emi if i < loan.tenure_months else principal_component + interest,
-                principal_component=principal_component,
-                interest_component=interest,
-                balance_after=remaining_after,
-                payment_status="upcoming",
-            )
-        )
-
-        remaining = remaining_after
-
-        if current_date.month == 12:
-            next_month, next_year = 1, current_date.year + 1
-        else:
-            next_month, next_year = current_date.month + 1, current_date.year
-        max_day = calendar.monthrange(next_year, next_month)[1]
-        current_date = date(next_year, next_month, min(first_emi_date.day, max_day))
-
-    if repayments:
-        loan.last_emi_date = repayments[-1].due_date
-
-    loan.save()
-    LoanRepayment.objects.bulk_create(repayments)
+    except ServiceError as e:
+        return _service_error_to_response(e)
 
     dispatch_user_notification(
-        user=loan.user,
+        user=acct.user,
         title="Loan Approved",
-        message=f"Your loan {loan.loan_number} has been approved and is now active.",
+        message=f"Your loan {acct.loan_number} has been approved and is now active.",
         notification_type="loan",
-        metadata={"loan_id": loan.id, "loan_number": loan.loan_number, "status": loan.status},
+        metadata={"loan_id": acct.id, "loan_number": acct.loan_number, "status": acct.status},
         email_template="loan_approval",
     )
 
-    log_action(request, "approve", "loan", loan.id, f"Approved loan via API: {loan.loan_number}")
-    return Response(LoanDetailSerializer(loan).data)
+    return Response(LoanDetailSerializer(acct).data)
 
 
 @api_view(["POST"])
 @permission_classes([IsAdmin])
 def admin_loans_record_emi(request, loan_id):
-    """Record an EMI payment."""
+    """Record an EMI payment (delegates to `services.loans.record_emi_payment`)."""
     try:
-        installment_number = request.data.get("installment_number")
-        amount_paid = request.data.get("amount_paid")
-        payment_mode = request.data.get("payment_mode", "cash")
-
-        if not installment_number or not amount_paid:
-            return Response(
-                {"error": "installment_number and amount_paid are required"}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        amount = Decimal(str(amount_paid))
-        if amount <= 0:
-            return Response({"error": "amount_paid must be positive"}, status=status.HTTP_400_BAD_REQUEST)
-
-        with transaction.atomic():
-            loan = Loan.objects.select_for_update().get(id=loan_id)
-            if loan.status != "active":
-                return Response({"error": "Only active loans can receive payments"}, status=status.HTTP_400_BAD_REQUEST)
-
-            repayment = LoanRepayment.objects.select_for_update().get(
-                loan=loan, installment_number=int(installment_number)
-            )
-            if repayment.payment_status == "paid":
-                return Response({"error": "This installment is already paid"}, status=status.HTTP_400_BAD_REQUEST)
-
-            # Calculate late penalty
-            penalty = Decimal("0.00")
-            if repayment.due_date < date.today():
-                days_late = (date.today() - repayment.due_date).days
-                months_late = max(1, days_late / 30)
-                penalty = (repayment.amount_due * Decimal("2") * Decimal(str(months_late)) / Decimal("100")).quantize(
-                    Decimal("0.01")
-                )
-
-            repayment.paid_date = date.today()
-            repayment.amount_paid = amount
-            repayment.penalty = penalty
-            repayment.payment_mode = payment_mode
-            repayment.payment_status = "paid" if amount >= repayment.amount_due else "partial"
-
-            # Create receipt
-            member_account = loan.disbursement_account
-            if not member_account:
-                member_account = MemberAccount.objects.filter(user=loan.user, status="active").first()
-
-            receipt = None
-            if member_account:
-                member_account = MemberAccount.objects.select_for_update().get(id=member_account.id)
-                year = date.today().year
-                last_receipt = (
-                    Receipt.objects.select_for_update()
-                    .filter(receipt_number__startswith=f"RCP-{year}-")
-                    .order_by("-receipt_number")
-                    .first()
-                )
-                next_seq = 1
-                if last_receipt:
-                    try:
-                        next_seq = int(last_receipt.receipt_number.split("-")[-1]) + 1
-                    except (ValueError, IndexError):
-                        pass
-
-                new_balance = member_account.balance + amount
-                MemberAccount.objects.filter(id=member_account.id).update(
-                    balance=F("balance") + amount, last_transaction_date=date.today()
-                )
-
-                receipt = Receipt.objects.create(
-                    receipt_number=f"RCP-{year}-{next_seq:05d}",
-                    user=loan.user,
-                    member_account=member_account,
-                    transaction_type="credit",
-                    amount=amount,
-                    description=f"Loan EMI #{installment_number} - {loan.loan_number}",
-                    payment_mode=payment_mode,
-                    balance_after=new_balance,
-                    created_by=request.user,
-                )
-                repayment.receipt = receipt
-
-            repayment.save()
-
-            # Update loan totals
-            loan.total_paid += amount
-            loan.outstanding_balance -= repayment.principal_component
-            if loan.outstanding_balance < 0:
-                loan.outstanding_balance = Decimal("0")
-            loan.emis_paid = LoanRepayment.objects.filter(loan=loan, payment_status="paid").count()
-
-            # Mark overdue EMIs
-            LoanRepayment.objects.filter(loan=loan, payment_status="upcoming", due_date__lt=date.today()).update(
-                payment_status="overdue"
-            )
-
-            loan.emis_overdue = LoanRepayment.objects.filter(loan=loan, payment_status="overdue").count()
-            loan.overdue_amount = LoanRepayment.objects.filter(loan=loan, payment_status="overdue").aggregate(
-                total=Sum("amount_due")
-            )["total"] or Decimal("0")
-
-            # Check if all paid
-            unpaid = LoanRepayment.objects.filter(loan=loan).exclude(payment_status="paid").count()
-            if unpaid == 0:
-                loan.status = "closed"
-                loan.closure_date = date.today()
-                loan.outstanding_balance = Decimal("0")
-
-            loan.save()
-
-            log_action(
-                request,
-                "update",
-                "loan",
-                loan.id,
-                f"Recorded EMI #{installment_number} via API: ₹{amount} for {loan.loan_number}",
-            )
-
-            dispatch_user_notification(
-                user=loan.user,
-                title="EMI Payment Recorded",
-                message=f"EMI #{installment_number} of ₹{amount} recorded for {loan.loan_number}.",
-                notification_type="loan",
-                metadata={
-                    "loan_id": loan.id,
-                    "loan_number": loan.loan_number,
-                    "installment_number": int(installment_number),
-                    "amount_paid": str(amount),
-                    "penalty": str(penalty),
-                },
-                email_template="payment_success",
-            )
-
-        return Response(
-            {
-                "success": True,
-                "repayment": LoanRepaymentSerializer(repayment).data,
-                "loan_status": loan.status,
-                "outstanding_balance": str(loan.outstanding_balance),
-                "penalty": str(penalty),
-            }
+        result = loan_service.record_emi_payment(
+            loan_account_id=loan_id,
+            installment_number=request.data.get("installment_number"),
+            amount_paid=request.data.get("amount_paid"),
+            payment_mode=request.data.get("payment_mode", "cash"),
+            actor=request.user,
+            ip_address=_get_client_ip(request),
+            audit_via="api",
         )
+    except ServiceError as e:
+        return _service_error_to_response(e)
 
-    except Loan.DoesNotExist:
-        return Response({"error": "Loan not found"}, status=status.HTTP_404_NOT_FOUND)
-    except LoanRepayment.DoesNotExist:
-        return Response({"error": "Installment not found"}, status=status.HTTP_404_NOT_FOUND)
-    except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    repayment = result["repayment"]
+    loan_ac = result["loan_account"]
+    penalty = result["penalty"]
+
+    dispatch_user_notification(
+        user=loan_ac.user,
+        title="EMI Payment Recorded",
+        message=f"EMI #{repayment.installment_number} of \u20b9{repayment.amount_paid} recorded for {loan_ac.loan_number}.",
+        notification_type="loan",
+        metadata={
+            "loan_id": loan_ac.id,
+            "loan_number": loan_ac.loan_number,
+            "installment_number": int(repayment.installment_number),
+            "amount_paid": str(repayment.amount_paid),
+            "penalty": str(penalty),
+        },
+        email_template="payment_success",
+    )
+
+    return Response(
+        {
+            "success": True,
+            "repayment": LoanRepaymentSerializer(repayment).data,
+            "loan_status": loan_ac.status,
+            "outstanding_balance": str(loan_ac.outstanding_balance),
+            "penalty": str(penalty),
+        }
+    )
 
 
 # ========================================
@@ -1480,6 +1319,161 @@ def admin_audit_logs_list(request):
 
 
 # ========================================
+# Admin: Phase 4 finance (fees, receivables, snapshots)
+# ========================================
+
+
+@api_view(["GET"])
+@permission_classes([IsAdmin])
+def admin_fee_schedules_list(request):
+    qs = FeeSchedule.objects.all().order_by("-effective_date", "fee_type")
+    active = request.query_params.get("is_active", "")
+    if active.lower() in ("true", "1", "yes"):
+        qs = qs.filter(is_active=True)
+    elif active.lower() in ("false", "0", "no"):
+        qs = qs.filter(is_active=False)
+    from rest_framework.pagination import PageNumberPagination
+
+    paginator = PageNumberPagination()
+    paginator.page_size = int(request.query_params.get("page_size", 50))
+    page = paginator.paginate_queryset(qs, request)
+    return paginator.get_paginated_response(FeeScheduleSerializer(page, many=True).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAdmin])
+def admin_fee_charges_list(request):
+    qs = FeeCharge.objects.select_related("fee_schedule", "user", "loan_account").order_by("-created_at")
+    status_filter = request.query_params.get("status", "")
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+    user_id = request.query_params.get("user_id", "")
+    if user_id.isdigit():
+        qs = qs.filter(user_id=int(user_id))
+    from rest_framework.pagination import PageNumberPagination
+
+    paginator = PageNumberPagination()
+    paginator.page_size = int(request.query_params.get("page_size", 50))
+    page = paginator.paginate_queryset(qs, request)
+    return paginator.get_paginated_response(FeeChargeSerializer(page, many=True).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAdmin])
+def admin_interest_receivables_list(request):
+    qs = InterestReceivable.objects.select_related("loan_account", "financial_period").order_by("-due_date")
+    st = request.query_params.get("status", "")
+    if st:
+        qs = qs.filter(status=st)
+    loan_id = request.query_params.get("loan_account_id", "")
+    if loan_id.isdigit():
+        qs = qs.filter(loan_account_id=int(loan_id))
+    from rest_framework.pagination import PageNumberPagination
+
+    paginator = PageNumberPagination()
+    paginator.page_size = int(request.query_params.get("page_size", 50))
+    page = paginator.paginate_queryset(qs, request)
+    return paginator.get_paginated_response(InterestReceivableSerializer(page, many=True).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAdmin])
+def admin_profit_loss_list(request):
+    qs = ProfitAndLoss.objects.select_related("financial_period", "calculated_by").order_by("-calculation_date")
+    fp_id = request.query_params.get("financial_period_id", "")
+    if fp_id.isdigit():
+        qs = qs.filter(financial_period_id=int(fp_id))
+    from rest_framework.pagination import PageNumberPagination
+
+    paginator = PageNumberPagination()
+    paginator.page_size = int(request.query_params.get("page_size", 20))
+    page = paginator.paginate_queryset(qs, request)
+    return paginator.get_paginated_response(ProfitAndLossSerializer(page, many=True).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAdmin])
+def admin_profit_loss_detail(request, snapshot_id):
+    pl = get_object_or_404(ProfitAndLoss.objects.select_related("financial_period"), pk=snapshot_id)
+    return Response(ProfitAndLossSerializer(pl).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAdmin])
+def admin_society_snapshots_list(request):
+    qs = SocietyAccount.objects.select_related("financial_period").order_by("-last_updated")
+    fp_id = request.query_params.get("financial_period_id", "")
+    if fp_id.isdigit():
+        qs = qs.filter(financial_period_id=int(fp_id))
+    from rest_framework.pagination import PageNumberPagination
+
+    paginator = PageNumberPagination()
+    paginator.page_size = int(request.query_params.get("page_size", 20))
+    page = paginator.paginate_queryset(qs, request)
+    return paginator.get_paginated_response(SocietyAccountSerializer(page, many=True).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAdmin])
+def admin_finance_save_snapshot(request):
+    """Persist ProfitAndLoss + SocietyAccount from computed summary for a financial period."""
+    pid = request.data.get("financial_period_id")
+    if pid:
+        fp = get_object_or_404(FinancialPeriod, pk=pid)
+    else:
+        fp = active_financial_period()
+        if not fp:
+            return Response(
+                {"error": "No active financial period; pass financial_period_id."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    pl_row, soc_row, pl_updated = persist_financial_snapshots(fp, calculated_by=request.user)
+    log_action(
+        request,
+        "create",
+        "system",
+        None,
+        f"Saved financial snapshot for {fp.label} (P&L updated={pl_updated}).",
+    )
+    return Response(
+        {
+            "profit_and_loss": ProfitAndLossSerializer(pl_row).data,
+            "society_account": SocietyAccountSerializer(soc_row).data,
+            "profit_and_loss_updated": pl_updated,
+        }
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAdmin])
+def admin_finance_sync_receivables(request):
+    """Create/update InterestReceivable rows from unpaid EMIs due on or before as_of_date."""
+    as_of = date.today()
+    raw = request.data.get("as_of_date") or request.query_params.get("as_of_date")
+    if raw:
+        try:
+            as_of = datetime.strptime(str(raw), "%Y-%m-%d").date()
+        except ValueError:
+            return Response({"error": "as_of_date must be YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
+
+    fp = None
+    fp_id = request.data.get("financial_period_id") or request.query_params.get("financial_period_id")
+    if fp_id:
+        fp = get_object_or_404(FinancialPeriod, pk=fp_id)
+
+    n = sync_loan_interest_receivables(as_of_date=as_of, financial_period=fp)
+    log_action(
+        request,
+        "update",
+        "system",
+        None,
+        f"Synced loan interest receivables as of {as_of} ({n} installments).",
+    )
+    return Response({"as_of_date": str(as_of), "installments_considered": n})
+
+
+# ========================================
 # Member: Dashboard
 # ========================================
 
@@ -1491,8 +1485,8 @@ def member_dashboard(request):
     user = request.user
 
     accounts = MemberAccount.objects.filter(user=user, is_deleted=False, status="active")
-    active_loans = Loan.objects.filter(user=user, status__in=["active", "approved"])
-    recent_txns = Receipt.objects.filter(user=user).select_related("member_account")[:10]
+    active_loans = LoanAccount.objects.filter(user=user, status="active").select_related("application", "user")
+    recent_txns = Transaction.objects.filter(user=user).select_related("member_account")[:10]
 
     return Response(
         {
@@ -1501,11 +1495,11 @@ def member_dashboard(request):
             "total_balance": str(sum(a.balance for a in accounts)),
             "total_active_loans": active_loans.count(),
             "total_outstanding": str(sum(loan.outstanding_balance for loan in active_loans)),
-            "share_capital": str(user.share_capital_amount),
+            "share_capital": str(user_active_share_capital_total(user)),
             "dividend_payable": str(user.dividend_payable_balance),
             "accounts": MemberAccountSerializer(accounts[:5], many=True).data,
             "active_loans": LoanListSerializer(active_loans[:5], many=True).data,
-            "recent_transactions": ReceiptSerializer(recent_txns, many=True).data,
+            "recent_transactions": TransactionSerializer(recent_txns, many=True).data,
         }
     )
 
@@ -1542,8 +1536,8 @@ def member_accounts_detail(request, account_id):
         return Response({"error": "Account not found"}, status=status.HTTP_404_NOT_FOUND)
 
     data = MemberAccountSerializer(account).data
-    data["transactions"] = ReceiptSerializer(
-        Receipt.objects.filter(member_account=account).order_by("-created_at")[:50], many=True
+    data["transactions"] = TransactionSerializer(
+        Transaction.objects.filter(member_account=account).order_by("-created_at")[:50], many=True
     ).data
     return Response(data)
 
@@ -1556,34 +1550,92 @@ def member_accounts_detail(request, account_id):
 @api_view(["GET"])
 @permission_classes([IsMember])
 def member_loans_list(request):
-    """List member's own loans."""
-    qs = Loan.objects.filter(user=request.user).order_by("-created_at")
+    """List member's loan accounts and open applications."""
+    user = request.user
+    accounts_qs = LoanAccount.objects.filter(user=user).select_related("application", "user")
+    open_apps_qs = (
+        LoanApplication.objects.filter(user=user, status__in=["pending", "rejected"])
+        .select_related("user")
+        .exclude(pk__in=LoanAccount.objects.filter(user=user).values_list("application_id", flat=True))
+    )
 
     loan_status = request.query_params.get("status", "")
     if loan_status:
-        qs = qs.filter(status=loan_status)
+        if loan_status in ("active", "closed", "defaulted", "written_off"):
+            accounts_qs = accounts_qs.filter(status=loan_status)
+            open_apps_qs = open_apps_qs.none()
+        elif loan_status in ("pending", "rejected"):
+            accounts_qs = accounts_qs.none()
+            open_apps_qs = open_apps_qs.filter(status=loan_status)
+        else:
+            accounts_qs = accounts_qs.none()
+            open_apps_qs = open_apps_qs.none()
+
+    rows = [LoanListItem(account=a) for a in accounts_qs.order_by("-created_at")]
+    rows.extend(LoanListItem(application=a) for a in open_apps_qs.order_by("-created_at"))
+    rows.sort(key=lambda r: r.created_at, reverse=True)
 
     from rest_framework.pagination import PageNumberPagination
 
     paginator = PageNumberPagination()
-    page = paginator.paginate_queryset(qs, request)
-    return paginator.get_paginated_response(LoanListSerializer(page, many=True).data)
+    page = paginator.paginate_queryset(rows, request)
+    data = [loan_merged_list_dict(r) for r in page]
+    return paginator.get_paginated_response(data)
 
 
 @api_view(["GET"])
 @permission_classes([IsMember])
 def member_loans_detail(request, loan_id):
-    """Get member's loan detail with repayments."""
-    try:
-        loan = Loan.objects.get(id=loan_id, user=request.user)
-    except Loan.DoesNotExist:
-        return Response({"error": "Loan not found"}, status=status.HTTP_404_NOT_FOUND)
+    """Get member's loan application or account. Use ?kind=application|account to disambiguate."""
+    user = request.user
+    kind = request.query_params.get("kind", "").strip()
 
-    data = LoanDetailSerializer(loan).data
-    data["repayments"] = LoanRepaymentSerializer(
-        LoanRepayment.objects.filter(loan=loan).order_by("installment_number"), many=True
-    ).data
-    return Response(data)
+    if kind == "application":
+        try:
+            app = LoanApplication.objects.get(id=loan_id, user=user)
+        except LoanApplication.DoesNotExist:
+            return Response({"error": "Loan not found"}, status=status.HTTP_404_NOT_FOUND)
+        data = LoanApplicationDetailSerializer(app).data
+        data["repayments"] = []
+        return Response(data)
+
+    ac_select = (
+        "application",
+        "user",
+        "disbursement_account",
+        "created_by",
+        "application__approved_by",
+        "application__created_by",
+    )
+
+    if kind == "account":
+        try:
+            ac = LoanAccount.objects.select_related(*ac_select).get(id=loan_id, user=user)
+        except LoanAccount.DoesNotExist:
+            return Response({"error": "Loan not found"}, status=status.HTTP_404_NOT_FOUND)
+        data = LoanDetailSerializer(ac).data
+        data["repayments"] = LoanRepaymentSerializer(
+            LoanRepayment.objects.filter(loan_account=ac).order_by("installment_number"), many=True
+        ).data
+        return Response(data)
+
+    try:
+        ac = LoanAccount.objects.select_related(*ac_select).get(id=loan_id, user=user)
+        data = LoanDetailSerializer(ac).data
+        data["repayments"] = LoanRepaymentSerializer(
+            LoanRepayment.objects.filter(loan_account=ac).order_by("installment_number"), many=True
+        ).data
+        return Response(data)
+    except LoanAccount.DoesNotExist:
+        pass
+
+    try:
+        app = LoanApplication.objects.select_related("user", "approved_by", "created_by").get(id=loan_id, user=user)
+        data = LoanApplicationDetailSerializer(app).data
+        data["repayments"] = []
+        return Response(data)
+    except LoanApplication.DoesNotExist:
+        return Response({"error": "Loan not found"}, status=status.HTTP_404_NOT_FOUND)
 
 
 # ========================================
@@ -1595,7 +1647,7 @@ def member_loans_detail(request, loan_id):
 @permission_classes([IsMember])
 def member_transactions_list(request):
     """List member's transactions across all accounts."""
-    qs = Receipt.objects.filter(user=request.user).select_related("member_account").order_by("-created_at")
+    qs = Transaction.objects.filter(user=request.user).select_related("member_account").order_by("-created_at")
 
     txn_type = request.query_params.get("type", "")
     if txn_type:
@@ -1609,7 +1661,7 @@ def member_transactions_list(request):
 
     paginator = PageNumberPagination()
     page = paginator.paginate_queryset(qs, request)
-    return paginator.get_paginated_response(ReceiptSerializer(page, many=True).data)
+    return paginator.get_paginated_response(TransactionSerializer(page, many=True).data)
 
 
 @api_view(["GET"])
@@ -1617,11 +1669,11 @@ def member_transactions_list(request):
 def member_transactions_detail(request, transaction_id):
     """Get a single member transaction/receipt detail."""
     try:
-        receipt = Receipt.objects.select_related("member_account").get(id=transaction_id, user=request.user)
-    except Receipt.DoesNotExist:
+        receipt = Transaction.objects.select_related("member_account").get(id=transaction_id, user=request.user)
+    except Transaction.DoesNotExist:
         return Response({"error": "Transaction not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    return Response(ReceiptSerializer(receipt).data)
+    return Response(TransactionSerializer(receipt).data)
 
 
 @api_view(["GET"])
@@ -1811,9 +1863,9 @@ def admin_post_interest(request):
             if days <= 0:
                 continue
 
-            interest_amount = (
-                account.balance * account.interest_rate * Decimal(str(days)) / Decimal("36500")
-            ).quantize(Decimal("0.01"))
+            interest_amount = InterestCalculatorService.daily_simple_interest(
+                account.balance, account.interest_rate, days
+            )
 
             if interest_amount <= 0:
                 continue
@@ -1825,39 +1877,45 @@ def admin_post_interest(request):
                 last_transaction_date=today,
             )
 
+            year = today.year
+            last_txn = (
+                Transaction.objects.filter(transaction_number__startswith=f"TXN-{year}-")
+                .order_by("-transaction_number")
+                .first()
+            )
+            if last_txn:
+                try:
+                    last_seq = int(last_txn.transaction_number.split("-")[-1])
+                    next_seq = last_seq + 1
+                except (ValueError, IndexError):
+                    next_seq = 1
+            else:
+                next_seq = 1
+            new_transaction_number = f"TXN-{year}-{next_seq:05d}"
+            new_balance = account.balance + interest_amount
+
+            txn = Transaction.objects.create(
+                user=account.user,
+                member_account=account,
+                transaction_number=new_transaction_number,
+                transaction_type="interest",
+                amount=interest_amount,
+                description=f"Interest credit {calc_start.strftime('%b %d')} - {today.strftime('%b %d, %Y')} @ {account.interest_rate}%",
+                payment_mode="internal",
+                balance_after=new_balance,
+                created_by=request.user,
+            )
+
+            fp = active_financial_period()
             InterestPayout.objects.create(
                 account=account,
                 amount=interest_amount,
                 period_start=calc_start,
                 period_end=today,
                 created_by=request.user,
-            )
-
-            # Create receipt with consistent RCP-YYYY-NNNNN format
-            year = today.year
-            last_receipt = (
-                Receipt.objects.filter(receipt_number__startswith=f"RCP-{year}-").order_by("-receipt_number").first()
-            )
-            if last_receipt:
-                try:
-                    last_seq = int(last_receipt.receipt_number.split("-")[-1])
-                    next_seq = last_seq + 1
-                except (ValueError, IndexError):
-                    next_seq = 1
-            else:
-                next_seq = 1
-            new_receipt_number = f"RCP-{year}-{next_seq:05d}"
-
-            Receipt.objects.create(
-                user=account.user,
-                member_account=account,
-                receipt_number=new_receipt_number,
-                transaction_type="interest",
-                amount=interest_amount,
-                description=f"Interest credit {calc_start.strftime('%b %d')} - {today.strftime('%b %d, %Y')} @ {account.interest_rate}%",
-                payment_mode="internal",
-                balance_after=account.balance + interest_amount,
-                created_by=request.user,
+                transaction=txn,
+                financial_period=fp,
+                status="credited",
             )
 
             dispatch_user_notification(
@@ -1905,8 +1963,26 @@ def admin_distribute_dividend(request):
     if dividend_rate <= 0 or dividend_rate > 100:
         return Response({"error": "dividend_rate must be between 0.01 and 100"}, status=status.HTTP_400_BAD_REQUEST)
 
-    eligible_members = User.objects.filter(
-        is_deleted=False, status="active", eligible_for_dividend=True, share_capital_amount__gt=0
+    eligible_members = (
+        User.objects.filter(
+            is_deleted=False,
+            status="active",
+            eligible_for_dividend=True,
+        )
+        .annotate(
+            share_capital_total=Coalesce(
+                Sum(
+                    "share_holdings__total_value",
+                    filter=Q(
+                        share_holdings__status="issued",
+                        share_holdings__redemption_date__isnull=True,
+                    ),
+                ),
+                Value(0),
+                output_field=DecimalField(max_digits=14, decimal_places=2),
+            )
+        )
+        .filter(share_capital_total__gt=0)
     )
 
     if not eligible_members.exists():
@@ -1917,7 +1993,7 @@ def admin_distribute_dividend(request):
 
     with transaction.atomic():
         for member in eligible_members:
-            dividend_amount = (member.share_capital_amount * dividend_rate / Decimal("100")).quantize(Decimal("0.01"))
+            dividend_amount = (member.share_capital_total * dividend_rate / Decimal("100")).quantize(Decimal("0.01"))
             if dividend_amount <= 0:
                 continue
 
@@ -2173,3 +2249,106 @@ def confirm_email_change_view(request):
         send_email_moved_security_notice(old_email, request.user.display_name, new_email)
     send_email_change_confirmed(request.user)
     return Response({"success": True, "message": "Email updated successfully.", "email": request.user.email})
+
+
+# ============================================================================
+# Admin: Financial Periods (Phase A5)
+# ----------------------------------------------------------------------------
+# Lifecycle endpoints for FinancialPeriod. All business logic lives in
+# `accounts.services.financial_period`; these views just translate HTTP into
+# service calls and map `ServiceError` subclasses to HTTP status codes via
+# `_service_error_to_response`.
+# ============================================================================
+
+from accounts.serializers import FinancialPeriodSerializer  # noqa: E402
+from accounts.services import financial_period as fp_service  # noqa: E402
+
+
+def admin_financial_periods_list(request):
+    """List all financial periods (most recent first)."""
+    qs = FinancialPeriod.objects.all().order_by("-start_date")
+    return Response(FinancialPeriodSerializer(qs, many=True).data)
+
+
+def admin_financial_periods_create(request):
+    """Open a new financial period.
+
+    Body: `{name, start_date, end_date}`. The new period becomes active and any
+    previously-active period is demoted (status untouched).
+    """
+    name = (request.data.get("name") or "").strip()
+    start_date = request.data.get("start_date")
+    end_date = request.data.get("end_date")
+    try:
+        period = fp_service.open_period(
+            name=name,
+            start_date=start_date,
+            end_date=end_date,
+            actor=request.user,
+            ip_address=_get_client_ip(request),
+            audit_via="api",
+        )
+    except ServiceError as e:
+        return _service_error_to_response(e)
+    return Response(FinancialPeriodSerializer(period).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated, IsAdmin])
+def admin_financial_periods_dispatch(request):
+    """GET → list periods; POST → open a new period.
+
+    Both behaviours live behind a single `/admin/financial-periods/` URL so
+    the surface matches the rest of the public API conventions.
+    """
+    if request.method == "POST":
+        return admin_financial_periods_create(request)
+    return admin_financial_periods_list(request)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsAdmin])
+def admin_financial_periods_current(request):
+    """Return the currently-active financial period or 404 if none is set."""
+    period = fp_service.active()
+    if period is None:
+        return Response({"error": "No active financial period."}, status=status.HTTP_404_NOT_FOUND)
+    return Response(FinancialPeriodSerializer(period).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsAdmin])
+def admin_financial_periods_continue(request, pk):
+    """Set the chosen non-closed period as the active one."""
+    try:
+        period = fp_service.continue_period(
+            period_id=pk,
+            actor=request.user,
+            ip_address=_get_client_ip(request),
+            audit_via="api",
+        )
+    except ServiceError as e:
+        return _service_error_to_response(e)
+    return Response(FinancialPeriodSerializer(period).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsAdmin])
+def admin_financial_periods_close(request, pk):
+    """Close the period and lock its P&L snapshot."""
+    try:
+        result = fp_service.close_period(
+            period_id=pk,
+            actor=request.user,
+            ip_address=_get_client_ip(request),
+            audit_via="api",
+        )
+    except ServiceError as e:
+        return _service_error_to_response(e)
+    return Response(
+        {
+            "period": FinancialPeriodSerializer(result["period"]).data,
+            "profit_and_loss_id": result["pnl"].id if result["pnl"] else None,
+            "society_account_id": result["society_account"].id if result["society_account"] else None,
+        }
+    )

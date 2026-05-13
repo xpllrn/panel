@@ -1,0 +1,438 @@
+{% extends 'admin/base.html' %}
+{% load static currency_filters %}
+
+{% block title %}Transactions - Admin Portal{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/pages/transactions.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2 class="page-title">Transactions</h2>
+    <div class="header-stats">
+        <span class="stat-item">Total: <strong>{{ total_receipts }}</strong></span>
+        <span class="stat-item">Today: <strong>{{ today_receipts }}</strong></span>
+    </div>
+    <form id="receiptsSearchForm" class="search-form" method="get" action="">
+        <input type="text" name="q" placeholder="Search by transaction no, member..."
+            value="{{ search_query|default:'' }}" class="search-input" aria-label="Search receipts">
+        <input type="hidden" id="receipts-filter-type" name="type" value="{{ selected_type|default:'' }}">
+        <input type="hidden" id="receipts-filter-mode" name="mode" value="{{ selected_mode|default:'' }}">
+        <input type="hidden" id="receipts-filter-date-from" name="date_from" value="{{ date_from|default:'' }}">
+        <input type="hidden" id="receipts-filter-date-to" name="date_to" value="{{ date_to|default:'' }}">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="openReceiptsFilterModal()">Filters</button>
+        <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+        {% if search_query or selected_type or selected_mode or date_from or date_to %}
+        <a href="{% url 'transactions' %}" class="clear-search">Clear</a>
+        {% endif %}
+    </form>
+    <a href="{% url 'export_transactions' %}" class="btn btn-secondary btn-sm">Export Excel</a>
+    <button class="btn btn-primary btn-sm" onclick="showAddReceiptModal()">+ New Transaction</button>
+</div>
+
+{% if search_query or selected_type or selected_mode or date_from or date_to %}
+<div class="search-info">
+    Showing {{ page_obj.paginator.count }} transaction(s)
+    {% if search_query %} matching "<strong>{{ search_query }}</strong>"{% endif %}
+    {% if selected_type %} of type <strong>{{ selected_type|title }}</strong>{% endif %}
+    {% if selected_mode %} via <strong>{{ selected_mode|upper }}</strong>{% endif %}
+    {% if date_from or date_to %} in date range <strong>{{ date_from|default:"..." }}</strong> to <strong>{{ date_to|default:"..." }}</strong>{% endif %}
+</div>
+{% endif %}
+
+<div id="receiptsFilterModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Transaction Filters</h3>
+            <button class="modal-close" onclick="closeReceiptsFilterModal()" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label">Transaction Type</label>
+                <select id="receipts-filter-type-input" class="form-input">
+                    <option value="">All Types</option>
+                    {% for value, label in transaction_type_choices %}
+                    <option value="{{ value }}" {% if selected_type == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Payment Mode</label>
+                <select id="receipts-filter-mode-input" class="form-input">
+                    <option value="">All Modes</option>
+                    {% for value, label in payment_mode_choices %}
+                    <option value="{{ value }}" {% if selected_mode == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">From</label>
+                <input type="date" id="receipts-filter-date-from-input" class="form-input" value="{{ date_from|default:'' }}">
+            </div>
+            <div class="form-group">
+                <label class="form-label">To</label>
+                <input type="date" id="receipts-filter-date-to-input" class="form-input" value="{{ date_to|default:'' }}">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="clearReceiptsFilters()">Clear</button>
+            <button class="btn btn-primary" onclick="applyReceiptsFilters()">Apply</button>
+        </div>
+    </div>
+</div>
+
+<div class="data-table">
+    <table>
+        <thead>
+            <tr>
+                <th>Transaction #</th>
+                <th>Member</th>
+                <th>Account</th>
+                <th>Type</th>
+                <th>Amount</th>
+                <th>Mode</th>
+                <th>Date</th>
+                <th style="width: 50px;"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for receipt in receipts %}
+            <tr onclick="showReceiptModal({{ receipt.id }})">
+                <td>
+                    <span class="receipt-number">{{ receipt.transaction_number }}</span>
+                </td>
+                <td>
+                    <div class="user-info">
+                        <div class="avatar avatar-sm">{{ receipt.user.display_name|first|upper }}</div>
+                        <div class="user-details">
+                            <span class="user-name">{{ receipt.user.display_name }}</span>
+                            {% if receipt.user.member_id %}
+                            <span class="user-member-id">{{ receipt.user.member_id }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </td>
+                <td>
+                    <span class="account-number">{{ receipt.member_account.account_number }}</span>
+                </td>
+                <td>
+                    <span class="transaction-type-badge type-{{ receipt.transaction_type }}">{{ receipt.get_transaction_type_display }}</span>
+                </td>
+                <td class="amount">{{ receipt.amount|inr }}</td>
+                <td>{{ receipt.get_payment_mode_display }}</td>
+                <td>{{ receipt.created_at|date:"M d, Y" }}</td>
+                <td class="actions-cell" onclick="event.stopPropagation();">
+                    <button class="kebab-menu" onclick="toggleDropdown(event, {{ receipt.id }})" aria-label="Actions">&#8942;</button>
+                    <div class="dropdown-menu" id="dropdown-{{ receipt.id }}">
+                        <button class="dropdown-item" onclick="showReceiptModal({{ receipt.id }})">View</button>
+                        <button class="dropdown-item" onclick="printReceipt(event, {{ receipt.id }})">Print</button>
+                    </div>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="8" class="empty-state">No transactions found</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if page_obj.has_other_pages %}
+<div class="pagination" role="navigation" aria-label="Pagination">
+    <div class="pagination-info">
+        Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} transactions
+    </div>
+    <div class="pagination-nav">
+        {% if page_obj.has_previous %}
+        <a href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_mode %}&mode={{ selected_mode }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="First page">&laquo; First</a>
+        <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_mode %}&mode={{ selected_mode }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="Previous page">Previous</a>
+        {% endif %}
+
+        <span class="page-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_mode %}&mode={{ selected_mode }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="Next page">Next</a>
+        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_mode %}&mode={{ selected_mode }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="Last page">Last &raquo;</a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Receipt View Modal -->
+<div id="receiptModal" class="modal">
+    <div class="modal-content modal-receipt">
+        <div class="modal-header">
+            <h3>Receipt Details</h3>
+            <div class="modal-header-actions">
+                <button class="btn btn-sm btn-secondary" id="printReceiptBtn" onclick="printCurrentReceipt()">Print</button>
+                <button class="modal-close" onclick="closeReceiptModal()" aria-label="Close">&times;</button>
+            </div>
+        </div>
+
+        <div class="modal-body" id="receipt-print-area">
+            <!-- Bank Header -->
+            <div class="receipt-bank-header">
+                <div class="bank-name">{{ society_name|upper }}</div>
+                <div class="bank-contact">Phone: 9307070796</div>
+            </div>
+
+            <div class="receipt-title-bar">
+                <span class="receipt-title-label" id="modal-receipt-title">RECEIPT</span>
+                <span class="receipt-title-number" id="modal-receipt-number"></span>
+            </div>
+
+            <div class="receipt-meta-row">
+                <div class="receipt-meta-item">
+                    <span class="receipt-meta-label">Date:</span>
+                    <span class="receipt-meta-value" id="modal-receipt-date"></span>
+                </div>
+                <div class="receipt-meta-item">
+                    <span class="receipt-meta-label">Mode:</span>
+                    <span class="receipt-meta-value" id="modal-payment-mode"></span>
+                </div>
+            </div>
+
+            <!-- Member Section -->
+            <div class="receipt-section">
+                <div class="receipt-section-title">Member Details</div>
+                <div class="receipt-details-grid">
+                    <div class="receipt-detail">
+                        <span class="receipt-detail-label">Name</span>
+                        <span class="receipt-detail-value" id="modal-member-name">-</span>
+                    </div>
+                    <div class="receipt-detail">
+                        <span class="receipt-detail-label">Member ID</span>
+                        <span class="receipt-detail-value" id="modal-member-id">-</span>
+                    </div>
+                    <div class="receipt-detail">
+                        <span class="receipt-detail-label">Mobile</span>
+                        <span class="receipt-detail-value" id="modal-member-mobile">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Account Section -->
+            <div class="receipt-section">
+                <div class="receipt-section-title">Account Details</div>
+                <div class="receipt-details-grid">
+                    <div class="receipt-detail">
+                        <span class="receipt-detail-label">Account No.</span>
+                        <span class="receipt-detail-value" id="modal-account-number">-</span>
+                    </div>
+                    <div class="receipt-detail">
+                        <span class="receipt-detail-label">Account Type</span>
+                        <span class="receipt-detail-value" id="modal-account-type">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transaction Section -->
+            <div class="receipt-section">
+                <div class="receipt-section-title">Transaction Details</div>
+                <div class="receipt-amount-box">
+                    <div class="receipt-amount-row">
+                        <span class="receipt-amount-label">Transaction Type</span>
+                        <span class="receipt-amount-value" id="modal-transaction-type">-</span>
+                    </div>
+                    <div class="receipt-amount-row receipt-amount-highlight">
+                        <span class="receipt-amount-label">Amount</span>
+                        <span class="receipt-amount-value receipt-amount-large" id="modal-amount">-</span>
+                    </div>
+                    <div class="receipt-amount-row">
+                        <span class="receipt-amount-label">Balance After</span>
+                        <span class="receipt-amount-value" id="modal-balance-after">-</span>
+                    </div>
+                    <div class="receipt-amount-row" id="modal-reference-row" style="display: none;">
+                        <span class="receipt-amount-label">Reference No.</span>
+                        <span class="receipt-amount-value" id="modal-reference">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Description -->
+            <div class="receipt-section" id="modal-description-section" style="display: none;">
+                <div class="receipt-section-title">Description</div>
+                <div class="receipt-description" id="modal-description"></div>
+            </div>
+
+            <!-- Remarks -->
+            <div class="receipt-section" id="modal-remarks-section" style="display: none;">
+                <div class="receipt-section-title">Remarks</div>
+                <div class="receipt-description" id="modal-remarks"></div>
+            </div>
+
+            <!-- Footer -->
+            <div class="receipt-footer">
+                <div class="receipt-footer-left">
+                    <div class="receipt-footer-label">Processed by</div>
+                    <div class="receipt-footer-value" id="modal-created-by">-</div>
+                </div>
+                <div class="receipt-footer-right">
+                    <div class="receipt-footer-label">Authorized Signatory</div>
+                    <div class="receipt-signature-line"></div>
+                </div>
+            </div>
+
+            <div class="receipt-disclaimer">
+                This is a computer-generated receipt. Subject to realization of cheque/instrument, if any.
+            </div>
+        </div>
+
+        <div class="modal-footer no-print">
+            <button class="btn btn-secondary" onclick="closeReceiptModal()">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Add Receipt Modal -->
+<div id="addReceiptModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>New Receipt</h3>
+            <button class="modal-close" onclick="closeAddReceiptModal()" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="addReceiptForm">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label class="form-label">Member *</label>
+                    <div class="member-selector">
+                        <input type="text" id="receipt-member-search" class="form-input" placeholder="Type to search members..." autocomplete="off">
+                        <input type="hidden" id="receipt-member-id" name="user_id">
+                        <div class="member-selector-results" id="receipt-member-results"></div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Receipt Entries *</label>
+                    <div id="receipt-lines-container">
+                        <div class="receipt-line-item" data-line-index="0" style="display:grid; grid-template-columns: 1.3fr 1fr 1fr 1.3fr auto; gap:0.5rem; margin-bottom:0.5rem;">
+                            <select class="form-input line-account-id" required></select>
+                            <select class="form-input line-transaction-type" required>
+                                <option value="credit">Credit</option>
+                                <option value="debit">Debit</option>
+                                <option value="loan_emi">Loan EMI</option>
+                                <option value="interest">Interest Payment</option>
+                                <option value="dividend">Dividend</option>
+                                <option value="share_capital">Share Capital</option>
+                                <option value="transfer">Transfer</option>
+                            </select>
+                            <input type="number" class="form-input line-amount" step="0.01" min="0.01" placeholder="Amount" required>
+                            <select class="form-input line-emi-id" style="display:none;">
+                                <option value="">Select pending EMI</option>
+                            </select>
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="removeReceiptLine(this)">Remove</button>
+                        </div>
+                    </div>
+                    <small class="form-hint">Use Loan EMI only for actual loan repayment lines. EMI selector appears only when available for the selected member.</small>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="addReceiptLine()">+ Add Entry</button>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Payment Mode *</label>
+                    <select name="payment_mode" class="form-input" required>
+                        {% for value, label in payment_mode_choices %}
+                        <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    <small class="form-hint">Cash transactions post directly unless you check 'Use voucher'.</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Fund Settlement (optional)</label>
+                    <select name="fund_id" class="form-input">
+                        <option value="">Do not move to fund</option>
+                        {% for fund in funds %}
+                        <option value="{{ fund.id }}">{{ fund.name }} ({{ fund.get_fund_type_display }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">
+                        <input type="checkbox" name="use_voucher" value="1">
+                        Save as voucher first (no balance update now)
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Voucher Type</label>
+                    <select name="voucher_type" class="form-input">
+                        <option value="voucher">Voucher</option>
+                        <option value="contra_voucher">Contra Voucher</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Reference / Cheque No.</label>
+                    <input type="text" name="reference_number" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea name="description" class="form-input" rows="2"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Remarks</label>
+                    <textarea name="remarks" class="form-input" rows="2"></textarea>
+                </div>
+                <div id="add-receipt-error" class="error-message"></div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeAddReceiptModal()">Cancel</button>
+            <button class="btn btn-primary" id="addReceiptBtn" onclick="addReceipt()">Create Receipt</button>
+        </div>
+    </div>
+</div>
+
+<section class="voucher-panel" aria-labelledby="voucher-panel-title">
+    <div class="voucher-panel-header">
+        <h3 id="voucher-panel-title">Recent vouchers</h3>
+        <p class="voucher-panel-hint">Pending items can be transferred to a fund. Cleared vouchers stay listed for audit.</p>
+    </div>
+    <div class="voucher-table-wrap">
+        <table class="voucher-table">
+            <thead>
+                <tr>
+                    <th>Voucher #</th>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Member</th>
+                    <th class="voucher-col-amount">Amount</th>
+                    <th>Status</th>
+                    <th class="voucher-col-action">Action</th>
+                </tr>
+            </thead>
+            <tbody id="voucher-table-body">
+                <tr><td colspan="7" class="empty-state">Loading vouchers…</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    window.CSRF_TOKEN = '{{ csrf_token }}';
+    window.RECEIPT_FUNDS = {{ fund_options_json|safe }};
+    function openReceiptsFilterModal() {
+        document.getElementById('receiptsFilterModal').classList.add('show');
+    }
+    function closeReceiptsFilterModal() {
+        document.getElementById('receiptsFilterModal').classList.remove('show');
+    }
+    function applyReceiptsFilters() {
+        document.getElementById('receipts-filter-type').value = document.getElementById('receipts-filter-type-input').value;
+        document.getElementById('receipts-filter-mode').value = document.getElementById('receipts-filter-mode-input').value;
+        document.getElementById('receipts-filter-date-from').value = document.getElementById('receipts-filter-date-from-input').value;
+        document.getElementById('receipts-filter-date-to').value = document.getElementById('receipts-filter-date-to-input').value;
+        closeReceiptsFilterModal();
+        document.getElementById('receiptsSearchForm').submit();
+    }
+    function clearReceiptsFilters() {
+        document.getElementById('receipts-filter-type-input').value = '';
+        document.getElementById('receipts-filter-mode-input').value = '';
+        document.getElementById('receipts-filter-date-from-input').value = '';
+        document.getElementById('receipts-filter-date-to-input').value = '';
+        applyReceiptsFilters();
+    }
+</script>
+<script src="{% static 'js/transactions.js' %}"></script>
+{% endblock %}

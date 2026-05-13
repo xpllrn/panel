@@ -5,7 +5,8 @@ from decimal import Decimal
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from accounts.models import AuditLog, Loan, LoanRepayment, MemberAccount, Receipt, User
+from accounts.models import AuditLog, LoanAccount, LoanApplication, LoanRepayment, MemberAccount, Transaction, User
+from accounts.utils import ensure_member_submodels
 
 
 class Command(BaseCommand):
@@ -125,6 +126,7 @@ class Command(BaseCommand):
 
                     user.member_id = f"MBR-{year}-{next_seq:05d}"
                     user.save()
+                    ensure_member_submodels(user)
 
                     users_created += 1
                     self.stdout.write(f"\n✓ Created user: {username} ({user.display_name})")
@@ -175,13 +177,13 @@ class Command(BaseCommand):
                             # Generate receipt number
                             receipt_year = txn_date.year
                             last_receipt = (
-                                Receipt.objects.filter(receipt_number__startswith=f"RCP-{receipt_year}-")
-                                .order_by("-receipt_number")
+                                Transaction.objects.filter(transaction_number__startswith=f"RCP-{receipt_year}-")
+                                .order_by("-transaction_number")
                                 .first()
                             )
                             if last_receipt:
                                 try:
-                                    last_seq = int(last_receipt.receipt_number.split("-")[-1])
+                                    last_seq = int(last_receipt.transaction_number.split("-")[-1])
                                     next_seq = last_seq + 1
                                 except (ValueError, IndexError):
                                     next_seq = 1
@@ -191,8 +193,8 @@ class Command(BaseCommand):
                             receipt_number = f"RCP-{receipt_year}-{next_seq:05d}"
                             payment_mode = random.choice(["cash", "cheque", "online", "upi"])
 
-                            receipt = Receipt.objects.create(
-                                receipt_number=receipt_number,
+                            receipt = Transaction.objects.create(
+                                transaction_number=receipt_number,
                                 user=user,
                                 member_account=account,
                                 transaction_type=txn_type,
@@ -202,7 +204,7 @@ class Command(BaseCommand):
                                 balance_after=running_balance,
                                 created_by=None,
                             )
-                            Receipt.objects.filter(id=receipt.id).update(created_at=txn_date)
+                            Transaction.objects.filter(id=receipt.id).update(created_at=txn_date)
                             receipts_created += 1
 
                         # Update account balance
@@ -241,37 +243,68 @@ class Command(BaseCommand):
                                 disbursement_date = date.today() - timedelta(days=random.randint(30, 730))
                                 application_date = disbursement_date - timedelta(days=random.randint(7, 30))
 
-                                # Generate loan number
                                 loan_year = disbursement_date.year
-                                last_loan = (
-                                    Loan.objects.filter(loan_number__startswith=f"LN-{loan_year}-")
+                                last_ln = (
+                                    LoanAccount.objects.filter(loan_number__startswith=f"LN-{loan_year}-")
                                     .order_by("-loan_number")
                                     .first()
                                 )
-                                if last_loan:
+                                if last_ln:
                                     try:
-                                        last_seq = int(last_loan.loan_number.split("-")[-1])
-                                        next_seq = last_seq + 1
+                                        ln_seq = int(last_ln.loan_number.split("-")[-1]) + 1
                                     except (ValueError, IndexError):
-                                        next_seq = 1
+                                        ln_seq = 1
                                 else:
-                                    next_seq = 1
+                                    ln_seq = 1
+                                loan_number = f"LN-{loan_year}-{ln_seq:05d}"
 
-                                loan_number = f"LN-{loan_year}-{next_seq:05d}"
+                                last_app = (
+                                    LoanApplication.objects.filter(application_number__startswith=f"LA-{loan_year}-")
+                                    .order_by("-application_number")
+                                    .first()
+                                )
+                                if last_app:
+                                    try:
+                                        app_seq = int(last_app.application_number.split("-")[-1]) + 1
+                                    except (ValueError, IndexError):
+                                        app_seq = 1
+                                else:
+                                    app_seq = 1
+                                application_number = f"LA-{loan_year}-{app_seq:05d}"
 
-                                # Create loan
-                                loan = Loan.objects.create(
+                                application = LoanApplication.objects.create(
+                                    application_number=application_number,
                                     user=user,
-                                    loan_number=loan_number,
                                     loan_type=loan_type,
                                     principal_amount=principal,
                                     interest_rate=Decimal(str(interest_rate)),
+                                    interest_type="reducing",
+                                    tenure_months=tenure_months,
+                                    application_date=application_date,
+                                    status="approved",
+                                    approval_date=application_date + timedelta(days=random.randint(1, 7)),
+                                )
+                                total_payable = (emi * Decimal(str(tenure_months))).quantize(Decimal("0.01"))
+                                first_emi = disbursement_date + timedelta(days=30)
+                                loan = LoanAccount.objects.create(
+                                    application=application,
+                                    user=user,
+                                    loan_number=loan_number,
+                                    principal_amount=principal,
+                                    interest_rate=Decimal(str(interest_rate)),
+                                    interest_type="reducing",
                                     tenure_months=tenure_months,
                                     emi_amount=emi,
-                                    application_date=application_date,
+                                    total_payable=total_payable,
+                                    total_paid=Decimal("0"),
+                                    outstanding_balance=principal,
+                                    overdue_amount=Decimal("0"),
                                     disbursement_date=disbursement_date,
+                                    first_emi_date=first_emi,
                                     status="active",
                                     total_emis=tenure_months,
+                                    emis_paid=0,
+                                    emis_overdue=0,
                                 )
                                 loans_created += 1
                                 self.stdout.write(f"    ✓ Loan {loan_number}: {loan_name} - ₹{principal}")
@@ -301,7 +334,7 @@ class Command(BaseCommand):
                                         amount_paid = Decimal("0.00")
 
                                     LoanRepayment.objects.create(
-                                        loan=loan,
+                                        loan_account=loan,
                                         installment_number=month + 1,
                                         due_date=due_date,
                                         amount_due=emi,

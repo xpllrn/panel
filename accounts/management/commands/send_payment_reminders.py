@@ -13,12 +13,12 @@ class Command(BaseCommand):
         today = date.today()
         upcoming_date = today + timedelta(days=3)
 
-        upcoming = LoanRepayment.objects.select_related("loan", "loan__user").filter(
+        upcoming = LoanRepayment.objects.select_related("loan_account", "loan_account__user").filter(
             payment_status="upcoming",
             due_date__lte=upcoming_date,
             due_date__gte=today,
         )
-        overdue = LoanRepayment.objects.select_related("loan", "loan__user").filter(
+        overdue = LoanRepayment.objects.select_related("loan_account", "loan_account__user").filter(
             payment_status="overdue",
             due_date__lt=today,
         )
@@ -26,15 +26,15 @@ class Command(BaseCommand):
         sent = 0
 
         for repayment in upcoming:
-            user = repayment.loan.user
+            user = repayment.loan_account.user
             dispatch_user_notification(
                 user=user,
                 title="EMI Reminder",
                 message=f"EMI #{repayment.installment_number} of ₹{repayment.amount_due} is due on {repayment.due_date}.",
                 notification_type="loan",
                 metadata={
-                    "loan_id": repayment.loan.id,
-                    "loan_number": repayment.loan.loan_number,
+                    "loan_id": repayment.loan_account.id,
+                    "loan_number": repayment.loan_account.loan_number,
                     "installment_number": repayment.installment_number,
                     "due_amount": str(repayment.amount_due),
                     "due_date": str(repayment.due_date),
@@ -44,15 +44,15 @@ class Command(BaseCommand):
             sent += 1
 
         for repayment in overdue:
-            user = repayment.loan.user
+            user = repayment.loan_account.user
             dispatch_user_notification(
                 user=user,
                 title="Overdue EMI Alert",
                 message=f"EMI #{repayment.installment_number} of ₹{repayment.amount_due} is overdue since {repayment.due_date}.",
                 notification_type="loan",
                 metadata={
-                    "loan_id": repayment.loan.id,
-                    "loan_number": repayment.loan.loan_number,
+                    "loan_id": repayment.loan_account.id,
+                    "loan_number": repayment.loan_account.loan_number,
                     "installment_number": repayment.installment_number,
                     "due_amount": str(repayment.amount_due),
                     "due_date": str(repayment.due_date),

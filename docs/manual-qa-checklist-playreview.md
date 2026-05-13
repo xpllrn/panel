@@ -3,7 +3,8 @@
 ## Preconditions
 - Run migrations: `docker compose exec web python manage.py migrate`
 - Seed review account + light data: `docker compose exec web python manage.py create_play_review_user --username playreview --password "YourPassword" --seed-light`
-- Login as admin and as `playreview` in Android app.
+- Staff HTML UI: with **`WEB_LOGIN_DISABLED=True`** (Docker default), open **`/`** or **`/home/`** after **`/setup/`** — no browser login step.
+- Login as admin and as `playreview` in Android app (API JWT unchanged).
 
 ## Admin Portal
 - Members page filters: verify `status`, `member type`, and search together.

@@ -14,7 +14,7 @@
                 <div class="card-body text-center p-4">
                     <h1 class="h4 text-success mb-3">Email verified</h1>
                     <p class="text-muted mb-4">Your email address has been confirmed. You can close this page or sign in.</p>
-                    <a href="/login/" class="btn btn-primary">Sign in</a>
+                    <a href="{% if WEB_LOGIN_DISABLED %}/home/{% else %}/login/{% endif %}" class="btn btn-primary">{% if WEB_LOGIN_DISABLED %}Open dashboard{% else %}Sign in{% endif %}</a>
                 </div>
 
             </div>
@@ -23,7 +23,7 @@
                 <div class="card-body text-center p-4">
                     <h1 class="h4 text-danger mb-3">Verification failed</h1>
                     <p class="text-muted mb-4">{{ error_message }}</p>
-                    <a href="/login/" class="btn btn-outline-secondary">Sign in</a>
+                    <a href="{% if WEB_LOGIN_DISABLED %}/home/{% else %}/login/{% endif %}" class="btn btn-outline-secondary">{% if WEB_LOGIN_DISABLED %}Open dashboard{% else %}Sign in{% endif %}</a>
                 </div>
             </div>
         {% endif %}

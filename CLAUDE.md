@@ -15,7 +15,9 @@ This is the single source of truth for AI coding agents working in this Django c
 
 This is an admin panel for managing members, accounts (FD, CD, RD, OD, Share, Sukanya, Suputra), loans, receipts, funds, and audit logs for a cooperative society/credit union.
 
-The same repo also ships a **static public marketing site** under `docs/` (suitable for GitHub Pages) and a **member Android app** under `android-app/` that consumes the REST API.
+The same repo also ships a **static public marketing site** under `docs/` (suitable for GitHub Pages).
+
+The member-facing surfaces (member portal Django app, member REST endpoints, OTP-login flow, Android app) have been archived to `legacy/`. See `legacy/README.md` for what's there and how to revive each piece. The active build is admin-only.
 
 ---
 
@@ -24,9 +26,9 @@ The same repo also ships a **static public marketing site** under `docs/` (suita
 ```bash
 # Docker (recommended)
 docker-compose up --build
-docker-compose exec web python manage.py migrate
-docker-compose exec web python manage.py createsuperuser
+docker-compose exec web python manage.py migrate   # also runs on web container start
 docker-compose exec web python manage.py collectstatic --noinput
+# Complete /setup/ in the browser; optional: createsuperuser for /admin/
 
 # Local development
 python -m venv venv && source venv/bin/activate
@@ -71,8 +73,9 @@ python manage.py test -v 2 accounts.tests.PANValidatorTests  # Verbose
 |-----|---------|-----------|
 | `accounts` | Auth, user management, all core models | models.py (9 models), forms.py, utils.py, api_views.py |
 | `admin_portal` | Admin interface (60+ routes, 40+ views) | views.py (~2870 lines), urls.py |
-| `member_portal` | Member self-service portal (read-only) | views.py, urls.py (15 routes) |
 | `config` | Django project config | settings.py, urls.py |
+
+Archived (see `legacy/README.md`): `member_portal` (Django app), `templates/member/`, `android-app/`, OTP / device / member REST endpoints + tests.
 
 ### Core Models (accounts/models.py)
 
@@ -99,13 +102,15 @@ User (AbstractUser, 200+ fields - center hub)
 
 ### URL Structure
 
-- `/login/`, `/logout/` - Authentication
-- `/home/` - Admin dashboard
-- `/members/`, `/accounts/`, `/receipts/`, `/loans/` - Admin CRUD
-- `/funds/`, `/allocation-rules/` - Fund management
-- `/audit-logs/`, `/profile/`, `/calculator/` - Admin tools
-- `/member/` - Member portal (dashboard, accounts, loans, transactions, profile)
-- `/admin/` - Django admin
+- `/setup/` — First-run wizard (society + primary staff user + product rates)
+- `/home/` — Staff dashboard (after setup, opens directly when `WEB_LOGIN_DISABLED=True`)
+- `/login/`, `/logout/` — Staff password session (used when `WEB_LOGIN_DISABLED=False`)
+- `/members/`, `/accounts/`, `/transactions/`, `/loans/` — Staff CRUD
+- `/funds/`, `/allocation-rules/` — Fund management
+- `/audit-logs/`, `/profile/` — Staff tools
+- `/finance/periods/` — FinancialPeriod open / continue / close (Phase A5)
+- `/admin/` — Django admin (separate login; not affected by `WEB_LOGIN_DISABLED`)
+- `/api/v1/` — REST API (JWT password login at `/api/v1/auth/login/password/`; member endpoints archived to `legacy/`)
 
 ---
 
@@ -260,10 +265,11 @@ Views use manual pagination with `Paginator` from `django.core.paginator`.
 ## Security Guidelines
 
 - Environment variables via `python-decouple` - never hardcode secrets
+- **`WEB_LOGIN_DISABLED`** (default `True`): staff HTML panel skips `/login/` and binds anonymous browser sessions to the **first staff user** after setup. Set **`WEB_LOGIN_DISABLED=False`** for any Internet-facing or shared deployment unless another gateway enforces authentication. **`/api/v1/`** and Django **`/admin/`** are unchanged (JWT and Django admin login respectively).
 - CSRF protection enabled - include tokens in AJAX requests
 - Password validators: min 8 chars, not common, not numeric-only
 - Production security: HSTS (1 year), secure cookies, SSL redirect, XFrame protection
-- Role-based access: `@admin_required` and `@member_required` decorators
+- Role-based access: `@admin_required` and `@member_required` decorators (still enforced per user once the session user is known)
 - Always escape user content in JavaScript with `escapeHTML()`
 - Rate limiting on member creation (10/minute per admin)
 - Never commit `.env` files
@@ -288,7 +294,8 @@ Views use manual pagination with `Paginator` from `django.core.paginator`.
 ├── config/              # Django settings, root URLs, WSGI/ASGI
 ├── accounts/            # Core app: models, auth, forms, utils, API
 │   ├── models.py        # 9 models (User, MemberAccount, Receipt, Loan, etc.)
-│   ├── views.py         # Auth views (login, logout)
+│   ├── middleware.py    # Optional auto-login for staff HTML when WEB_LOGIN_DISABLED
+│   ├── views.py         # Auth views (setup wizard, optional login/logout)
 │   ├── api_views.py     # REST API endpoints
 │   ├── forms.py         # Django forms
 │   ├── utils.py         # Utilities (split_full_name, apply_fund_allocations)
@@ -296,18 +303,14 @@ Views use manual pagination with `Paginator` from `django.core.paginator`.
 │   └── migrations/      # 23 migration files
 ├── admin_portal/        # Admin dashboard (views only, no models)
 │   └── views.py         # 40+ admin views (~2870 lines)
-├── member_portal/       # Member self-service (read-only views)
-│   ├── views.py         # Member views
-│   └── urls.py          # 15 URL patterns
 ├── templates/
 │   ├── accounts/        # login.html, signup.html
-│   ├── admin/           # 11 admin templates (base, home, members, accounts, etc.)
-│   └── member/          # 8 member templates (base, dashboard, accounts, etc.)
+│   └── admin/           # 11 admin templates (base, home, members, accounts, etc.)
 ├── static/
 │   ├── css/             # base.css, layout.css, components.css, pages/
 │   └── js/              # utils.js, members.js, accounts.js, loans.js, etc.
 ├── docs/                # Static public site (e.g. GitHub Pages from /docs)
-├── android-app/         # Android mobile app (Kotlin/Jetpack Compose)
+├── legacy/              # Archived: member_portal/, templates/member/, android-app/, OTP templates
 ├── .kiro/               # Kiro hooks
 ├── docker-compose.yml   # PostgreSQL + Django services
 ├── Dockerfile           # Python 3.11-slim, Gunicorn
@@ -329,6 +332,7 @@ Views use manual pagination with `Paginator` from `django.core.paginator`.
 | `DB_PASSWORD` | PostgreSQL password | - |
 | `DB_HOST` | PostgreSQL host | `db` (Docker) / `localhost` |
 | `DB_PORT` | PostgreSQL port | `5432` |
+| `WEB_LOGIN_DISABLED` | Skip staff HTML login; auto first staff user | `True` / `False` |
 
 ---
 

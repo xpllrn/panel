@@ -271,7 +271,7 @@
                             var txn = data.transactions[i];
                             var row = document.createElement('tr');
                             var typeClass = txn.type_raw === 'credit' || txn.type_raw === 'interest' || txn.type_raw === 'dividend' ? 'credit' : 'debit';
-                            row.innerHTML = '<td><span class="account-number">' + escapeHTML(txn.receipt_number) + '</span></td>' +
+                            row.innerHTML = '<td><span class="account-number">' + escapeHTML(txn.transaction_number) + '</span></td>' +
                                 '<td>' + escapeHTML(txn.date) + '</td>' +
                                 '<td><span class="txn-type-badge txn-' + escapeHTML(typeClass) + '">' + escapeHTML(txn.type) + '</span></td>' +
                                 '<td>' + escapeHTML(txn.description) + '</td>' +

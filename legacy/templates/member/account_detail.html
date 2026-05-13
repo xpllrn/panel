@@ -1,0 +1,144 @@
+{% extends "member/base.html" %}
+{% load currency_filters %}
+
+{% block title %}Account {{ account.account_number }} - Member Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="page-header-left">
+        <a href="{% url 'member_portal:accounts' %}" class="btn btn-sm btn-outline">&larr; Back to Accounts</a>
+        <h2>Account: {{ account.account_number }}</h2>
+    </div>
+    <a href="{% url 'member_portal:account_statement' account.id %}?months=3" class="btn btn-sm btn-primary">Download Statement (PDF)</a>
+</div>
+
+<!-- Account Details Card -->
+<div class="card">
+    <div class="card-header">
+        <h3>Account Details</h3>
+        <span class="badge badge-{{ account.status }}">{{ account.get_status_display }}</span>
+    </div>
+    <div class="card-body">
+        <div class="detail-grid">
+            <div class="detail-item">
+                <span class="detail-label">Account Number</span>
+                <span class="detail-value">{{ account.account_number }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Account Type</span>
+                <span class="detail-value">{{ account.get_account_type_display }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Balance</span>
+                <span class="detail-value">₹{{ account.balance|inr }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Interest Rate</span>
+                <span class="detail-value">{{ account.interest_rate }}%</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Principal Amount</span>
+                <span class="detail-value">₹{{ account.principal_amount|inr }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Accrued Interest</span>
+                <span class="detail-value">₹{{ account.accrued_interest|inr }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Opening Date</span>
+                <span class="detail-value">{{ account.opening_date|date:"d M Y" }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Maturity Date</span>
+                <span class="detail-value">{{ account.maturity_date|date:"d M Y"|default:"N/A" }}</span>
+            </div>
+            {% if account.tenure_months %}
+            <div class="detail-item">
+                <span class="detail-label">Tenure</span>
+                <span class="detail-value">{{ account.tenure_months }} months</span>
+            </div>
+            {% endif %}
+            {% if account.is_term_deposit %}
+            <div class="detail-item">
+                <span class="detail-label">Estimated Maturity Amount</span>
+                <span class="detail-value">₹{{ account.maturity_amount|inr }}</span>
+            </div>
+            {% endif %}
+            {% if account.account_type == 'rd' %}
+            <div class="detail-item">
+                <span class="detail-label">Monthly Installment</span>
+                <span class="detail-value">₹{{ account.rd_monthly_amount|inr }}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Installments Paid</span>
+                <span class="detail-value">{{ account.rd_installments_paid }} / {{ account.rd_total_installments|default:"—" }}</span>
+            </div>
+            {% endif %}
+            {% if account.nominee_name %}
+            <div class="detail-item">
+                <span class="detail-label">Nominee</span>
+                <span class="detail-value">{{ account.nominee_name }} ({{ account.nominee_relationship|default:"—" }})</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Transaction History -->
+<div class="card" style="margin-top: 1.5rem;">
+    <div class="card-header">
+        <h3>Transaction History</h3>
+    </div>
+    <div class="card-body">
+        {% if transactions %}
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Transaction #</th>
+                        <th>Type</th>
+                        <th>Mode</th>
+                        <th>Amount</th>
+                        <th>Balance After</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for txn in transactions %}
+                    <tr>
+                        <td>{{ txn.created_at|date:"d M Y" }}</td>
+                        <td>{{ txn.transaction_number }}</td>
+                        <td>
+                            <span class="badge badge-{{ txn.transaction_type }}">
+                                {{ txn.get_transaction_type_display }}
+                            </span>
+                        </td>
+                        <td>{{ txn.get_payment_mode_display }}</td>
+                        <td class="{% if txn.transaction_type == 'credit' %}text-success{% else %}text-danger{% endif %}">
+                            {% if txn.transaction_type == 'credit' %}+{% else %}-{% endif %}₹{{ txn.amount|inr }}
+                        </td>
+                        <td>₹{{ txn.balance_after|inr }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if transactions.has_other_pages %}
+        <div class="pagination">
+            {% if transactions.has_previous %}
+            <a href="?page={{ transactions.previous_page_number }}" class="btn btn-sm btn-outline">&laquo; Previous</a>
+            {% endif %}
+            <span class="pagination-info">Page {{ transactions.number }} of {{ transactions.paginator.num_pages }}</span>
+            {% if transactions.has_next %}
+            <a href="?page={{ transactions.next_page_number }}" class="btn btn-sm btn-outline">Next &raquo;</a>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% else %}
+        <p class="empty-state">No transactions found for this account.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

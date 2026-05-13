@@ -5,7 +5,8 @@ from decimal import Decimal
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from accounts.models import AuditLog, MemberAccount, Receipt, User
+from accounts.models import AuditLog, MemberAccount, Transaction, User
+from accounts.utils import ensure_member_submodels
 
 
 class Command(BaseCommand):
@@ -193,6 +194,7 @@ class Command(BaseCommand):
                         user.status = "active"
                         user.member_id = member_id
                         user.save()
+                        ensure_member_submodels(user)
 
                         self.stdout.write(f"\n✓ Created user: {username} ({full_name})")
                         self.stdout.write(f"  Member ID: {member_id}")
@@ -241,27 +243,27 @@ class Command(BaseCommand):
                                 # Generate receipt number
                                 receipt_year = txn_date.year
                                 last_receipt = (
-                                    Receipt.objects.filter(receipt_number__startswith=f"RCP-{receipt_year}-")
-                                    .order_by("-receipt_number")
+                                    Transaction.objects.filter(transaction_number__startswith=f"RCP-{receipt_year}-")
+                                    .order_by("-transaction_number")
                                     .first()
                                 )
                                 if last_receipt:
                                     try:
-                                        last_seq = int(last_receipt.receipt_number.split("-")[-1])
+                                        last_seq = int(last_receipt.transaction_number.split("-")[-1])
                                         next_seq = last_seq + 1
                                     except (ValueError, IndexError):
                                         next_seq = 1
                                 else:
                                     next_seq = 1
 
-                                receipt_number = f"RCP-{receipt_year}-{next_seq:05d}"
+                                transaction_number = f"RCP-{receipt_year}-{next_seq:05d}"
 
                                 # Payment mode
                                 payment_mode = random.choice(["cash", "cheque", "online", "upi"])
 
                                 # Create receipt
-                                receipt = Receipt.objects.create(
-                                    receipt_number=receipt_number,
+                                receipt = Transaction.objects.create(
+                                    transaction_number=transaction_number,
                                     user=user,
                                     member_account=account,
                                     transaction_type=txn_type,
@@ -272,7 +274,7 @@ class Command(BaseCommand):
                                     created_by=None,  # System generated
                                 )
                                 # Backdate the receipt
-                                Receipt.objects.filter(id=receipt.id).update(created_at=txn_date)
+                                Transaction.objects.filter(id=receipt.id).update(created_at=txn_date)
 
                                 receipts_created += 1
 

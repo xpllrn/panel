@@ -8,6 +8,7 @@
     // State
     var currentLoanId = null;
     var currentLoanStatus = null;
+    var currentLoanListKind = 'account';
     var approveLoanId = null;
     var isAddingLoan = false;
     var isApproving = false;
@@ -83,6 +84,23 @@
                 }, 300);
             });
         }
+
+        var loanTypeInput = document.getElementById('loan-type-input');
+        if (loanTypeInput) {
+            loanTypeInput.addEventListener('change', applyDefaultInterestRate);
+        }
+    }
+
+    function applyDefaultInterestRate() {
+        var loanTypeInput = document.getElementById('loan-type-input');
+        var rateInput = document.getElementById('loan-interest-rate-input');
+        if (!loanTypeInput || !rateInput) return;
+        var selected = loanTypeInput.options[loanTypeInput.selectedIndex];
+        if (!selected) return;
+        var defaultRate = selected.getAttribute('data-default-rate');
+        if (defaultRate && defaultRate !== '') {
+            rateInput.value = defaultRate;
+        }
     }
 
     /**
@@ -100,16 +118,19 @@
     /**
      * Toggle dropdown menu
      */
-    function toggleDropdown(event, loanId) {
+    function toggleDropdown(event, listKind, loanId) {
         event.stopPropagation();
+        listKind = listKind || 'account';
+        var menuId = 'dropdown-' + listKind + '-' + loanId;
 
         document.querySelectorAll('.dropdown-menu').forEach(function (menu) {
-            if (menu.id !== 'dropdown-' + loanId) {
+            if (menu.id !== menuId) {
                 menu.classList.remove('show');
             }
         });
 
-        document.getElementById('dropdown-' + loanId).classList.toggle('show');
+        var menu = document.getElementById(menuId);
+        if (menu) menu.classList.toggle('show');
     }
 
     /**
@@ -161,19 +182,23 @@
     /**
      * Show loan details modal
      */
-    function showLoanModal(loanId) {
-        fetch('/loans/' + loanId + '/get/')
+    function showLoanModal(loanId, listKind) {
+        listKind = listKind || 'account';
+        var url = '/loans/' + loanId + '/get/?kind=' + encodeURIComponent(listKind);
+        fetch(url)
             .then(function (response) { return response.json(); })
             .then(function (data) {
                 if (data.success) {
+                    currentLoanListKind = data.loan.list_kind || listKind;
                     populateLoanModal(data.loan);
                     currentLoanId = loanId;
                     currentLoanStatus = data.loan.status;
 
-                    // Show/hide approve button
+                    // Show/hide approve button (applications only)
                     var approveBtn = document.getElementById('modal-approve-btn');
                     if (approveBtn) {
-                        approveBtn.style.display = data.loan.status === 'pending' ? 'inline-block' : 'none';
+                        var showApprove = data.loan.list_kind === 'application' && data.loan.status === 'pending';
+                        approveBtn.style.display = showApprove ? 'inline-block' : 'none';
                     }
 
                     // Reset to details tab
@@ -269,13 +294,14 @@
         }
 
         // Repayment schedule
-        renderRepaymentSchedule(loan.repayments, loan.status);
+        renderRepaymentSchedule(loan.repayments, loan.status, loan.list_kind || 'account');
     }
 
     /**
      * Render the repayment schedule table
      */
-    function renderRepaymentSchedule(repayments, loanStatus) {
+    function renderRepaymentSchedule(repayments, loanStatus, listKind) {
+        listKind = listKind || 'account';
         var tbody = document.getElementById('repayment-tbody');
         var noRepayments = document.getElementById('no-repayments');
         var table = document.getElementById('repayment-table');
@@ -305,7 +331,7 @@
             html += '<td style="text-align: right;">' + (r.amount_paid && parseFloat(r.amount_paid) > 0 ? formatCurrency(r.amount_paid) : '-') + '</td>';
             html += '<td><span class="payment-status ' + statusClass + '">' + escapeHTML(r.payment_status_display) + '</span></td>';
             html += '<td>';
-            if ((r.payment_status === 'upcoming' || r.payment_status === 'overdue' || r.payment_status === 'partial') && loanStatus === 'active') {
+            if ((r.payment_status === 'upcoming' || r.payment_status === 'overdue' || r.payment_status === 'partial') && loanStatus === 'active' && listKind === 'account') {
                 html += '<button class="emi-pay-btn" onclick="showRecordEmiDialog(' + parseInt(currentLoanId, 10) + ', ' + parseInt(r.installment_number, 10) + ', \'' + escapeHTML(r.amount_due) + '\')">Pay</button>';
             }
             html += '</td>';
@@ -345,6 +371,7 @@
         if (loanModal) loanModal.classList.remove('show');
         currentLoanId = null;
         currentLoanStatus = null;
+        currentLoanListKind = 'account';
     }
 
     // ========================================
@@ -377,6 +404,7 @@
         }
 
         isAddingLoan = false;
+        applyDefaultInterestRate();
         addLoanModal.classList.add('show');
     }
 
@@ -446,8 +474,9 @@
      */
     function showApproveDialog(event, loanId) {
         event.stopPropagation();
-        var dropdown = document.getElementById('dropdown-' + loanId);
-        if (dropdown) dropdown.classList.remove('show');
+        document.querySelectorAll('.dropdown-menu').forEach(function (menu) {
+            menu.classList.remove('show');
+        });
 
         approveLoanId = loanId;
         openApproveDialog();
@@ -561,16 +590,19 @@
     /**
      * Show record EMI from the kebab menu (opens loan modal first to get data)
      */
-    function showRecordEmiFromMenu(event, loanId) {
+    function showRecordEmiFromMenu(event, loanId, listKind) {
         event.stopPropagation();
-        var dropdown = document.getElementById('dropdown-' + loanId);
-        if (dropdown) dropdown.classList.remove('show');
+        listKind = listKind || 'account';
+        document.querySelectorAll('.dropdown-menu').forEach(function (menu) {
+            menu.classList.remove('show');
+        });
 
         // Open loan modal to the schedule tab
-        fetch('/loans/' + loanId + '/get/')
+        fetch('/loans/' + loanId + '/get/?kind=' + encodeURIComponent(listKind))
             .then(function (response) { return response.json(); })
             .then(function (data) {
                 if (data.success) {
+                    currentLoanListKind = data.loan.list_kind || listKind;
                     populateLoanModal(data.loan);
                     currentLoanId = loanId;
                     currentLoanStatus = data.loan.status;

@@ -17,7 +17,7 @@ The Django app is **not** the marketing site: `/` still redirects staff or membe
 
 ## Features
 
-- Admin authentication (Login/Signup)
+- Staff panel without a separate login step by default (`WEB_LOGIN_DISABLED`); optional password login when disabled in `.env`
 - Admin profile management with clickable avatar upload
 - Members listing page
 - Notification settings (Email & Push)
@@ -56,29 +56,26 @@ python3 -c "from django.core.management.utils import get_random_secret_key; prin
 ```
 Copy the output and update `SECRET_KEY` in your `.env` file.
 
-4. Build and start the containers:
+4. Build and start the containers (the `web` service runs **`migrate`** on startup):
 ```bash
 docker-compose up --build
 ```
 
-5. In a new terminal, run migrations:
-```bash
-docker-compose exec web python manage.py migrate
-```
+5. Complete **first-run setup** at `http://localhost:8000/setup/` (creates society config and the primary staff user).
 
-6. Collect static files:
-```bash
-docker-compose exec web python manage.py collectstatic --noinput
-```
+6. Access the staff panel: **`http://localhost:8000/home/`** (or **`http://localhost:8000/`**). Docker Compose sets **`WEB_LOGIN_DISABLED=True`**, so the HTML staff panel does not ask for a password (you are signed in as the first staff user).
 
-7. Create a superuser (admin):
+7. **Django admin** (`/admin/`) still uses its own username/password. Create a user for it if needed:
+
 ```bash
 docker-compose exec web python manage.py createsuperuser
 ```
 
-8. Access the application:
-   - Admin panel: http://localhost:8000
-   - Django admin: http://localhost:8000/admin
+8. **REST API** (`/api/v1/`) still uses **JWT**; browser auto-login does not apply there.
+
+### Optional: password login on the staff panel
+
+Set **`WEB_LOGIN_DISABLED=False`** in `.env` if you want staff to use **`/login/`** with username and password. **`createsuperuser`** remains available for Django admin and for API users.
 
 ### Code Review Graph Setup (Optional)
 
@@ -107,8 +104,9 @@ Required environment variables in `.env`:
 | `DB_PASSWORD` | PostgreSQL password | `admin123` |
 | `DB_HOST` | PostgreSQL host | `db` (Docker) or `localhost` |
 | `DB_PORT` | PostgreSQL port | `5432` |
+| `WEB_LOGIN_DISABLED` | Skip staff HTML login; auto-use first staff user after setup | `True` (Docker default) / `False` to require `/login/` |
 
-**Security Note:** Never commit your `.env` file to version control!
+**Security Note:** Never commit your `.env` file to version control. Leaving **`WEB_LOGIN_DISABLED=True`** exposes the staff UI to anyone who can reach the server — use **`False`** behind authentication or a private network in production.
 
 ### Local Development (Without Docker)
 
@@ -125,13 +123,15 @@ pip install -r requirements.txt
 
 3. Set up PostgreSQL database and update .env file
 
-4. Run migrations and create superuser:
+4. Run migrations. Use **`WEB_LOGIN_DISABLED=False`** locally if you want password login on the panel.
+
 ```bash
 python manage.py migrate
-python manage.py createsuperuser
 ```
 
-5. Run the development server:
+5. Run **`/setup/`** in the browser once, then open **`/home/`** (or set **`WEB_LOGIN_DISABLED=False`** and use **`createsuperuser`** + **`/login/`**).
+
+6. Run the development server:
 ```bash
 python manage.py runserver
 ```
@@ -158,9 +158,10 @@ python manage.py runserver
 
 | Route | Description |
 |-------|-------------|
-| `/login/` | Admin login page |
-| `/signup/` | Admin registration |
-| `/home/` | Admin dashboard |
+| `/login/` | Staff password login (only when `WEB_LOGIN_DISABLED=False`) |
+| `/logout/` | End session (hidden when `WEB_LOGIN_DISABLED=True`) |
+| `/setup/` | First-run society + admin setup |
+| `/home/` | Staff dashboard |
 | `/members/` | List of all members |
 | `/profile/` | Admin profile edit |
 | `/admin/` | Django admin panel |
@@ -189,6 +190,7 @@ docker-compose exec web python manage.py shell
 ### Security Checklist
 
 - [ ] Generate a strong `SECRET_KEY` and keep it secret
+- [ ] Set **`WEB_LOGIN_DISABLED=False`** unless the staff panel is behind another auth layer or private network
 - [ ] Set `DEBUG=False` in production
 - [ ] Configure proper `ALLOWED_HOSTS`
 - [ ] Use strong database credentials
@@ -205,6 +207,7 @@ docker-compose exec web python manage.py shell
 ```bash
 SECRET_KEY=<generate-new-key>
 DEBUG=False
+WEB_LOGIN_DISABLED=False
 ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
 ```
 

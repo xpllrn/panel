@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:15-alpine
@@ -10,11 +8,15 @@ services:
       - POSTGRES_USER=admin
       - POSTGRES_PASSWORD=admin123
     ports:
-      - "5432:5432"
+      # Avoid clash with a local Postgres on 5432; services use internal hostname `db:5432`.
+      - "5433:5432"
     env_file:
       - .env
 
-  web:
+  # Staff & member HTML panel. Owns migrations: it is the only service that
+  # runs `manage.py migrate` on start. URLs: config.urls_panel. Settings:
+  # config.settings (the default).
+  panel:
     build: .
     command: sh -c "sleep 5 && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
     volumes:
@@ -26,11 +28,40 @@ services:
     environment:
       - DEBUG=True
       - SECRET_KEY=django-insecure-change-this-in-production
-      - ALLOWED_HOSTS=localhost,127.0.0.1,10.0.2.2,0.0.0.0
+      - ALLOWED_HOSTS=localhost,127.0.0.1,10.0.2.2,0.0.0.0,panel,api
       - EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
       - DB_HOST=db
+      - WEB_LOGIN_DISABLED=True
+      - DJANGO_SETTINGS_MODULE=config.settings
     depends_on:
       - db
+    restart: on-failure
+
+  # Pure REST API for Android, future client apps, and the Phase 5 MCP server.
+  # URLs: config.urls_api (only /api/v1/, schema, docs, health). Settings:
+  # config.settings_api (drops AutoStaffLoginMiddleware). Does NOT run
+  # migrations — that is the `panel` service's job.
+  api:
+    build: .
+    command: sh -c "sleep 8 && python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - .:/app
+    ports:
+      - "8001:8000"
+    env_file:
+      - .env
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=django-insecure-change-this-in-production
+      - ALLOWED_HOSTS=localhost,127.0.0.1,10.0.2.2,0.0.0.0,panel,api
+      - EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
+      - DB_HOST=db
+      # Never auto-login on the API surface, regardless of panel setting.
+      - WEB_LOGIN_DISABLED=False
+      - DJANGO_SETTINGS_MODULE=config.settings_api
+    depends_on:
+      - db
+      - panel
     restart: on-failure
 
 volumes:

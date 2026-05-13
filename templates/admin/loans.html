@@ -65,7 +65,7 @@
         </thead>
         <tbody>
             {% for loan in loans %}
-            <tr onclick="showLoanModal({{ loan.id }})">
+            <tr onclick="showLoanModal({{ loan.id }}, '{{ loan.list_kind }}')">
                 <td>
                     <span class="loan-number">{{ loan.loan_number }}</span>
                 </td>
@@ -90,14 +90,14 @@
                     <span class="status-badge status-{{ loan.status }}">{{ loan.get_status_display }}</span>
                 </td>
                 <td class="actions-cell" onclick="event.stopPropagation();">
-                    <button class="kebab-menu" onclick="toggleDropdown(event, {{ loan.id }})" aria-label="Actions">&#8942;</button>
-                    <div class="dropdown-menu" id="dropdown-{{ loan.id }}">
-                        <button class="dropdown-item" onclick="showLoanModal({{ loan.id }})">View Details</button>
+                    <button class="kebab-menu" onclick="toggleDropdown(event, '{{ loan.list_kind }}', {{ loan.id }})" aria-label="Actions">&#8942;</button>
+                    <div class="dropdown-menu" id="dropdown-{{ loan.list_kind }}-{{ loan.id }}">
+                        <button class="dropdown-item" onclick="showLoanModal({{ loan.id }}, '{{ loan.list_kind }}')">View Details</button>
                         {% if loan.status == 'pending' %}
                         <button class="dropdown-item" onclick="showApproveDialog(event, {{ loan.id }})">Approve</button>
                         {% endif %}
                         {% if loan.status == 'active' %}
-                        <button class="dropdown-item" onclick="showRecordEmiFromMenu(event, {{ loan.id }})">Record EMI</button>
+                        <button class="dropdown-item" onclick="showRecordEmiFromMenu(event, {{ loan.id }}, '{{ loan.list_kind }}')">Record EMI</button>
                         {% endif %}
                     </div>
                 </td>
@@ -379,10 +379,10 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Loan Type *</label>
-                    <select name="loan_type" class="form-input" required>
+                    <select name="loan_type" class="form-input" id="loan-type-input" required>
                         <option value="">Select type...</option>
-                        {% for value, label in loan_type_choices %}
-                        <option value="{{ value }}">{{ label }}</option>
+                        {% for opt in loan_type_create_options %}
+                        <option value="{{ opt.value }}" data-default-rate="{{ opt.default_rate }}">{{ opt.label }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -392,7 +392,10 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Interest Rate (% p.a.) *</label>
-                    <input type="number" name="interest_rate" class="form-input" step="0.01" min="0" required>
+                    <input type="number" name="interest_rate" id="loan-interest-rate-input" class="form-input" step="0.01" min="0" required>
+                    <small class="form-help" style="display:block; margin-top:0.25rem; color: var(--color-gray-500);">
+                        Default rate comes from Settings. You can adjust per loan if needed.
+                    </small>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Interest Type</label>
@@ -502,6 +505,10 @@
                 <div class="form-group">
                     <label class="form-label">Amount Due</label>
                     <input type="text" id="emi-amount-due" class="form-input" disabled>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Configured Late Penalty/Day</label>
+                    <input type="text" class="form-input" value="₹{{ late_penalty_per_day }}" disabled>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Amount Paid *</label>

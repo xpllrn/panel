@@ -1,0 +1,459 @@
+/**
+ * Settings page — minimal layout.
+ * Quiet neutral palette, single accent on focus, no badges/gradients.
+ */
+
+.settings-shell {
+    max-width: 880px;
+}
+
+/* ---------- Header ---------- */
+.settings-header {
+    margin-bottom: var(--spacing-xl);
+}
+
+.settings-title {
+    font-size: 1.35rem;
+    font-weight: 600;
+    margin: 0;
+    color: var(--color-gray-900);
+    letter-spacing: -0.005em;
+}
+
+.settings-subtitle {
+    margin: 0.2rem 0 0;
+    color: var(--color-gray-600);
+    font-size: 0.88rem;
+}
+
+.settings-fy-pill { display: none; }
+
+/* ---------- Layout (tabs + panels) ---------- */
+.settings-layout {
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr);
+    gap: var(--spacing-2xl);
+    align-items: start;
+}
+
+@media (max-width: 760px) {
+    .settings-layout { grid-template-columns: 1fr; }
+}
+
+/* ---------- Tabs (left rail) ---------- */
+.settings-tabs {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    position: sticky;
+    top: var(--spacing-xl);
+}
+
+.settings-tab {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.5rem 0.6rem;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: left;
+    color: var(--color-gray-600);
+    font-family: inherit;
+    font-size: 0.88rem;
+    transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.settings-tab:hover {
+    background: var(--color-gray-100);
+    color: var(--color-gray-900);
+}
+
+.settings-tab.is-active {
+    background: var(--color-gray-100);
+    color: var(--color-gray-900);
+    font-weight: 500;
+}
+
+.settings-tab-icon {
+    flex: 0 0 16px;
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-gray-500);
+}
+
+.settings-tab.is-active .settings-tab-icon {
+    color: var(--color-gray-800);
+}
+
+.settings-tab-icon svg {
+    width: 16px;
+    height: 16px;
+}
+
+.settings-tab-title {
+    display: inline;
+}
+
+.settings-tab-sub { display: none; }
+
+/* ---------- Panels ---------- */
+.settings-panels { display: contents; }
+
+.settings-panel {
+    display: none;
+    grid-column: 2;
+}
+
+@media (max-width: 760px) {
+    .settings-panel { grid-column: 1; }
+}
+
+.settings-panel.is-active { display: block; }
+
+/* ---------- Card ---------- */
+.settings-card {
+    background: var(--color-white);
+    border: 1px solid var(--color-gray-200);
+    border-radius: 8px;
+    padding: 1.1rem 1.25rem;
+    margin-bottom: var(--spacing-lg);
+}
+
+.settings-card-header {
+    margin-bottom: var(--spacing-md);
+}
+
+.settings-card-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--spacing-md);
+}
+
+.settings-card-header h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0;
+    color: var(--color-gray-900);
+}
+
+.settings-card-sub {
+    margin: 0.2rem 0 0;
+    color: var(--color-gray-600);
+    font-size: 0.82rem;
+    line-height: 1.45;
+}
+
+/* ---------- Forms ---------- */
+.settings-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.settings-form-inset {
+    background: var(--color-gray-50);
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--color-gray-200);
+    border-radius: 6px;
+    margin-bottom: var(--spacing-md);
+}
+
+.settings-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--spacing-md);
+}
+
+.settings-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.settings-field-label {
+    font-size: 0.78rem;
+    color: var(--color-gray-700);
+}
+
+.settings-field-hint {
+    font-size: 0.74rem;
+    color: var(--color-gray-500);
+    margin-top: 0.1rem;
+}
+
+.settings-field input[type="text"],
+.settings-field input[type="number"],
+.settings-field input[type="date"],
+.settings-field input[type="file"],
+.settings-field select,
+.settings-select {
+    width: 100%;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--color-gray-300);
+    border-radius: 6px;
+    font-size: 0.88rem;
+    font-family: inherit;
+    background: var(--color-white);
+    color: var(--color-gray-900);
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.settings-field input[type="file"] {
+    padding: 0.35rem;
+    font-size: 0.8rem;
+}
+
+.settings-field input:focus,
+.settings-field select:focus,
+.settings-select:focus {
+    outline: none;
+    border-color: var(--color-gray-800);
+    box-shadow: 0 0 0 2px rgba(17, 24, 39, 0.08);
+}
+
+/* Plain inputs — no prefix/suffix decoration in minimal mode */
+.settings-input-prefix,
+.settings-input-suffix {
+    display: contents;
+}
+.settings-input-prefix input,
+.settings-input-suffix input {
+    width: 100%;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--color-gray-300);
+    border-radius: 6px;
+    font-size: 0.88rem;
+    font-family: inherit;
+    background: var(--color-white);
+    color: var(--color-gray-900);
+}
+.settings-input-prefix input:focus,
+.settings-input-suffix input:focus {
+    outline: none;
+    border-color: var(--color-gray-800);
+    box-shadow: 0 0 0 2px rgba(17, 24, 39, 0.08);
+}
+.settings-input-prefix-icon,
+.settings-input-suffix-icon { display: none; }
+
+.settings-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.82rem;
+    color: var(--color-gray-700);
+    cursor: pointer;
+}
+
+.settings-form-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+    padding-top: 0.2rem;
+}
+
+/* ---------- Logo block ---------- */
+.settings-logo-row {
+    display: flex;
+    gap: var(--spacing-md);
+    align-items: flex-start;
+    padding-top: var(--spacing-sm);
+    border-top: 1px solid var(--color-gray-100);
+}
+
+.settings-logo-preview {
+    flex: 0 0 56px;
+    width: 56px;
+    height: 56px;
+    border-radius: 6px;
+    background: var(--color-gray-100);
+    border: 1px solid var(--color-gray-200);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.settings-logo-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.settings-logo-placeholder {
+    font-size: 1.2rem;
+    font-weight: 500;
+    color: var(--color-gray-500);
+    text-transform: uppercase;
+}
+
+.settings-logo-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    flex: 1;
+}
+
+/* ---------- Financial year ---------- */
+.settings-fy-current {
+    margin-bottom: var(--spacing-md);
+    font-size: 0.85rem;
+    color: var(--color-gray-700);
+}
+
+.settings-fy-current-label {
+    color: var(--color-gray-500);
+    margin-right: 0.35rem;
+}
+
+.settings-fy-current-value {
+    display: inline;
+    font-weight: 600;
+    color: var(--color-gray-900);
+    font-size: inherit;
+    margin: 0;
+}
+
+.settings-fy-current-range {
+    color: var(--color-gray-500);
+    margin-left: 0.4rem;
+}
+
+.settings-fy-current-block {
+    display: block;
+}
+
+.settings-fy-switch {
+    display: flex;
+    gap: var(--spacing-md);
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+.settings-fy-switch .settings-field {
+    flex: 1;
+    min-width: 220px;
+}
+
+/* ---------- Table ---------- */
+.settings-table-wrap {
+    overflow-x: auto;
+    margin-top: var(--spacing-sm);
+}
+
+.settings-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.86rem;
+}
+
+.settings-table th {
+    text-align: left;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-gray-500);
+    font-weight: 500;
+    padding: 0.45rem 0.6rem;
+    border-bottom: 1px solid var(--color-gray-200);
+    background: transparent;
+}
+
+.settings-table td {
+    padding: 0.5rem 0.6rem;
+    border-bottom: 1px solid var(--color-gray-100);
+    vertical-align: middle;
+    color: var(--color-gray-800);
+}
+
+.settings-table tbody tr.is-active td {
+    background: transparent;
+}
+
+.settings-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.settings-cell-narrow { width: 100px; }
+.settings-cell-center { text-align: center; }
+
+.settings-table-empty {
+    text-align: center;
+    color: var(--color-gray-500);
+    padding: 1rem;
+}
+
+.settings-table-products td input[type="text"],
+.settings-table-products td input[type="number"] {
+    width: 100%;
+    padding: 0.35rem 0.5rem;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    background: transparent;
+    font-size: 0.86rem;
+    color: var(--color-gray-900);
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.settings-table-products td input[type="text"]:hover,
+.settings-table-products td input[type="number"]:hover {
+    background: var(--color-gray-50);
+}
+
+.settings-table-products td input[type="text"]:focus,
+.settings-table-products td input[type="number"]:focus {
+    outline: none;
+    background: var(--color-white);
+    border-color: var(--color-gray-800);
+    box-shadow: 0 0 0 2px rgba(17, 24, 39, 0.08);
+}
+
+.settings-row-actions {
+    display: flex;
+    gap: 0.4rem;
+    justify-content: flex-end;
+    align-items: center;
+    white-space: nowrap;
+}
+
+.settings-inline-form { display: inline; margin: 0; }
+
+/* ---------- Chips → plain text ---------- */
+.settings-chip {
+    display: inline;
+    padding: 0;
+    background: transparent;
+    color: var(--color-gray-600);
+    font-size: 0.78rem;
+    font-weight: 400;
+    text-transform: capitalize;
+}
+
+.settings-chip-active {
+    color: var(--color-gray-900);
+    font-weight: 500;
+}
+
+.settings-chip-muted {
+    color: var(--color-gray-400);
+}
+
+.settings-link-danger {
+    color: var(--color-gray-600) !important;
+}
+
+.settings-link-danger:hover {
+    color: #b91c1c !important;
+}
+
+.settings-switch {
+    accent-color: var(--color-gray-900);
+}

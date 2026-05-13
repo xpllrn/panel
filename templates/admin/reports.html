@@ -171,9 +171,16 @@
     <h2 class="page-title">Financial Reports</h2>
     <div class="report-filters">
         <button class="btn btn-secondary btn-sm" onclick="openReportsFilterModal()">Filters</button>
-        <a href="{% url 'export_report' %}?period={{ period }}&year={{ year }}{% if period == 'month' %}&month={{ month }}{% endif %}{% if selected_account_type %}&account_type={{ selected_account_type }}{% endif %}" class="btn btn-sm btn-outline" style="padding: 0.4rem 0.75rem; font-size: 0.85rem; text-decoration: none;">Export CSV</a>
+        <a href="{% url 'export_report' %}?period={{ period }}{% if period == 'month' %}&month_key={{ month_key|urlencode }}{% endif %}{% if period == 'quarter' %}&quarter={{ selected_quarter }}{% endif %}{% if selected_account_type %}&account_type={{ selected_account_type }}{% endif %}" class="btn btn-sm btn-outline" style="padding: 0.4rem 0.75rem; font-size: 0.85rem; text-decoration: none;">Export CSV</a>
+        <a href="{% url 'settings' %}" class="btn btn-sm btn-outline" style="padding: 0.4rem 0.75rem; font-size: 0.85rem; text-decoration: none;">FY in Settings</a>
     </div>
 </div>
+
+<p style="font-size: 0.85rem; color: var(--color-gray-600); margin: -0.5rem 0 1rem; max-width: 48rem;">
+    Reporting uses the <strong>working financial year</strong> from
+    <a href="{% url 'settings' %}">Settings</a> (currently <strong>{{ fy_window.label }}</strong>).
+    Change granularity below (month / quarter / full FY within those dates only).
+</p>
 
 <div id="reportsFilterModal" class="modal">
     <div class="modal-content">
@@ -183,41 +190,36 @@
         </div>
         <div class="modal-body">
             <div class="form-group">
-                <label class="form-label">Period</label>
+                <label class="form-label">Granularity</label>
                 <select id="periodSelect" class="form-input">
                     <option value="month" {% if period == 'month' %}selected{% endif %}>Monthly</option>
                     <option value="quarter" {% if period == 'quarter' %}selected{% endif %}>Quarterly</option>
-                    <option value="year" {% if period == 'year' %}selected{% endif %}>Yearly</option>
+                    <option value="year" {% if period == 'year' %}selected{% endif %}>Full working FY</option>
+                </select>
+            </div>
+            <div class="form-group" id="fyMonthGroup">
+                <label class="form-label">Month (within working FY)</label>
+                <select id="fyMonthSelect" class="form-input">
+                    {% for m in fy_month_options %}
+                    <option value="{{ m.key }}" {% if m.key == month_key %}selected{% endif %}>{{ m.label }}</option>
+                    {% empty %}
+                    <option value="">No months in range</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group" id="fyQuarterGroup" style="display:none;">
+                <label class="form-label">Quarter</label>
+                <select id="quarterSelect" class="form-input">
+                    {% for q in fy_quarters %}
+                    <option value="{{ q.num }}" {% if q.num == selected_quarter %}selected{% endif %}>{{ q.label }}</option>
+                    {% empty %}
+                    <option value="1">Full period</option>
+                    {% endfor %}
                 </select>
             </div>
             <div class="form-group">
-                <label class="form-label">Year</label>
-                <select id="yearSelect" class="form-input">
-                    <option value="2024" {% if year == 2024 %}selected{% endif %}>2024</option>
-                    <option value="2025" {% if year == 2025 %}selected{% endif %}>2025</option>
-                    <option value="2026" {% if year == 2026 %}selected{% endif %}>2026</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Month (for Monthly period)</label>
-                <select id="monthSelect" class="form-input">
-                    <option value="1" {% if month == 1 %}selected{% endif %}>Jan</option>
-                    <option value="2" {% if month == 2 %}selected{% endif %}>Feb</option>
-                    <option value="3" {% if month == 3 %}selected{% endif %}>Mar</option>
-                    <option value="4" {% if month == 4 %}selected{% endif %}>Apr</option>
-                    <option value="5" {% if month == 5 %}selected{% endif %}>May</option>
-                    <option value="6" {% if month == 6 %}selected{% endif %}>Jun</option>
-                    <option value="7" {% if month == 7 %}selected{% endif %}>Jul</option>
-                    <option value="8" {% if month == 8 %}selected{% endif %}>Aug</option>
-                    <option value="9" {% if month == 9 %}selected{% endif %}>Sep</option>
-                    <option value="10" {% if month == 10 %}selected{% endif %}>Oct</option>
-                    <option value="11" {% if month == 11 %}selected{% endif %}>Nov</option>
-                    <option value="12" {% if month == 12 %}selected{% endif %}>Dec</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Quick Month Picker</label>
-                <input type="month" id="monthPicker" class="form-input" value="{{ month_key }}" title="Quick month filter">
+                <label class="form-label">Quick month (HTML)</label>
+                <input type="month" id="monthPicker" class="form-input" value="{{ month_key }}" title="Sets monthly view">
             </div>
             <div class="form-group">
                 <label class="form-label">Account Type</label>
@@ -424,6 +426,74 @@
 </div>
 {% endif %}
 
+<!-- Persisted P&L / society snapshot & receivables -->
+<div class="report-card" style="margin-bottom: 1.5rem;">
+    <h3>Financial snapshots &amp; loan interest receivable</h3>
+    <p style="font-size: 0.85rem; color: var(--color-gray-600); margin-bottom: 1rem;">
+        Save a persisted P&amp;L and society balance sheet for a financial year, and sync interest receivable from unpaid EMIs.
+        Charts above stay <strong>live</strong> (recomputed); this section shows the <strong>saved</strong> snapshot for the FY that overlaps your report dates.
+    </p>
+    {% if report_financial_period %}
+    <div style="font-size: 0.85rem; margin-bottom: 1rem; padding: 0.75rem; background: var(--color-gray-50, #f9fafb); border-radius: var(--radius-md);">
+        <strong>Overlapping FY:</strong> {{ report_financial_period.label }}
+        ({{ report_financial_period.start_date|date:"d M Y" }} – {{ report_financial_period.end_date|date:"d M Y" }})
+        {% if report_financial_period.is_active %}<span style="color: #16a34a;">· Active</span>{% endif %}
+    </div>
+    {% if snapshot_pl or snapshot_society %}
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+        {% if snapshot_pl %}
+        <div style="border: 1px solid var(--color-gray-200); border-radius: var(--radius-md); padding: 0.75rem;">
+            <div style="font-size: 0.75rem; text-transform: uppercase; color: var(--color-gray-500); margin-bottom: 0.35rem;">Saved P&amp;L</div>
+            <div style="font-size: 0.8rem;">Total income: <strong>₹{{ snapshot_pl.total_income|inr }}</strong></div>
+            <div style="font-size: 0.8rem;">Total expense: <strong>₹{{ snapshot_pl.total_expense|inr }}</strong></div>
+            <div style="font-size: 0.8rem;">Net surplus: <strong>₹{{ snapshot_pl.net_surplus|inr }}</strong></div>
+            <div style="font-size: 0.75rem; color: var(--color-gray-400); margin-top: 0.35rem;">Calculated {{ snapshot_pl.calculation_date|date:"d M Y H:i" }}{% if snapshot_pl.is_locked %} · <span style="color:#b45309;">Locked</span>{% endif %}</div>
+        </div>
+        {% endif %}
+        {% if snapshot_society %}
+        <div style="border: 1px solid var(--color-gray-200); border-radius: var(--radius-md); padding: 0.75rem;">
+            <div style="font-size: 0.75rem; text-transform: uppercase; color: var(--color-gray-500); margin-bottom: 0.35rem;">Saved society snapshot</div>
+            <div style="font-size: 0.8rem;">Member deposits: <strong>₹{{ snapshot_society.total_member_deposits|inr }}</strong></div>
+            <div style="font-size: 0.8rem;">Loans outstanding: <strong>₹{{ snapshot_society.total_loan_outstanding|inr }}</strong></div>
+            <div style="font-size: 0.8rem;">Interest receivable: <strong>₹{{ snapshot_society.total_interest_receivable|inr }}</strong></div>
+            <div style="font-size: 0.8rem;">Fund balance: <strong>₹{{ snapshot_society.total_fund_balance|inr }}</strong></div>
+        </div>
+        {% endif %}
+    </div>
+    {% else %}
+    <p style="font-size: 0.85rem; color: var(--color-gray-500); margin-bottom: 1rem;">No snapshot saved yet for this FY.</p>
+    {% endif %}
+    {% else %}
+    <p style="font-size: 0.85rem; color: var(--color-gray-500); margin-bottom: 1rem;">
+        No financial period overlaps the current report range.
+        <a href="{% url 'settings' %}">Add a financial year in Settings</a> so snapshots can be tied to a year.
+    </p>
+    {% endif %}
+
+    <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end;">
+        <div>
+            <label class="form-label" for="snapshotPeriodSelect" style="display:block;font-size:0.8rem;margin-bottom:0.25rem;">Save snapshot for period</label>
+            <select id="snapshotPeriodSelect" class="form-input" style="min-width: 220px; padding: 0.4rem 0.6rem;">
+                <option value="">— Active open period —</option>
+                {% for fp in financial_periods %}
+                <option value="{{ fp.id }}" {% if report_financial_period and fp.id == report_financial_period.id %}selected{% endif %}>{{ fp.label }} ({{ fp.start_date|date:"M y" }} – {{ fp.end_date|date:"M y" }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" onclick="saveFinancialSnapshot()" id="saveSnapshotBtn">Save financial snapshot</button>
+    </div>
+    <div id="saveSnapshotResult" style="margin: 0.5rem 0 1rem; font-size: 0.85rem;"></div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; border-top: 1px solid var(--color-gray-200); padding-top: 1rem;">
+        <div>
+            <label class="form-label" for="receivableAsOf" style="display:block;font-size:0.8rem;margin-bottom:0.25rem;">Receivable sync as of</label>
+            <input type="date" id="receivableAsOf" class="form-input" value="{{ end_date|date:'Y-m-d' }}" style="padding: 0.4rem 0.6rem;">
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="syncReceivables()" id="syncReceivablesBtn">Sync loan interest receivables</button>
+    </div>
+    <div id="syncReceivablesResult" style="margin-top: 0.5rem; font-size: 0.85rem;"></div>
+</div>
+
 <!-- Interest Posting & Dividend Distribution -->
 <div class="report-row">
     <div class="report-card">
@@ -483,7 +553,7 @@
     {% if period == 'year' %}
     <div class="distribute-section">
         <p style="font-size: 0.85rem; color: var(--color-gray-600); margin-bottom: 0.75rem;">
-            Distribute FY {{ year }}-{{ year|add:"1" }} profit (₹{{ summary.net_profit|inr }}) to funds using allocation rules.
+            Distribute <strong>{{ fy_window.label }}</strong> profit (₹{{ summary.net_profit|inr }}) to funds using allocation rules.
         </p>
         <button class="btn btn-primary btn-sm" onclick="distributeProfit()" id="distributeBtn"
             {% if summary.net_profit <= 0 %}disabled title="No distributable profit"{% endif %}>
@@ -561,7 +631,18 @@ function updatePeriod() {
     applyReportsFilters();
 }
 
+function syncReportFilterGroups() {
+    var p = document.getElementById('periodSelect');
+    var mg = document.getElementById('fyMonthGroup');
+    var qg = document.getElementById('fyQuarterGroup');
+    if (!p || !mg || !qg) return;
+    var v = p.value;
+    mg.style.display = v === 'month' ? '' : 'none';
+    qg.style.display = v === 'quarter' ? '' : 'none';
+}
+
 function openReportsFilterModal() {
+    syncReportFilterGroups();
     document.getElementById('reportsFilterModal').classList.add('show');
 }
 
@@ -571,22 +652,24 @@ function closeReportsFilterModal() {
 
 function applyReportsFilters() {
     var period = document.getElementById('periodSelect').value;
-    var year = document.getElementById('yearSelect').value;
-    var month = document.getElementById('monthSelect').value;
     var accountType = document.getElementById('accountTypeSelect').value;
-    var monthKey = document.getElementById('monthPicker').value;
+    var monthPicker = document.getElementById('monthPicker');
+    var monthKey = monthPicker && monthPicker.value ? monthPicker.value : '';
+    var fyMonth = document.getElementById('fyMonthSelect');
+    var quarterSel = document.getElementById('quarterSelect');
     closeReportsFilterModal();
     if (monthKey) {
-        var monthUrl = '/reports/?period=month&month_key=' + encodeURIComponent(monthKey);
-        if (accountType) {
-            monthUrl += '&account_type=' + encodeURIComponent(accountType);
-        }
-        window.location.href = monthUrl;
+        var mkUrl = '/reports/?period=month&month_key=' + encodeURIComponent(monthKey);
+        if (accountType) mkUrl += '&account_type=' + encodeURIComponent(accountType);
+        window.location.href = mkUrl;
         return;
     }
-    var url = '/reports/?period=' + period + '&year=' + year;
-    if (period === 'month') {
-        url += '&month=' + month;
+    var url = '/reports/?period=' + encodeURIComponent(period);
+    if (period === 'month' && fyMonth && fyMonth.value) {
+        url += '&month_key=' + encodeURIComponent(fyMonth.value);
+    }
+    if (period === 'quarter' && quarterSel && quarterSel.value) {
+        url += '&quarter=' + encodeURIComponent(quarterSel.value);
     }
     if (accountType) {
         url += '&account_type=' + encodeURIComponent(accountType);
@@ -595,8 +678,9 @@ function applyReportsFilters() {
 }
 
 function clearReportsFilters() {
-    document.getElementById('periodSelect').value = 'month';
-    document.getElementById('monthPicker').value = '';
+    document.getElementById('periodSelect').value = 'year';
+    var mp = document.getElementById('monthPicker');
+    if (mp) mp.value = '';
     document.getElementById('accountTypeSelect').value = '';
     applyReportsFilters();
 }
@@ -647,7 +731,7 @@ function distributeDividend() {
             'X-CSRFToken': window.CSRF_TOKEN,
             'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: 'year={{ year }}&dividend_rate=' + rate
+        body: 'dividend_rate=' + rate
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
@@ -659,6 +743,83 @@ function distributeDividend() {
             btn.disabled = false;
             btn.textContent = 'Distribute Dividend';
         }
+    });
+}
+
+function saveFinancialSnapshot() {
+    var btn = document.getElementById('saveSnapshotBtn');
+    var result = document.getElementById('saveSnapshotResult');
+    var sel = document.getElementById('snapshotPeriodSelect');
+    var fpId = sel ? sel.value : '';
+    if (!confirm('Save or refresh P&L and society snapshot for the selected period?')) return;
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    var body = '';
+    if (fpId) body = 'financial_period_id=' + encodeURIComponent(fpId);
+    fetch('/reports/save-snapshot/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': window.CSRF_TOKEN,
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: body
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            var extra = data.profit_and_loss_updated === false ? ' (P&amp;L was locked; society snapshot refreshed.)' : '';
+            result.innerHTML = '<span style="color: #16a34a;">' + data.message + extra + '</span>';
+            setTimeout(function() { location.reload(); }, 1500);
+        } else {
+            result.innerHTML = '<span style="color: #dc2626;">' + (data.error || 'Failed') + '</span>';
+            btn.disabled = false;
+            btn.textContent = 'Save financial snapshot';
+        }
+    })
+    .catch(function() {
+        result.innerHTML = '<span style="color: #dc2626;">Request failed</span>';
+        btn.disabled = false;
+        btn.textContent = 'Save financial snapshot';
+    });
+}
+
+function syncReceivables() {
+    var btn = document.getElementById('syncReceivablesBtn');
+    var result = document.getElementById('syncReceivablesResult');
+    var asOf = document.getElementById('receivableAsOf');
+    var asOfVal = asOf && asOf.value ? asOf.value : '';
+    if (!confirm('Create/update interest receivable rows for unpaid EMIs due on or before this date?')) return;
+    btn.disabled = true;
+    btn.textContent = 'Syncing...';
+    var body = asOfVal ? 'as_of_date=' + encodeURIComponent(asOfVal) : '';
+    var sel = document.getElementById('snapshotPeriodSelect');
+    if (sel && sel.value) {
+        body += (body ? '&' : '') + 'financial_period_id=' + encodeURIComponent(sel.value);
+    }
+    fetch('/reports/sync-receivables/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': window.CSRF_TOKEN,
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: body
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            result.innerHTML = '<span style="color: #16a34a;">' + data.message + '</span>';
+            btn.disabled = false;
+            btn.textContent = 'Sync loan interest receivables';
+        } else {
+            result.innerHTML = '<span style="color: #dc2626;">' + (data.error || 'Failed') + '</span>';
+            btn.disabled = false;
+            btn.textContent = 'Sync loan interest receivables';
+        }
+    })
+    .catch(function() {
+        result.innerHTML = '<span style="color: #dc2626;">Request failed</span>';
+        btn.disabled = false;
+        btn.textContent = 'Sync loan interest receivables';
     });
 }
 
@@ -674,7 +835,7 @@ function distributeProfit() {
             'X-CSRFToken': window.CSRF_TOKEN,
             'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: 'year={{ year }}'
+        body: ''
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
@@ -688,5 +849,11 @@ function distributeProfit() {
         }
     });
 }
+
+document.addEventListener('DOMContentLoaded', function () {
+    var ps = document.getElementById('periodSelect');
+    if (ps) ps.addEventListener('change', syncReportFilterGroups);
+    syncReportFilterGroups();
+});
 </script>
 {% endblock %}

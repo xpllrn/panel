@@ -27,7 +27,7 @@
     <table>
         <thead>
             <tr>
-                <th>Receipt #</th>
+                <th>Transaction #</th>
                 <th>Date</th>
                 <th>Type</th>
                 <th>Amount</th>
@@ -37,7 +37,7 @@
         <tbody>
             {% for receipt in transactions %}
             <tr>
-                <td>{{ receipt.receipt_number }}</td>
+                <td>{{ receipt.transaction_number }}</td>
                 <td>{{ receipt.created_at|date:"d M Y H:i" }}</td>
                 <td>{{ receipt.get_transaction_type_display }}</td>
                 <td>₹{{ receipt.amount|inr }}</td>

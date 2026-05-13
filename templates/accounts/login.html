@@ -11,7 +11,12 @@
 
 <body class="auth-page">
     <div class="auth-container">
-        <h2>Login</h2>
+        {% if society_config and society_config.society_logo %}
+        <div style="text-align:center; margin-bottom: 0.75rem;">
+            <img src="{{ society_config.society_logo.url }}" alt="{{ society_config.society_name }}" style="width:56px; height:56px; border-radius: 10px; object-fit: cover;">
+        </div>
+        {% endif %}
+        <h2>{% if society_config %}{{ society_config.society_name }} Login{% else %}Login{% endif %}</h2>
 
         {% if messages %}
         {% for message in messages %}

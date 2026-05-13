@@ -1,0 +1,100 @@
+{% extends 'admin/base.html' %}
+{% load static currency_filters %}
+
+{% block title %}Fees - Admin Portal{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/pages/members.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2 class="page-title">Fees</h2>
+    <p class="page-subtitle" style="font-size: 0.85rem; color: var(--color-gray-600); max-width: 42rem;">
+        Fee schedules define rules; fee charges are posted instances. Create or edit schedules in
+        <a href="/admin/accounts/feeschedule/">Django admin</a> if needed.
+    </p>
+</div>
+
+<div class="report-card" style="margin-bottom: 1.5rem;">
+    <h3 style="font-size: 1rem; margin-bottom: 0.75rem;">Fee schedules</h3>
+    <div class="data-table">
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Applies to</th>
+                    <th>Amount / %</th>
+                    <th>Effective</th>
+                    <th>Active</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in schedules %}
+                <tr>
+                    <td><strong>{{ s.name }}</strong></td>
+                    <td>{{ s.get_fee_type_display }}</td>
+                    <td>{{ s.get_applies_to_display }}</td>
+                    <td>{% if s.amount %}₹{{ s.amount|inr }}{% endif %}{% if s.percentage %}{% if s.amount %} · {% endif %}{{ s.percentage }}%{% endif %}</td>
+                    <td>{{ s.effective_date|date:"d M Y" }}</td>
+                    <td>{% if s.is_active %}Yes{% else %}No{% endif %}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" style="color: var(--color-gray-500);">No fee schedules. Add via Django admin.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="page-header" style="margin-top: 1rem;">
+    <h3 class="page-title" style="font-size: 1.05rem;">Fee charges</h3>
+    <form method="get" class="search-form" action="">
+        <input type="text" name="q" placeholder="Search member name, ID, fee name…" value="{{ search_query|default:'' }}" class="search-input">
+        <button type="submit" class="btn btn-primary btn-sm">Search</button>
+        {% if search_query %}<a href="{% url 'finance_fees' %}" class="clear-search">Clear</a>{% endif %}
+    </form>
+</div>
+
+<div class="data-table">
+    <table>
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Member</th>
+                <th>Fee</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Loan</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in charges_page %}
+            <tr>
+                <td>{{ c.created_at|date:"d M Y" }}</td>
+                <td>{{ c.user.display_name }}</td>
+                <td>{{ c.fee_schedule.name }}</td>
+                <td>₹{{ c.amount|inr }}</td>
+                <td>{{ c.get_status_display }}</td>
+                <td>{% if c.loan_account %}{{ c.loan_account.loan_number }}{% else %}—{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" style="color: var(--color-gray-500);">No fee charges yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if charges_page.paginator.num_pages > 1 %}
+<div style="margin-top: 1rem; font-size: 0.85rem;">
+    {% if charges_page.has_previous %}
+    <a href="?page={{ charges_page.previous_page_number }}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}">Previous</a>
+    {% endif %}
+    <span style="margin: 0 0.5rem;">Page {{ charges_page.number }} of {{ charges_page.paginator.num_pages }}</span>
+    {% if charges_page.has_next %}
+    <a href="?page={{ charges_page.next_page_number }}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}">Next</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}
