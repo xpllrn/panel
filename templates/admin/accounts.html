@@ -118,23 +118,29 @@
 
 {% block content %}
 <div class="page-header">
-    <h2 class="page-title">Account Book</h2>
-    <form id="accountsSearchForm" class="search-form" method="get" action="">
-        <input type="text" name="q" placeholder="Search members..."
-            value="{{ search_query|default:'' }}" class="search-input" aria-label="Search members">
-        <input type="hidden" id="accounts-filter-member-status" name="member_status" value="{{ selected_member_status|default:'' }}">
-        <input type="hidden" id="accounts-filter-account-type" name="account_type" value="{{ selected_account_type|default:'' }}">
-        <input type="hidden" id="accounts-filter-account-status" name="account_status" value="{{ selected_account_status|default:'' }}">
-        <input type="hidden" id="accounts-filter-date-filter" name="date_filter" value="{{ date_filter|default:'member_registered' }}">
-        <input type="hidden" id="accounts-filter-date-from" name="date_from" value="{{ date_from|default:'' }}">
-        <input type="hidden" id="accounts-filter-date-to" name="date_to" value="{{ date_to|default:'' }}">
-        <button type="button" class="btn btn-secondary btn-sm" onclick="openAccountsFilterModal()">Filters</button>
-        <button type="submit" class="btn btn-primary btn-sm">Filter</button>
-        {% if search_query or selected_account_type or selected_account_status or selected_member_status or date_from or date_to %}
-        <a href="{% url 'accounts' %}" class="clear-search">Clear</a>
-        {% endif %}
-    </form>
-    <a href="{% url 'export_accounts' %}" class="btn btn-secondary btn-sm">Export Excel</a>
+    <div class="page-header-top">
+        <h2 class="page-title">Account Book</h2>
+        <div class="page-actions">
+            <a href="{% url 'export_accounts' %}" class="btn btn-secondary btn-sm">Export Excel</a>
+        </div>
+    </div>
+    <div class="page-toolbar">
+        <form id="accountsSearchForm" class="search-form" method="get" action="">
+            <input type="text" name="q" placeholder="Search members..."
+                value="{{ search_query|default:'' }}" class="search-input" aria-label="Search members">
+            <input type="hidden" id="accounts-filter-member-status" name="member_status" value="{{ selected_member_status|default:'' }}">
+            <input type="hidden" id="accounts-filter-account-type" name="account_type" value="{{ selected_account_type|default:'' }}">
+            <input type="hidden" id="accounts-filter-account-status" name="account_status" value="{{ selected_account_status|default:'' }}">
+            <input type="hidden" id="accounts-filter-date-filter" name="date_filter" value="{{ date_filter|default:'member_registered' }}">
+            <input type="hidden" id="accounts-filter-date-from" name="date_from" value="{{ date_from|default:'' }}">
+            <input type="hidden" id="accounts-filter-date-to" name="date_to" value="{{ date_to|default:'' }}">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="openAccountsFilterModal()">Filters</button>
+            <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+            {% if search_query or selected_account_type or selected_account_status or selected_member_status or date_from or date_to %}
+            <a href="{% url 'accounts' %}" class="clear-search">Clear</a>
+            {% endif %}
+        </form>
+    </div>
 </div>
 
 {% if search_query or selected_account_type or selected_account_status or selected_member_status or date_from or date_to %}

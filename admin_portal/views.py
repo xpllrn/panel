@@ -185,9 +185,9 @@ def home_view(request):
     now = timezone.now()
     today = now.date()
 
-    # Member stats
-    total_members = User.objects.filter(is_deleted=False).count()
-    active_members = User.objects.filter(is_deleted=False, status="active").count()
+    # Member stats (exclude admin/staff accounts)
+    total_members = User.objects.filter(is_deleted=False, is_superuser=False, role="member").count()
+    active_members = User.objects.filter(is_deleted=False, is_superuser=False, role="member", status="active").count()
 
     # Account stats
     total_accounts = MemberAccount.objects.filter(is_deleted=False).count()
@@ -355,8 +355,8 @@ def members_view(request):
     date_to = request.GET.get("date_to", "").strip()
     per_page = 25
 
-    # Base queryset
-    users = User.objects.filter(is_deleted=False).order_by("-date_joined")
+    # Base queryset (exclude admin/staff accounts from member list)
+    users = User.objects.filter(is_deleted=False, is_superuser=False, role="member").order_by("-date_joined")
 
     # Apply search filter if query provided
     if query:
@@ -394,9 +394,9 @@ def members_view(request):
     except EmptyPage:
         users_page = paginator.page(paginator.num_pages)
 
-    # Summary stats
-    total_members = User.objects.filter(is_deleted=False).count()
-    active_members = User.objects.filter(is_deleted=False, status="active").count()
+    # Summary stats (exclude admin/staff accounts)
+    total_members = User.objects.filter(is_deleted=False, is_superuser=False, role="member").count()
+    active_members = User.objects.filter(is_deleted=False, is_superuser=False, role="member", status="active").count()
 
     member_status_choices = [
         ("active", "Active"),
@@ -853,6 +853,8 @@ def search_members_view(request):
         | Q(last_name__icontains=query)
         | Q(member_id__icontains=query),
         is_deleted=False,
+        is_superuser=False,
+        role="member",
     )[:10]
 
     results = [

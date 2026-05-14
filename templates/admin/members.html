@@ -9,27 +9,33 @@
 
 {% block content %}
 <div class="page-header">
-    <h2 class="page-title">Members</h2>
-    <div class="header-stats">
-        <span class="stat-item">Total: <strong>{{ total_members }}</strong></span>
-        <span class="stat-item">Active: <strong>{{ active_members }}</strong></span>
+    <div class="page-header-top">
+        <h2 class="page-title">Members</h2>
+        <div class="header-stats">
+            <span class="stat-item">Total: <strong>{{ total_members }}</strong></span>
+            <span class="stat-item">Active: <strong>{{ active_members }}</strong></span>
+        </div>
+        <div class="page-actions">
+            <a href="{% url 'export_members' %}" class="btn btn-secondary btn-sm">Export Excel</a>
+            <button class="btn btn-primary btn-sm" onclick="showAddMemberModal()">+ Add Member</button>
+        </div>
     </div>
-    <form id="membersSearchForm" class="search-form" method="get" action="">
-        <input type="text" name="q" placeholder="Search members..." value="{{ search_query|default:'' }}"
-            class="search-input" aria-label="Search members">
-        <input type="hidden" id="filter-status" name="status" value="{{ selected_status|default:'' }}">
-        <input type="hidden" id="filter-member-type" name="member_type" value="{{ selected_member_type|default:'' }}">
-        <input type="hidden" id="filter-date-filter" name="date_filter" value="{{ date_filter|default:'registered' }}">
-        <input type="hidden" id="filter-date-from" name="date_from" value="{{ date_from|default:'' }}">
-        <input type="hidden" id="filter-date-to" name="date_to" value="{{ date_to|default:'' }}">
-        <button type="button" class="btn btn-secondary btn-sm" onclick="openMembersFilterModal()">Filters</button>
-        <button type="submit" class="btn btn-primary btn-sm">Filter</button>
-        {% if search_query or selected_status or selected_member_type or date_from or date_to %}
-        <a href="{% url 'members' %}" class="clear-search">Clear</a>
-        {% endif %}
-    </form>
-    <a href="{% url 'export_members' %}" class="btn btn-secondary btn-sm">Export Excel</a>
-    <button class="btn btn-primary btn-sm" onclick="showAddMemberModal()">+ Add Member</button>
+    <div class="page-toolbar">
+        <form id="membersSearchForm" class="search-form" method="get" action="">
+            <input type="text" name="q" placeholder="Search members..." value="{{ search_query|default:'' }}"
+                class="search-input" aria-label="Search members">
+            <input type="hidden" id="filter-status" name="status" value="{{ selected_status|default:'' }}">
+            <input type="hidden" id="filter-member-type" name="member_type" value="{{ selected_member_type|default:'' }}">
+            <input type="hidden" id="filter-date-filter" name="date_filter" value="{{ date_filter|default:'registered' }}">
+            <input type="hidden" id="filter-date-from" name="date_from" value="{{ date_from|default:'' }}">
+            <input type="hidden" id="filter-date-to" name="date_to" value="{{ date_to|default:'' }}">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="openMembersFilterModal()">Filters</button>
+            <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+            {% if search_query or selected_status or selected_member_type or date_from or date_to %}
+            <a href="{% url 'members' %}" class="clear-search">Clear</a>
+            {% endif %}
+        </form>
+    </div>
 </div>
 
 {% if search_query or selected_status or selected_member_type or date_from or date_to %}
