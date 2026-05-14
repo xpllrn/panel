@@ -33,9 +33,9 @@ class ComputeLivePositionTests(TestCase):
 
     def setUp(self):
         self.fp = FinancialPeriod.objects.create(
-            label="FY 2025-26",
-            start_date=date(2025, 4, 1),
-            end_date=date(2026, 3, 31),
+            label="FY 2026-27",
+            start_date=date(2026, 4, 1),
+            end_date=date(2027, 3, 31),
             status="open",
             is_active=True,
         )
@@ -100,6 +100,7 @@ class ComputeLivePositionTests(TestCase):
             tenure_months=12,
             status="approved",
             created_by=admin,
+            application_date=date.today(),
         )
         LoanAccount.objects.create(
             loan_number="LN-2026-00100",
@@ -128,6 +129,7 @@ class ComputeLivePositionTests(TestCase):
             tenure_months=12,
             status="approved",
             created_by=admin,
+            application_date=date.today(),
         )
         loan_ac = LoanAccount.objects.create(
             loan_number="LN-2026-00101",
@@ -220,9 +222,9 @@ class GetMainAccountTests(TestCase):
 
     def setUp(self):
         self.fp = FinancialPeriod.objects.create(
-            label="FY 2025-26",
-            start_date=date(2025, 4, 1),
-            end_date=date(2026, 3, 31),
+            label="FY 2026-27",
+            start_date=date(2026, 4, 1),
+            end_date=date(2027, 3, 31),
             status="open",
             is_active=True,
         )
@@ -291,7 +293,7 @@ class GetMainAccountTests(TestCase):
     def test_financial_period_data_included(self):
         """The response includes financial period metadata."""
         result = society_service.get_main_account(financial_period=self.fp)
-        self.assertEqual(result["financial_period"]["label"], "FY 2025-26")
+        self.assertEqual(result["financial_period"]["label"], "FY 2026-27")
         self.assertEqual(result["financial_period"]["status"], "open")
 
     def test_no_active_period_returns_none_fp(self):
