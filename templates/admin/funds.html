@@ -9,24 +9,30 @@
 
 {% block content %}
 <div class="page-header">
-    <h2 class="page-title">Fund Management</h2>
-    <div class="header-stats">
-        <span class="stat-item">Total Funds: <strong>{{ total_funds }}</strong></span>
-        <span class="stat-item">Total Balance: <strong>₹{{ total_balance|inr }}</strong></span>
+    <div class="page-header-top">
+        <h2 class="page-title">Fund Management</h2>
+        <div class="header-stats">
+            <span class="stat-item">Total Funds: <strong>{{ total_funds }}</strong></span>
+            <span class="stat-item">Total Balance: <strong>₹{{ total_balance|inr }}</strong></span>
+        </div>
+        <div class="page-actions">
+            <a href="{% url 'allocation_rules' %}" class="btn btn-secondary btn-sm">Allocation Rules</a>
+            <button class="btn btn-primary btn-sm" onclick="showAddFundModal()">+ Add Fund</button>
+        </div>
     </div>
-    <form id="fundsSearchForm" class="search-form" method="get" action="">
-        <input type="text" name="q" placeholder="Search funds..." value="{{ search_query|default:'' }}"
-            class="search-input" aria-label="Search funds">
-        <input type="hidden" id="funds-filter-date-from" name="date_from" value="{{ date_from|default:'' }}">
-        <input type="hidden" id="funds-filter-date-to" name="date_to" value="{{ date_to|default:'' }}">
-        <button type="button" class="btn btn-secondary btn-sm" onclick="openFundsFilterModal()">Filters</button>
-        <button type="submit" class="btn btn-primary btn-sm">Search</button>
-        {% if search_query or date_from or date_to %}
-        <a href="{% url 'funds' %}" class="clear-search">Clear</a>
-        {% endif %}
-    </form>
-    <a href="{% url 'allocation_rules' %}" class="btn btn-secondary btn-sm">Allocation Rules</a>
-    <button class="btn btn-primary btn-sm" onclick="showAddFundModal()">+ Add Fund</button>
+    <div class="page-toolbar">
+        <form id="fundsSearchForm" class="search-form" method="get" action="">
+            <input type="text" name="q" placeholder="Search funds..." value="{{ search_query|default:'' }}"
+                class="search-input" aria-label="Search funds">
+            <input type="hidden" id="funds-filter-date-from" name="date_from" value="{{ date_from|default:'' }}">
+            <input type="hidden" id="funds-filter-date-to" name="date_to" value="{{ date_to|default:'' }}">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="openFundsFilterModal()">Filters</button>
+            <button type="submit" class="btn btn-primary btn-sm">Search</button>
+            {% if search_query or date_from or date_to %}
+            <a href="{% url 'funds' %}" class="clear-search">Clear</a>
+            {% endif %}
+        </form>
+    </div>
 </div>
 
 {% if search_query or date_from or date_to %}

@@ -9,35 +9,41 @@
 
 {% block content %}
 <div class="page-header">
-    <h2 class="page-title">Loans</h2>
-    <div class="header-stats">
-        <span class="stat-item">Total: <strong>{{ total_loans }}</strong></span>
-        <span class="stat-item">Active: <strong>{{ active_loans }}</strong></span>
-        <span class="stat-item">Disbursed: <strong>{{ total_disbursed|inr }}</strong></span>
-        <span class="stat-item">Outstanding: <strong>{{ total_outstanding|inr }}</strong></span>
+    <div class="page-header-top">
+        <h2 class="page-title">Loans</h2>
+        <div class="header-stats">
+            <span class="stat-item">Total: <strong>{{ total_loans }}</strong></span>
+            <span class="stat-item">Active: <strong>{{ active_loans }}</strong></span>
+            <span class="stat-item">Disbursed: <strong>{{ total_disbursed|inr }}</strong></span>
+            <span class="stat-item">Outstanding: <strong>{{ total_outstanding|inr }}</strong></span>
+        </div>
+        <div class="page-actions">
+            <a href="{% url 'export_loans' %}" class="btn btn-secondary btn-sm">Export Excel</a>
+            <button class="btn btn-primary btn-sm" onclick="showAddLoanModal()">+ Add Loan</button>
+        </div>
     </div>
-    <form class="search-form" method="get" action="">
-        <input type="text" name="q" placeholder="Search by loan no, member name..."
-            value="{{ search_query|default:'' }}" class="search-input" aria-label="Search loans">
-        <select name="type" class="filter-select" aria-label="Filter by loan type">
-            <option value="">All Types</option>
-            {% for value, label in loan_type_choices %}
-            <option value="{{ value }}" {% if selected_type == value %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-        </select>
-        <select name="status" class="filter-select" aria-label="Filter by status">
-            <option value="">All Status</option>
-            {% for value, label in status_choices %}
-            <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-        </select>
-        <button type="submit" class="btn btn-primary btn-sm">Filter</button>
-        {% if search_query or selected_type or selected_status %}
-        <a href="{% url 'loans' %}" class="clear-search">Clear</a>
-        {% endif %}
-    </form>
-    <a href="{% url 'export_loans' %}" class="btn btn-secondary btn-sm">Export Excel</a>
-    <button class="btn btn-primary btn-sm" onclick="showAddLoanModal()">+ Add Loan</button>
+    <div class="page-toolbar">
+        <form class="search-form" method="get" action="">
+            <input type="text" name="q" placeholder="Search by loan no, member name..."
+                value="{{ search_query|default:'' }}" class="search-input" aria-label="Search loans">
+            <select name="type" class="filter-select" aria-label="Filter by loan type">
+                <option value="">All Types</option>
+                {% for value, label in loan_type_choices %}
+                <option value="{{ value }}" {% if selected_type == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <select name="status" class="filter-select" aria-label="Filter by status">
+                <option value="">All Status</option>
+                {% for value, label in status_choices %}
+                <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+            {% if search_query or selected_type or selected_status %}
+            <a href="{% url 'loans' %}" class="clear-search">Clear</a>
+            {% endif %}
+        </form>
+    </div>
 </div>
 
 {% if search_query or selected_type or selected_status %}

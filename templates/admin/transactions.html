@@ -9,26 +9,32 @@
 
 {% block content %}
 <div class="page-header">
-    <h2 class="page-title">Transactions</h2>
-    <div class="header-stats">
-        <span class="stat-item">Total: <strong>{{ total_receipts }}</strong></span>
-        <span class="stat-item">Today: <strong>{{ today_receipts }}</strong></span>
+    <div class="page-header-top">
+        <h2 class="page-title">Transactions</h2>
+        <div class="header-stats">
+            <span class="stat-item">Total: <strong>{{ total_receipts }}</strong></span>
+            <span class="stat-item">Today: <strong>{{ today_receipts }}</strong></span>
+        </div>
+        <div class="page-actions">
+            <a href="{% url 'export_transactions' %}" class="btn btn-secondary btn-sm">Export Excel</a>
+            <button class="btn btn-primary btn-sm" onclick="showAddReceiptModal()">+ New Transaction</button>
+        </div>
     </div>
-    <form id="receiptsSearchForm" class="search-form" method="get" action="">
-        <input type="text" name="q" placeholder="Search by transaction no, member..."
-            value="{{ search_query|default:'' }}" class="search-input" aria-label="Search receipts">
-        <input type="hidden" id="receipts-filter-type" name="type" value="{{ selected_type|default:'' }}">
-        <input type="hidden" id="receipts-filter-mode" name="mode" value="{{ selected_mode|default:'' }}">
-        <input type="hidden" id="receipts-filter-date-from" name="date_from" value="{{ date_from|default:'' }}">
-        <input type="hidden" id="receipts-filter-date-to" name="date_to" value="{{ date_to|default:'' }}">
-        <button type="button" class="btn btn-secondary btn-sm" onclick="openReceiptsFilterModal()">Filters</button>
-        <button type="submit" class="btn btn-primary btn-sm">Filter</button>
-        {% if search_query or selected_type or selected_mode or date_from or date_to %}
-        <a href="{% url 'transactions' %}" class="clear-search">Clear</a>
-        {% endif %}
-    </form>
-    <a href="{% url 'export_transactions' %}" class="btn btn-secondary btn-sm">Export Excel</a>
-    <button class="btn btn-primary btn-sm" onclick="showAddReceiptModal()">+ New Transaction</button>
+    <div class="page-toolbar">
+        <form id="receiptsSearchForm" class="search-form" method="get" action="">
+            <input type="text" name="q" placeholder="Search by transaction no, member..."
+                value="{{ search_query|default:'' }}" class="search-input" aria-label="Search receipts">
+            <input type="hidden" id="receipts-filter-type" name="type" value="{{ selected_type|default:'' }}">
+            <input type="hidden" id="receipts-filter-mode" name="mode" value="{{ selected_mode|default:'' }}">
+            <input type="hidden" id="receipts-filter-date-from" name="date_from" value="{{ date_from|default:'' }}">
+            <input type="hidden" id="receipts-filter-date-to" name="date_to" value="{{ date_to|default:'' }}">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="openReceiptsFilterModal()">Filters</button>
+            <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+            {% if search_query or selected_type or selected_mode or date_from or date_to %}
+            <a href="{% url 'transactions' %}" class="clear-search">Clear</a>
+            {% endif %}
+        </form>
+    </div>
 </div>
 
 {% if search_query or selected_type or selected_mode or date_from or date_to %}
