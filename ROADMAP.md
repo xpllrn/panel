@@ -11,11 +11,11 @@
 |---|---|---|
 | 0 | Services layer (`accounts/services/`) shared by panel + API | ✅ Done |
 | A | Stabilize the diagram — instruments, FY lifecycle, locked-P&L distribute | ✅ Done |
-| **B** | **Running engine — interest, fees, society live totals, surplus posting** | **🟡 In progress — B1–B9 done, B10 remaining** |
+| **B** | **Running engine — interest, fees, society live totals, surplus posting** | **✅ Done** |
 | C | MCP server (Panel ERP as tools for AI agents) | ⚪ Not started |
 | D | Polish — docs, smoke script, perf | 🟡 D1 done |
 
-**👉 Next up: Phase B10 — Cross-product engine + fee + surplus tests.** Idempotency, CD+FD+OD+RD+Loan in one run, locked-P&L distribute, auto-fees.
+**👉 Phase B complete.** All engine, fee, and surplus services are shipped with full test coverage. Phase C (MCP server) and Phase D (polish) are next when ready.
 
 ---
 
@@ -34,10 +34,9 @@ Last updated: 2026-05-14.
 
 ## 🗺️ What's left, in plain language
 
-1. **B10** — cross-product engine + fee + surplus integration tests.
-2. **B7/B8 follow-ups** — REST endpoints + UI panels for the already-shipped exposure & eligibility services.
-3. **Phase C — MCP server** — B1–B5 gate passed. ✅ Unblocked.
-4. **Phase D — Polish** — refresh `DATABASE.md` / `README.md`, smoke script, pagination + caching.
+1. **B7/B8 follow-ups** — REST endpoints + UI panels for the already-shipped exposure & eligibility services.
+2. **Phase C — MCP server** — B1–B5 gate passed. ✅ Unblocked.
+3. **Phase D — Polish** — refresh `DATABASE.md` / `README.md`, smoke script, pagination + caching.
 
 ---
 
@@ -179,7 +178,7 @@ Every change from Phase A onwards lands the new logic in `accounts/services/` an
 | B7 | Member-exposure service | ✅ | `services/exposure.py` + 7 tests. **REST + UI panel still pending.** |
 | B8 | Loan-eligibility pre-check service | ✅ | `services/eligibility.py` + 11 tests. **REST + UI panel still pending.** |
 | B9 | Surplus distribution service | ✅ | `services/surplus.py` posts fund credits debiting Surplus / crediting funds. Idempotent. |
-| B10 | Cross-product engine + fee + surplus tests | ⚪ | Idempotency, CD+FD+OD+RD+Loan in one run, locked-P&L distribute, auto-fees. |
+| B10 | Cross-product engine + fee + surplus tests | ✅ | Full lifecycle integration test: accounts → engine → fees → close → distribute. Idempotency verified. |
 
 **Exit:** `python manage.py run_interest_engine` produces deterministic, audit-logged Transactions across all account types; FY close → P&L lock → distribute → fund credit happens via service calls (not view-internal logic).
 
@@ -257,14 +256,9 @@ C1 stack/skeleton · C2 resources (`panelerp://…`) · C3 tools · C4 prompts �
 
 ```
 Phase 0  ─►  Phase A  ─►  Phase B  ─►  Phase C  ─►  Phase D
-   ✅          ✅       (nearly done)   (unblocked) (queued)
+   ✅          ✅           ✅        (unblocked) (queued)
 
-Phase B sequencing:
-  B1 ─► B2 ─► B3 ─► B4 ─► B5 ─► (B6, B9) ─► B10
-  ✅    ✅    ✅    ✅    ✅    ✅   ✅     ▲
-                                              │
-                                              └── you are here
-                                                  B7, B8 services landed early; REST + UI later
+Phase B: ALL DONE (B1–B10 ✅)
 ```
 
 Why this order:
@@ -311,7 +305,7 @@ Every diagram element with a model gained a working end-to-end path. Half-wires 
 </details>
 
 <details>
-<summary><strong>Phase B partial — B1 / B2 / B3 / B4 / B5 / B6 / B7 / B8 / B9 · ✅ complete</strong></summary>
+<summary><strong>Phase B — B1–B10 · ✅ complete</strong></summary>
 
 - [x] **B1. Unified Interest Engine.** New `accounts/services/interest_engine.py` with three public entry points:
   - `accrue_deposits(*, as_of=, financial_period=, actor=, ip_address=, audit_via=)` — iterates active deposit accounts (CD/FD/RD/Sukanya/Suputra; `share` + `od` excluded), calls `InterestCalculatorService.daily_simple_interest`, posts via `transaction_service.post_transaction(transaction_type="interest", payment_mode="internal", transaction_date=as_of)` (one TXN number, balance bump, no `Instrument`), bumps `accrued_interest` + `last_interest_calc_date`, creates `InterestPayout(status="credited")`, writes one aggregated `AuditLog`.
@@ -389,6 +383,12 @@ Every diagram element with a model gained a working end-to-end path. Half-wires 
   **Validation chain:** no P&L → `NotFoundError`; P&L not locked → `ValidationError`; `net_surplus <= 0` → `ValidationError`; no active rules → `ValidationError`.
 
   **Tests:** 17 new tests in `accounts/tests_services_surplus.py` — allocation computation (percentage, fixed, max_cap, min_threshold, inactive rules), distribution (credits funds, idempotent, rejects missing/unlocked/zero P&L, rejects no rules, updates P&L total, creates FundTransactions, audit log, API marker).
+
+- [x] **B10. Cross-product engine + fee + surplus integration tests.** New `accounts/tests_phase_b10_integration.py` with two test classes:
+  - `FullLifecycleIntegrationTest` — 11-step end-to-end test: open accounts (CD/FD/RD) → approve loan (auto processing fee) → membership fee → run interest engine (deposits + loans) → record EMI (receivable reconciled) → late-payment sweep → annual maintenance sweep → idempotency re-runs → society live position → persist snapshot → FY close → surplus distribution → verify fund credits + audit trail.
+  - `InterestEngineMultiAccountTest` — verifies all 5 eligible deposit types (CD/FD/RD/Sukanya/Suputra) get interest in one engine run; share and OD excluded; idempotent on same day; `run_full_engine` runs both sides.
+
+  **Phase B exit criteria met:** `python manage.py run_interest_engine` produces deterministic, audit-logged Transactions across all account types; FY close → P&L lock → distribute → fund credit happens entirely via service calls.
 
 </details>
 
