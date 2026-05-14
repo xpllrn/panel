@@ -19,6 +19,7 @@ from accounts.models import (
     AuditLog,
     FundAccount,
     FundTransaction,
+    Instrument,
     LoanAccount,
     LoanApplication,
     LoanRepayment,
@@ -276,6 +277,71 @@ class TransactionServiceTests(TestCase):
         loan.refresh_from_db()
         self.assertEqual(loan.emis_paid, 1)
 
+    def test_post_transaction_cash_does_not_create_instrument(self):
+        """Cash postings leave ``Transaction.instrument`` unset."""
+        txn = txn_service.post_transaction(
+            member_account_id=self.account.id,
+            transaction_type="credit",
+            amount=Decimal("10"),
+            payment_mode="cash",
+            actor=self.admin,
+        )
+        self.assertIsNone(txn.instrument_id)
+
+    def test_post_transaction_neft_creates_instrument(self):
+        """Non-cash mode creates an Instrument linked to the new Transaction."""
+        txn = txn_service.post_transaction(
+            member_account_id=self.account.id,
+            transaction_type="credit",
+            amount=Decimal("250"),
+            payment_mode="neft",
+            reference_number="UTR123456",
+            instrument_payload={"reference_number": "UTR123456"},
+            actor=self.admin,
+        )
+        self.assertIsNotNone(txn.instrument_id)
+        inst = Instrument.objects.get(id=txn.instrument_id)
+        self.assertEqual(inst.instrument_type, "neft")
+        self.assertEqual(inst.amount, Decimal("250"))
+        self.assertEqual(inst.reference_number, "UTR123456")
+
+    def test_post_transaction_invalid_instrument_ifsc_raises_validation(self):
+        """Bad drawer IFSC in instrument_payload raises ValidationError."""
+        with self.assertRaises(ValidationError):
+            txn_service.post_transaction(
+                member_account_id=self.account.id,
+                transaction_type="credit",
+                amount=Decimal("10"),
+                payment_mode="cheque",
+                reference_number="CHQ001",
+                instrument_payload={"drawer_ifsc": "BADIFSC"},
+                actor=self.admin,
+            )
+
+    def test_post_transactions_bulk_non_cash_shares_one_instrument(self):
+        """Bulk NEFT lines attach the same Instrument whose amount is the line sum."""
+        lines = [
+            {"account_id": self.account.id, "transaction_type": "credit", "amount": "100"},
+            {"account_id": self.account.id, "transaction_type": "credit", "amount": "50"},
+        ]
+        result = txn_service.post_transactions_bulk(
+            user_id=self.member.id,
+            lines=lines,
+            payment_mode="neft",
+            reference_number="UTRBULK1",
+            instrument_payload={"reference_number": "UTRBULK1"},
+            actor=self.admin,
+        )
+        txns = result["transactions"]
+        self.assertEqual(len(txns), 2)
+        i0 = txns[0].instrument_id
+        i1 = txns[1].instrument_id
+        self.assertIsNotNone(i0)
+        self.assertEqual(i0, i1)
+        inst = Instrument.objects.get(id=i0)
+        self.assertEqual(inst.amount, Decimal("150"))
+        self.assertEqual(inst.reference_number, "UTRBULK1")
+
     # ------------------------------------------------------------------
     # post_transactions_bulk
     # ------------------------------------------------------------------
@@ -363,9 +429,27 @@ class TransactionServiceTests(TestCase):
         self.assertEqual(voucher.total_amount, Decimal("500"))
         self.assertEqual(VoucherEntry.objects.filter(voucher=voucher).count(), 2)
         self.assertRegex(voucher.voucher_number, r"^VCR-\d{4}-\d{5}$")
+        self.assertIsNone(voucher.instrument_id)
 
         self.account.refresh_from_db()
         self.assertEqual(self.account.balance, balance_before)
+
+    def test_post_voucher_neft_creates_instrument_on_voucher(self):
+        """Staging a non-cash voucher attaches one Instrument (total = line sum)."""
+        lines = [{"account_id": self.account.id, "transaction_type": "credit", "amount": "75"}]
+        voucher = txn_service.post_voucher(
+            user_id=self.member.id,
+            voucher_type="receipt",
+            lines=lines,
+            payment_mode="neft",
+            reference_number="VUTR-V-1",
+            instrument_payload={"reference_number": "VUTR-V-1"},
+            actor=self.admin,
+        )
+        self.assertIsNotNone(voucher.instrument_id)
+        inst = Instrument.objects.get(id=voucher.instrument_id)
+        self.assertEqual(inst.instrument_type, "neft")
+        self.assertEqual(inst.amount, Decimal("75"))
 
     def test_post_voucher_invalid_voucher_type_defaults_to_receipt(self):
         """An unknown voucher_type is silently normalised to 'receipt' (mirrors prior view behaviour)."""
@@ -458,6 +542,7 @@ class TransactionServiceTests(TestCase):
         self.assertEqual(voucher.voucher_type, "receipt")
         self.assertEqual(voucher.total_amount, Decimal("250"))
         self.assertEqual(VoucherEntry.objects.filter(voucher=voucher).count(), 1)
+        self.assertIsNone(voucher.instrument_id)
 
         self.account.refresh_from_db()
         self.assertEqual(self.account.balance, Decimal("0"))

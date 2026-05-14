@@ -252,6 +252,11 @@
                 </div>
             </div>
 
+            <div class="receipt-section" id="modal-instrument-section" style="display: none;">
+                <div class="receipt-section-title">Payment instrument</div>
+                <div class="receipt-description" id="modal-instrument-body"></div>
+            </div>
+
             <!-- Description -->
             <div class="receipt-section" id="modal-description-section" style="display: none;">
                 <div class="receipt-section-title">Description</div>
@@ -331,12 +336,37 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Payment Mode *</label>
-                    <select name="payment_mode" class="form-input" required>
+                    <select name="payment_mode" id="add-receipt-payment-mode" class="form-input" required>
                         {% for value, label in payment_mode_choices %}
                         <option value="{{ value }}">{{ label }}</option>
                         {% endfor %}
                     </select>
                     <small class="form-hint">Cash transactions post directly unless you check 'Use voucher'.</small>
+                </div>
+                <div id="instrument-fields-panel" class="form-group" style="display:none;">
+                    <div class="form-label">Payment instrument details</div>
+                    <div id="instrument-cheque-block" style="display:none;">
+                        <label class="form-label">Cheque number (optional if set in Reference above)</label>
+                        <input type="text" id="inst-cheque-number" class="form-input" maxlength="30" autocomplete="off">
+                        <label class="form-label">Drawer name</label>
+                        <input type="text" id="inst-drawer-name" class="form-input" maxlength="200" autocomplete="off">
+                        <label class="form-label">Drawer bank</label>
+                        <input type="text" id="inst-drawer-bank" class="form-input" maxlength="200" autocomplete="off">
+                        <label class="form-label">Drawer IFSC</label>
+                        <input type="text" id="inst-drawer-ifsc" class="form-input" maxlength="11" autocomplete="off" placeholder="ABCD0123456">
+                        <label class="form-label">Cheque date</label>
+                        <input type="date" id="inst-cheque-date" class="form-input">
+                    </div>
+                    <div id="instrument-upi-block" style="display:none;">
+                        <label class="form-label">UPI VPA</label>
+                        <input type="text" id="inst-upi-vpa" class="form-input" maxlength="100" autocomplete="off" placeholder="member@upi">
+                        <label class="form-label">UTR / reference</label>
+                        <input type="text" id="inst-upi-reference" class="form-input" maxlength="100" autocomplete="off">
+                    </div>
+                    <div id="instrument-transfer-block" style="display:none;">
+                        <label class="form-label">UTR / bank reference</label>
+                        <input type="text" id="inst-bank-reference" class="form-input" maxlength="100" autocomplete="off">
+                    </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Fund Settlement (optional)</label>
@@ -396,12 +426,13 @@
                     <th>Type</th>
                     <th>Member</th>
                     <th class="voucher-col-amount">Amount</th>
+                    <th>Pay mode</th>
                     <th>Status</th>
                     <th class="voucher-col-action">Action</th>
                 </tr>
             </thead>
             <tbody id="voucher-table-body">
-                <tr><td colspan="7" class="empty-state">Loading vouchers…</td></tr>
+                <tr><td colspan="8" class="empty-state">Loading vouchers…</td></tr>
             </tbody>
         </table>
     </div>

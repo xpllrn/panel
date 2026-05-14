@@ -637,10 +637,13 @@ class Transaction(models.Model):
     PAYMENT_MODE_CHOICES = [
         ("cash", "Cash"),
         ("cheque", "Cheque"),
+        ("dd", "Demand Draft"),
         ("online", "Online Transfer"),
         ("neft", "NEFT"),
         ("rtgs", "RTGS"),
         ("upi", "UPI"),
+        ("imps", "IMPS"),
+        ("internal", "Internal Transfer"),
     ]
 
     # Core Fields
@@ -717,6 +720,14 @@ class Voucher(models.Model):
         "FundAccount", on_delete=models.SET_NULL, blank=True, null=True, related_name="vouchers_transferred"
     )
     transferred_at = models.DateTimeField(blank=True, null=True)
+    instrument = models.ForeignKey(
+        Instrument,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="vouchers",
+        verbose_name="Payment instrument",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -1065,6 +1076,7 @@ class AuditLog(models.Model):
         ("voucher", "Voucher"),
         ("loan", "Loan"),
         ("fund", "Fund"),
+        ("fee", "Fee"),
         ("system", "System"),
     ]
 
@@ -1312,6 +1324,15 @@ class InterestReceivable(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="accrued", db_index=True)
     due_date = models.DateField()
     collected_date = models.DateField(blank=True, null=True)
+    transaction = models.ForeignKey(
+        "Transaction",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="interest_receivables_settled",
+        verbose_name="Settlement transaction",
+        help_text="The EMI Transaction that collected this receivable (Phase B3).",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -1366,6 +1387,7 @@ class FeeCharge(models.Model):
     """Posted fee instance against a member / loan / account."""
 
     STATUS_CHOICES = [
+        ("pending", "Pending"),
         ("charged", "Charged"),
         ("waived", "Waived"),
         ("refunded", "Refunded"),
@@ -1378,6 +1400,29 @@ class FeeCharge(models.Model):
     )
     member_account = models.ForeignKey(
         MemberAccount, on_delete=models.CASCADE, blank=True, null=True, related_name="fee_charges"
+    )
+    # Optional reverse pointer to the EMI that this fee was raised against.
+    # Used by Phase B4 late-payment idempotency (one late fee per overdue
+    # EMI, not one per cron tick).
+    loan_repayment = models.ForeignKey(
+        "LoanRepayment",
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        related_name="fee_charges",
+        verbose_name="Linked EMI",
+        help_text="The overdue installment that triggered this late_payment fee (Phase B4).",
+    )
+    # Annual / FY-scoped fees (membership, annual_maintenance) carry the FY
+    # to make idempotency a unique-per-(user, fee_type, FY) check.
+    financial_period = models.ForeignKey(
+        "FinancialPeriod",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="fee_charges",
+        verbose_name="Financial Period",
+        help_text="The FY this fee is attributed to (Phase B4).",
     )
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="charged", db_index=True)
@@ -1486,6 +1531,14 @@ class SocietyConfiguration(models.Model):
     society_name = models.CharField(max_length=255)
     society_logo = models.ImageField(upload_to="society/logo/", blank=True, null=True)
     late_payment_penalty_per_day = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    # Phase B4: how many days after an EMI's due date must elapse before an
+    # automatic ``FeeSchedule(fee_type="late_payment")`` charge is raised.
+    # 0 = same day, 7 = a one-week grace, etc.
+    late_fee_grace_days = models.PositiveSmallIntegerField(
+        default=0,
+        verbose_name="Late Fee Grace Days",
+        help_text="Days past EMI due date before a late_payment fee is auto-charged (Phase B4).",
+    )
     setup_completed_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

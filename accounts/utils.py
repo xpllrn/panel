@@ -355,62 +355,35 @@ def sync_loan_interest_receivables(*, as_of_date=None, financial_period=None):
     """
     Ensure InterestReceivable rows exist for unpaid EMIs on active loans with due_date <= as_of_date.
 
-    Returns the number of repayments considered (including those that already had a receivable).
+    Backward-compat shim — canonical impl now lives in
+    ``accounts.services.interest_engine.accrue_loans``. Returns the number of
+    repayments considered (including those that already had a receivable),
+    matching the original contract.
     """
     from django.utils import timezone
 
-    from accounts.models import InterestReceivable, LoanRepayment
+    from accounts.services import interest_engine
 
     as_of = as_of_date or timezone.now().date()
-    fp = financial_period if financial_period is not None else active_financial_period()
-
-    qs = (
-        LoanRepayment.objects.filter(loan_account__status="active", due_date__lte=as_of)
-        .exclude(payment_status="paid")
-        .select_related("loan_account")
+    result = interest_engine.accrue_loans(
+        as_of=as_of,
+        financial_period=financial_period,
+        audit_via="utils-shim",
     )
-
-    count = 0
-    for rep in qs:
-        if rep.interest_component <= 0:
-            continue
-        obj, created = InterestReceivable.objects.get_or_create(
-            loan_account=rep.loan_account,
-            due_date=rep.due_date,
-            defaults={
-                "financial_period": fp,
-                "amount_accrued": rep.interest_component,
-                "amount_collected": Decimal("0"),
-                "status": "accrued",
-            },
-        )
-        if not created and obj.status == "accrued":
-            obj.amount_accrued = rep.interest_component
-            if fp is not None:
-                obj.financial_period = fp
-            obj.save(update_fields=["amount_accrued", "financial_period"])
-        count += 1
-    return count
+    return result["installments_considered"]
 
 
 def mark_interest_receivable_collected_for_repayment(repayment):
-    """When an EMI is fully paid, mark the matching accrued interest receivable as collected."""
-    from django.db.models import F
+    """When an EMI is fully paid, mark the matching accrued interest receivable as collected.
 
-    from accounts.models import InterestReceivable
+    Backward-compat shim — canonical impl now lives in
+    ``accounts.services.interest_engine.reconcile_emi_to_receivable``. Returns
+    ``1`` when a row was created or updated, otherwise ``0`` (matching the
+    truthy/0-falsy contract callers depended on).
+    """
+    from accounts.services import interest_engine
 
-    if repayment.payment_status != "paid" or repayment.interest_component <= 0:
-        return 0
-    paid_date = repayment.paid_date
-    return InterestReceivable.objects.filter(
-        loan_account_id=repayment.loan_account_id,
-        due_date=repayment.due_date,
-        status="accrued",
-    ).update(
-        amount_collected=F("amount_accrued"),
-        status="collected",
-        collected_date=paid_date,
-    )
+    return interest_engine.reconcile_emi_to_receivable(repayment)
 
 
 def get_account_type_cashflow(months=6, account_type=None):

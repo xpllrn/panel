@@ -225,33 +225,40 @@ The system automatically:
 }
 ```
 
-### Receipts (Transactions)
+### Transactions (admin receipts)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/v1/admin/receipts/` | List all receipts |
-| `POST` | `/api/v1/admin/receipts/create/` | Create a receipt (deposit/withdrawal) |
-| `GET` | `/api/v1/admin/receipts/{id}/` | Get receipt detail |
+| `GET` | `/api/v1/admin/transactions/` | List all transactions |
+| `POST` | `/api/v1/admin/transactions/create/` | Create a transaction (deposit/withdrawal) |
+| `GET` | `/api/v1/admin/transactions/{id}/` | Get transaction detail (includes `instrument` when linked) |
 
-**Create Receipt (Deposit) Example:**
+**Create transaction (with optional instrument) example:**
 ```json
 {
     "member_account": 45,
     "transaction_type": "credit",
     "amount": 5000.00,
-    "payment_mode": "cash",
-    "description": "Monthly deposit"
+    "payment_mode": "neft",
+    "reference_number": "UTR123456789",
+    "description": "Monthly deposit",
+    "instrument": {
+        "reference_number": "UTR123456789"
+    }
 }
 ```
 
+**Payment modes:** `cash`, `cheque`, `dd`, `online`, `neft`, `rtgs`, `upi`, `imps`
+
+**Nested `instrument` (optional write):** flat keys such as `cheque_number`, `drawer_name`, `drawer_bank`, `drawer_ifsc`, `cheque_date` (`YYYY-MM-DD`), `reference_number` (UTR), `upi_vpa`, `instrument_type` (override, e.g. `dd` / `imps` when mode is ambiguous). For non-cash modes the API creates an `Instrument` row and links it on the `Transaction`.
+
 The system automatically:
-- Generates a unique receipt number (e.g., `RCP-2026-00940`)
+- Generates a unique transaction number (e.g. `TXN-2026-00001`)
 - Updates account balance atomically using `F()` expressions
 - Records the `balance_after` snapshot
 - Creates an audit log entry
 
 **Transaction types:** `credit`, `debit`, `transfer`, `interest`, `dividend`, `share_capital`
-**Payment modes:** `cash`, `cheque`, `online`, `neft`, `rtgs`, `upi`
 
 ### Loans
 
@@ -397,17 +404,25 @@ GET /api/v1/admin/reports/summary/?period=year&year=2025
 - `deposit_by_type` — Deposit portfolio breakdown by account type
 - `monthly_interest_liability` — Monthly interest expense
 
-**Distribute Profit:**
+**Distribute Profit** (requires **locked** `ProfitAndLoss` for the financial period):
+
 ```
 POST /api/v1/admin/reports/distribute-profit/
 Content-Type: application/json
 
 {
-    "year": 2025
+    "financial_period_id": 3
 }
 ```
 
-This applies all `annual_profit` allocation rules and distributes the calculated net profit to the configured funds.
+Alternatively pass `"year": 2025` (April–March FY start year); the server resolves the overlapping `FinancialPeriod` and loads its P&L snapshot.
+
+**Rules:**
+- A `ProfitAndLoss` row must exist for that period (save snapshot first).
+- `is_locked` must be `true` (close the financial year via `/api/v1/admin/financial-periods/<id>/close/` or the panel).
+- Distribution amount is **`net_surplus`** from that locked row (not the live `get_financial_summary` net profit).
+
+**Success response** includes `financial_period_id`, `net_surplus`, `total_allocated`, and `allocations` (fund transactions created).
 
 ### Interest Posting & Dividends
 
@@ -626,11 +641,11 @@ curl -s http://localhost:8000/api/v1/admin/members/ -H "Authorization: Bearer $T
 # Get financial report
 curl -s "http://localhost:8000/api/v1/admin/reports/summary/?period=year&year=2025" -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 
-# Create a receipt
-curl -s -X POST http://localhost:8000/api/v1/admin/receipts/create/ \
+# Create a transaction (non-cash + instrument)
+curl -s -X POST http://localhost:8000/api/v1/admin/transactions/create/ \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"member_account":1,"transaction_type":"credit","amount":5000,"payment_mode":"cash"}' | python3 -m json.tool
+  -d '{"member_account":1,"transaction_type":"credit","amount":5000,"payment_mode":"neft","reference_number":"UTR1","instrument":{"reference_number":"UTR1"}}' | python3 -m json.tool
 
 # Member login and dashboard
 MEMBER_TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login/ \

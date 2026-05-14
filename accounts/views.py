@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from uuid import uuid4
 
@@ -14,6 +15,9 @@ from django.utils import timezone
 from .forms import LoginForm, SetupAdminProfileForm, SetupKYCForm, SetupPenaltyForm, SetupSocietyForm
 from .models import (
     AccountTypeConfiguration,
+    FinancialPeriod,
+    FundAccount,
+    FundAllocationRule,
     LoanTypeConfiguration,
     MemberKYC,
     SocietyConfiguration,
@@ -24,6 +28,31 @@ from .utils import log_action, split_full_name
 SETUP_SESSION_KEY = "initial_setup_payload"
 SETUP_STEP_MIN = 1
 SETUP_STEP_MAX = 7
+
+# Statutory defaults seeded by the first-run wizard; operators can edit /
+# replace these later from the Funds and Allocation-Rules screens.
+#
+# STATUTORY_FUNDS drives the five FundAccount rows; ``code`` is the 2-letter
+# suffix used to build a deterministic, year-stamped ``account_number``
+# (``FND-<fy_start_year>-<code>001``) so re-running the wizard is idempotent.
+STATUTORY_FUNDS = (
+    {"name": "Statutory Reserve Fund", "fund_type": "statutory", "code": "SR"},
+    {"name": "Education Fund", "fund_type": "education", "code": "ED"},
+    {"name": "Build / Service Fund", "fund_type": "welfare", "code": "BS"},
+    {"name": "Bad-debt Provision Fund", "fund_type": "reserve", "code": "BD"},
+    {"name": "Dividend Fund", "fund_type": "dividend", "code": "DV"},
+)
+
+# (fund_name, percentage, priority_order). Each row becomes one
+# ``annual_profit`` FundAllocationRule wired to the matching fund above.
+# Percentages must total 100.00.
+STATUTORY_ALLOCATIONS = (
+    ("Statutory Reserve Fund", Decimal("25.00"), 10),
+    ("Education Fund", Decimal("1.50"), 20),
+    ("Build / Service Fund", Decimal("10.00"), 30),
+    ("Bad-debt Provision Fund", Decimal("2.00"), 40),
+    ("Dividend Fund", Decimal("61.50"), 50),
+)
 
 
 def is_initial_setup_complete():
@@ -209,6 +238,51 @@ def _finalize_setup(payload):
                 for index, item in enumerate(loan_configs)
             ]
         )
+
+        # Indian fiscal year: April 1 -> March 31. If today is before April 1
+        # the period that's "current" actually started last April.
+        today = timezone.localdate()
+        fy_start_year = today.year if today.month >= 4 else today.year - 1
+        fy_label = f"FY {fy_start_year}-{str(fy_start_year + 1)[-2:]}"
+
+        FinancialPeriod.objects.get_or_create(
+            start_date=date(fy_start_year, 4, 1),
+            end_date=date(fy_start_year + 1, 3, 31),
+            defaults={
+                "label": fy_label,
+                "status": "open",
+                "is_active": True,
+                "created_by": admin_user,
+            },
+        )
+
+        funds_by_name = {}
+        for spec in STATUTORY_FUNDS:
+            account_number = f"FND-{fy_start_year}-{spec['code']}001"
+            fund, _ = FundAccount.objects.get_or_create(
+                account_number=account_number,
+                defaults={
+                    "name": spec["name"],
+                    "fund_type": spec["fund_type"],
+                    "balance": Decimal("0"),
+                    "is_active": True,
+                    "created_by": admin_user,
+                },
+            )
+            funds_by_name[spec["name"]] = fund
+
+        for fund_name, percentage, priority_order in STATUTORY_ALLOCATIONS:
+            FundAllocationRule.objects.get_or_create(
+                trigger_event="annual_profit",
+                fund=funds_by_name[fund_name],
+                defaults={
+                    "allocation_type": "percentage",
+                    "percentage": percentage,
+                    "priority_order": priority_order,
+                    "is_active": True,
+                    "created_by": admin_user,
+                },
+            )
 
     return True, None
 

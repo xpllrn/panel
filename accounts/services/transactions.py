@@ -8,8 +8,9 @@ Public surface:
                                       optional loan-repayment settlement
     post_transactions_bulk(...)     — multi-line direct posting + optional fund credit
     post_voucher(...)               — stage a voucher with N entries (no balance
-                                      update; settlement happens later via the
-                                      voucher transfer / fund flow)
+                                      update yet); optional ``instrument_payload`` for
+                                      non-cash ``payment_mode`` (``Voucher.instrument``).
+                                      Settlement happens later via voucher transfer / fund flow.
     next_transaction_number()       — atomic TXN-YYYY-NNNNN generator
     next_voucher_number()           — atomic VCR-YYYY-NNNNN generator
     is_credit_transaction_type(t)   — boolean helper
@@ -28,11 +29,10 @@ Side effects this module DOES NOT manage (intentional — adapter concerns):
   (`apply_fund_allocations` — still tied to `request`; will move when
   Phase B4 overhauls fees / allocations)
 
-Phase A2 (Instrument wiring) will land inside this module — the
-`instrument` kwarg is already accepted by `post_transaction` and threaded
-through to `Transaction.instrument`; today it is always `None` because no
-adapter passes it yet. The same is true for `transaction_date` which will
-flip from `auto_now_add` to a caller-supplied value.
+Phase A2: when ``payment_mode`` is not ``cash`` and no pre-built ``instrument``
+instance is passed, ``instrument_payload`` (optional dict) is merged with
+the top-level ``reference_number`` to create an ``Instrument`` row and link
+it on the ``Transaction``. ``transaction_date`` remains an optional override.
 """
 
 from datetime import date
@@ -45,18 +45,122 @@ from accounts.models import (
     AuditLog,
     FundAccount,
     FundTransaction,
+    Instrument,
     LoanRepayment,
     MemberAccount,
     Transaction,
     User,
     Voucher,
     VoucherEntry,
+    ifsc_validator,
 )
 from accounts.services.exceptions import NotFoundError, ValidationError
 
 CREDIT_TYPES = ("credit", "interest", "dividend", "share_capital")
 VOUCHER_TYPES = ("receipt", "payment", "contra", "journal")
 MAX_NUMBER_GENERATION_RETRIES = 5
+
+
+def _instrument_type_for_payment_mode(payment_mode):
+    """Map Transaction ``payment_mode`` to a non-cash ``Instrument.instrument_type``.
+
+    Returns ``None`` for modes that never carry a physical / external instrument:
+    - ``cash`` (operator-handed cash)
+    - ``internal`` (system-generated postings, e.g. interest engine, fund transfers)
+    - empty / missing mode
+    """
+    if not payment_mode or payment_mode in ("cash", "internal"):
+        return None
+    return {
+        "cheque": "cheque",
+        "dd": "dd",
+        "neft": "neft",
+        "rtgs": "rtgs",
+        "upi": "upi",
+        "imps": "imps",
+        "online": "neft",
+    }.get(payment_mode, "neft")
+
+
+def _strip_or_none(val):
+    if val is None:
+        return None
+    s = str(val).strip()
+    return s or None
+
+
+def _create_instrument_row(*, payment_mode, amount_decimal, transaction_reference, payload):
+    """Persist an ``Instrument`` for a non-cash payment (Phase A2).
+
+    ``payload`` is a flat dict of optional keys: ``instrument_type``, ``cheque_number``,
+    ``drawer_name``, ``drawer_bank``, ``drawer_ifsc``, ``cheque_date`` (``YYYY-MM-DD``),
+    ``reference_number`` (UTR / instrument ref), ``upi_vpa``, ``cheque_status``, ``is_cleared``.
+
+    ``transaction_reference`` is the top-level receipt reference (often cheque no. or UTR).
+    """
+    inst_type = _instrument_type_for_payment_mode(payment_mode)
+    if inst_type is None:
+        return None
+
+    payload = payload or {}
+    override = _strip_or_none(payload.get("instrument_type"))
+    if override and override != "cash":
+        valid = {c[0] for c in Instrument.INSTRUMENT_TYPE_CHOICES}
+        if override not in valid:
+            raise ValidationError(f"Invalid instrument_type: {override!r}.")
+        inst_type = override
+
+    cheque_number = _strip_or_none(payload.get("cheque_number")) or _strip_or_none(transaction_reference)
+    drawer_name = _strip_or_none(payload.get("drawer_name"))
+    drawer_bank = _strip_or_none(payload.get("drawer_bank"))
+    drawer_ifsc = _strip_or_none(payload.get("drawer_ifsc"))
+    if drawer_ifsc:
+        try:
+            ifsc_validator(drawer_ifsc)
+        except Exception as exc:
+            raise ValidationError("Invalid IFSC on instrument.") from exc
+
+    cheque_date = None
+    raw_cd = payload.get("cheque_date")
+    if raw_cd is not None:
+        from datetime import date as date_cls
+        from datetime import datetime
+
+        if isinstance(raw_cd, date_cls):
+            cheque_date = raw_cd
+        else:
+            raw_s = _strip_or_none(str(raw_cd))
+            if raw_s:
+                try:
+                    cheque_date = datetime.strptime(raw_s, "%Y-%m-%d").date()
+                except ValueError as exc:
+                    raise ValidationError("cheque_date must be YYYY-MM-DD.") from exc
+
+    inst_ref = _strip_or_none(payload.get("reference_number")) or _strip_or_none(transaction_reference)
+    upi_vpa = _strip_or_none(payload.get("upi_vpa"))
+
+    cheque_status = _strip_or_none(payload.get("cheque_status")) or "submitted"
+    valid_cs = {c[0] for c in Instrument.CHEQUE_STATUS_CHOICES}
+    if cheque_status not in valid_cs:
+        cheque_status = "submitted"
+
+    is_cleared = bool(payload.get("is_cleared"))
+
+    ref_for_instrument = inst_ref if inst_type in ("neft", "rtgs", "upi", "imps") else None
+
+    return Instrument.objects.create(
+        instrument_type=inst_type,
+        amount=amount_decimal,
+        cheque_number=cheque_number if inst_type in ("cheque", "dd") else None,
+        drawer_name=drawer_name,
+        drawer_bank=drawer_bank,
+        drawer_ifsc=drawer_ifsc,
+        cheque_date=cheque_date,
+        cheque_status=cheque_status if inst_type in ("cheque", "dd") else None,
+        reference_number=ref_for_instrument,
+        upi_vpa=upi_vpa if inst_type == "upi" else None,
+        is_cleared=is_cleared,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +244,7 @@ def post_transaction(
     remarks="",
     loan_repayment_id=None,
     instrument=None,
+    instrument_payload=None,
     transaction_date=None,
     actor=None,
     ip_address=None,
@@ -154,14 +259,20 @@ def post_transaction(
     `loan_repayment_id` is given — settles that repayment and refreshes the
     parent LoanAccount aggregates.
 
+    When ``payment_mode`` is not ``cash`` and ``instrument`` is not provided,
+    builds an :class:`~accounts.models.Instrument` from ``instrument_payload``
+    (optional dict) plus ``reference_number`` and attaches it to the new
+    transaction. Pass a pre-saved ``instrument`` to attach an existing row
+    (e.g. one shared ``Instrument`` for a multi-line bulk post).
+
     Returns the created `Transaction`.
 
     Raises:
         NotFoundError   — account does not exist / is soft-deleted.
         ValidationError — bad amount, bad type, insufficient balance.
 
-    Note: `instrument` and `transaction_date` are accepted but currently
-    threaded through unchanged. Phase A2 will populate them from adapters.
+    ``transaction_date`` overrides the posting date on the ``Transaction`` row
+    when provided.
     """
     if transaction_type not in dict(Transaction.TRANSACTION_TYPE_CHOICES):
         raise ValidationError(f"Invalid transaction type: {transaction_type!r}.")
@@ -199,6 +310,15 @@ def post_transaction(
                         last_transaction_date=date.today(),
                     )
 
+                resolved_instrument = instrument
+                if resolved_instrument is None and payment_mode != "cash":
+                    resolved_instrument = _create_instrument_row(
+                        payment_mode=payment_mode,
+                        amount_decimal=amount_decimal,
+                        transaction_reference=(reference_number or "").strip(),
+                        payload=instrument_payload or {},
+                    )
+
                 txn_kwargs = dict(
                     transaction_number=next_transaction_number(),
                     user=account.user,
@@ -212,8 +332,8 @@ def post_transaction(
                     created_by=actor,
                     remarks=(remarks or "").strip() or None,
                 )
-                if instrument is not None:
-                    txn_kwargs["instrument"] = instrument
+                if resolved_instrument is not None:
+                    txn_kwargs["instrument"] = resolved_instrument
                 if transaction_date is not None:
                     txn_kwargs["transaction_date"] = transaction_date
 
@@ -238,8 +358,7 @@ def post_transaction(
                     entity_type="transaction",
                     entity_id=txn.id,
                     description=(
-                        f"Created transaction {via}{txn.transaction_number} - {transaction_type} "
-                        f"\u20b9{amount_decimal}"
+                        f"Created transaction {via}{txn.transaction_number} - {transaction_type} \u20b9{amount_decimal}"
                     ),
                 )
             return txn
@@ -251,7 +370,8 @@ def post_transaction(
 
 
 def _settle_loan_repayment(*, repayment_id, user_id, amount, payment_mode, reference_number, txn):
-    """Mark a LoanRepayment paid/partial and refresh its parent LoanAccount.
+    """Mark a LoanRepayment paid/partial, refresh its parent LoanAccount, and
+    (Phase B3) reconcile the matching ``InterestReceivable``.
 
     Silent no-op if the repayment doesn't exist or isn't on an active loan
     of the same user — preserves the previous adapter behaviour.
@@ -272,6 +392,11 @@ def _settle_loan_repayment(*, repayment_id, user_id, amount, payment_mode, refer
     repayment.payment_status = "paid" if amount >= repayment.amount_due else "partial"
     repayment.transaction = txn
     repayment.save()
+
+    if repayment.payment_status == "paid":
+        from accounts.services import interest_engine
+
+        interest_engine.reconcile_emi_to_receivable(repayment, transaction=txn)
 
     loan = repayment.loan_account
     loan.total_paid = LoanRepayment.objects.filter(loan_account=loan, payment_status="paid").aggregate(
@@ -302,6 +427,7 @@ def post_transactions_bulk(
     reference_number="",
     remarks="",
     fund_id=None,
+    instrument_payload=None,
     actor=None,
     ip_address=None,
     audit_via="panel",
@@ -309,6 +435,10 @@ def post_transactions_bulk(
     """Direct multi-line posting. One atomic block; each `line` becomes a
     `Transaction` row via `post_transaction`. Optionally credits a fund
     account with the grand total.
+
+    For non-cash ``payment_mode``, one :class:`~accounts.models.Instrument` is
+    created for the **sum** of all line amounts and linked to every line's
+    ``Transaction`` (single physical instrument paying multiple ledger lines).
 
     `lines` is a list of dicts shaped like::
 
@@ -334,24 +464,47 @@ def post_transactions_bulk(
     if not isinstance(lines, list) or not lines:
         raise ValidationError("At least one account entry is required.")
 
+    work_items = []
+    for line in lines:
+        if not isinstance(line, dict):
+            raise ValidationError("Each entry must be an object.")
+
+        line_type = (line.get("transaction_type") or "").strip()
+        if line_type == "loan_emi":
+            line_type = "credit"
+        if line_type not in dict(Transaction.TRANSACTION_TYPE_CHOICES):
+            raise ValidationError("Invalid transaction type in entry.")
+
+        account_id = line.get("account_id")
+        try:
+            MemberAccount.objects.get(id=account_id, user=user, is_deleted=False)
+        except MemberAccount.DoesNotExist as exc:
+            raise NotFoundError("Account not found for this member.") from exc
+
+        try:
+            line_amount = Decimal(str(line.get("amount", 0)))
+        except Exception as exc:
+            raise ValidationError("Amount is invalid in entry.") from exc
+        if line_amount <= 0:
+            raise ValidationError("Each line amount must be greater than zero.")
+
+        work_items.append((line, account_id, line_type, line_amount))
+
+    total_for_instrument = sum(w[3] for w in work_items)
+
     created = []
     fund_txn = None
     with transaction.atomic():
-        for line in lines:
-            line_type = (line.get("transaction_type") or "").strip()
-            if line_type == "loan_emi":
-                line_type = "credit"
-            if line_type not in dict(Transaction.TRANSACTION_TYPE_CHOICES):
-                raise ValidationError("Invalid transaction type in entry.")
+        shared_instrument = None
+        if payment_mode != "cash":
+            shared_instrument = _create_instrument_row(
+                payment_mode=payment_mode,
+                amount_decimal=total_for_instrument,
+                transaction_reference=(reference_number or "").strip(),
+                payload=instrument_payload or {},
+            )
 
-            # Verify the account belongs to the named user before delegating
-            # to post_transaction, which only enforces is_deleted=False.
-            account_id = line.get("account_id")
-            try:
-                MemberAccount.objects.get(id=account_id, user=user, is_deleted=False)
-            except MemberAccount.DoesNotExist as exc:
-                raise NotFoundError("Account not found for this member.") from exc
-
+        for line, account_id, line_type, _line_amount in work_items:
             txn = post_transaction(
                 member_account_id=account_id,
                 transaction_type=line_type,
@@ -361,6 +514,8 @@ def post_transactions_bulk(
                 reference_number=reference_number,
                 remarks=remarks,
                 loan_repayment_id=line.get("loan_repayment_id") or None,
+                instrument=shared_instrument,
+                instrument_payload=None,
                 actor=actor,
                 ip_address=ip_address,
                 audit=False,  # rolled up below
@@ -413,6 +568,7 @@ def post_voucher(
     payment_mode="cash",
     reference_number="",
     remarks="",
+    instrument_payload=None,
     actor=None,
     ip_address=None,
     audit_via="panel",
@@ -423,6 +579,10 @@ def post_voucher(
     `transfer_voucher_to_fund_view` (panel) or its API equivalent. This is
     the "cheque arrived, awaiting clearing" / "cash collected, awaiting
     deposit" stage.
+
+    When ``payment_mode`` is not ``cash``, creates one :class:`~accounts.models.Instrument`
+    for the voucher total (same shape as bulk direct posting) and stores it on
+    ``Voucher.instrument`` so transfer can attach it to each posted ``Transaction``.
 
     `voucher_type` MUST be one of "receipt", "payment", "contra", "journal".
 
@@ -442,50 +602,72 @@ def post_voucher(
     if not isinstance(lines, list) or not lines:
         raise ValidationError("At least one voucher entry is required.")
 
+    work_items = []
+    total_amount = Decimal("0.00")
+    for line in lines:
+        if not isinstance(line, dict):
+            raise ValidationError("Each voucher entry must be an object.")
+
+        line_type = (line.get("transaction_type") or "").strip()
+        if line_type == "loan_emi":
+            line_type = "credit"
+        if line_type not in dict(Transaction.TRANSACTION_TYPE_CHOICES):
+            raise ValidationError(f"Invalid transaction type: {line_type!r}.")
+
+        try:
+            account = MemberAccount.objects.get(id=line.get("account_id"), user=user, is_deleted=False)
+        except MemberAccount.DoesNotExist as exc:
+            raise NotFoundError("Account not found for this member.") from exc
+
+        try:
+            line_amount = Decimal(str(line.get("amount", 0)))
+        except Exception as exc:
+            raise ValidationError("Voucher line amount is invalid.") from exc
+        if line_amount <= 0:
+            raise ValidationError("Each voucher line amount must be positive.")
+
+        work_items.append(
+            {
+                "account": account,
+                "transaction_type": line_type,
+                "amount": line_amount,
+                "description": (line.get("description") or "").strip() or None,
+                "loan_repayment_id": line.get("loan_repayment_id") or None,
+            }
+        )
+        total_amount += line_amount
+
     with transaction.atomic():
+        shared_instrument = None
+        if payment_mode != "cash":
+            shared_instrument = _create_instrument_row(
+                payment_mode=payment_mode,
+                amount_decimal=total_amount,
+                transaction_reference=(reference_number or "").strip(),
+                payload=instrument_payload or {},
+            )
+
         voucher = Voucher.objects.create(
             voucher_number=next_voucher_number(),
             user=user,
             voucher_type=voucher_type,
-            total_amount=Decimal("0.00"),
+            total_amount=total_amount,
             payment_mode=payment_mode,
             reference_number=(reference_number or "").strip() or None,
             remarks=(remarks or "").strip() or None,
             created_by=actor,
+            instrument=shared_instrument,
         )
 
-        total_amount = Decimal("0.00")
-        for line in lines:
-            line_type = (line.get("transaction_type") or "").strip()
-            if line_type == "loan_emi":
-                line_type = "credit"
-            if line_type not in dict(Transaction.TRANSACTION_TYPE_CHOICES):
-                raise ValidationError(f"Invalid transaction type: {line_type!r}.")
-
-            try:
-                account = MemberAccount.objects.get(id=line.get("account_id"), user=user, is_deleted=False)
-            except MemberAccount.DoesNotExist as exc:
-                raise NotFoundError("Account not found for this member.") from exc
-
-            try:
-                line_amount = Decimal(str(line.get("amount", 0)))
-            except Exception as exc:
-                raise ValidationError("Voucher line amount is invalid.") from exc
-            if line_amount <= 0:
-                raise ValidationError("Each voucher line amount must be positive.")
-
+        for item in work_items:
             VoucherEntry.objects.create(
                 voucher=voucher,
-                member_account=account,
-                transaction_type=line_type,
-                amount=line_amount,
-                description=(line.get("description") or "").strip() or None,
-                linked_loan_repayment_id=line.get("loan_repayment_id") or None,
+                member_account=item["account"],
+                transaction_type=item["transaction_type"],
+                amount=item["amount"],
+                description=item["description"],
+                linked_loan_repayment_id=item["loan_repayment_id"],
             )
-            total_amount += line_amount
-
-        voucher.total_amount = total_amount
-        voucher.save(update_fields=["total_amount"])
 
     via = "via API: " if audit_via == "api" else ""
     _write_audit(

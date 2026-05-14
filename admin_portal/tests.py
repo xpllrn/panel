@@ -3,15 +3,26 @@ Tests for the admin_portal app.
 Covers views, API endpoints, and member management functionality.
 """
 
+from datetime import date, timedelta
+import json
+
 from django.contrib.auth import get_user_model
-from datetime import timedelta
 from decimal import Decimal
 
 from django.test import Client, TestCase
 from django.utils import timezone
 from django.urls import reverse
 
-from accounts.models import FundAccount, LoanAccount, LoanApplication, LoanRepayment, MemberAccount, Transaction, Voucher
+from accounts.models import (
+    FundAccount,
+    FundAllocationRule,
+    LoanAccount,
+    LoanApplication,
+    LoanRepayment,
+    MemberAccount,
+    Transaction,
+    Voucher,
+)
 
 User = get_user_model()
 
@@ -484,3 +495,30 @@ class VoucherFlowTests(TestCase):
         voucher = Voucher.objects.get(id=voucher_id)
         self.assertEqual(voucher.status, "transferred")
         self.assertTrue(Transaction.objects.filter(user=self.member).exists())
+
+    def test_neft_voucher_stores_instrument_and_transfer_attaches_to_transactions(self):
+        """Non-cash voucher path creates Voucher.instrument; transfer reuses it on each Transaction."""
+        response = self.client.post(
+            reverse("add_transaction"),
+            {
+                "user_id": self.member.id,
+                "use_voucher": "1",
+                "payment_mode": "neft",
+                "reference_number": "VUTR-NEFT-1",
+                "instrument_payload": json.dumps({"reference_number": "VUTR-NEFT-1"}),
+                "account_entries": '[{"account_id": %d, "transaction_type": "credit", "amount": "100.00"}]'
+                % self.account.id,
+            },
+        )
+        self.assertTrue(response.json()["success"], msg=response.content)
+        voucher_id = response.json()["voucher_id"]
+        voucher = Voucher.objects.get(id=voucher_id)
+        self.assertIsNotNone(voucher.instrument_id)
+        transfer = self.client.post(
+            reverse("transfer_voucher_to_fund", args=[voucher_id]),
+            {"fund_id": self.fund.id},
+        )
+        self.assertTrue(transfer.json()["success"])
+        txn = Transaction.objects.filter(user=self.member).order_by("-id").first()
+        self.assertIsNotNone(txn)
+        self.assertEqual(txn.instrument_id, voucher.instrument_id)

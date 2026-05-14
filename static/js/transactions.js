@@ -66,6 +66,17 @@
             }
         });
 
+        var addReceiptForm = document.getElementById('addReceiptForm');
+        if (addReceiptForm) {
+            addReceiptForm.addEventListener('change', function (ev) {
+                var t = ev.target;
+                if (!t || !t.name) return;
+                if (t.name === 'payment_mode' || t.name === 'use_voucher') {
+                    syncInstrumentPanelVisibility();
+                }
+            });
+        }
+
         // Member search input with debounce
         var memberSearchInput = document.getElementById('receipt-member-search');
         if (memberSearchInput) {
@@ -99,6 +110,176 @@
     }
 
     /**
+     * Populate the receipt view modal from API receipt JSON (shared by view + print).
+     */
+    function applyReceiptToModal(receipt) {
+        document.getElementById('modal-receipt-number').textContent = receipt.receipt_number;
+        document.getElementById('modal-receipt-date').textContent = receipt.created_at || receipt.created_date || '-';
+        document.getElementById('modal-payment-mode').textContent = receipt.payment_mode_display || '-';
+
+        var titleEl = document.getElementById('modal-receipt-title');
+        if (titleEl) {
+            var typeUpper = (receipt.transaction_type || '').toUpperCase();
+            if (typeUpper === 'CREDIT') {
+                titleEl.textContent = 'CREDIT RECEIPT';
+            } else if (typeUpper === 'DEBIT') {
+                titleEl.textContent = 'DEBIT RECEIPT';
+            } else {
+                titleEl.textContent = 'RECEIPT';
+            }
+        }
+
+        document.getElementById('modal-member-name').textContent = receipt.member_name || '-';
+        document.getElementById('modal-member-id').textContent = receipt.member_id || '-';
+        document.getElementById('modal-member-mobile').textContent = receipt.member_mobile || '-';
+
+        document.getElementById('modal-account-number').textContent = receipt.account_number || '-';
+        document.getElementById('modal-account-type').textContent = receipt.account_type_display || '-';
+
+        document.getElementById('modal-transaction-type').textContent = receipt.transaction_type_display || '-';
+        document.getElementById('modal-amount').textContent = '\u20B9 ' + formatCurrency(receipt.amount);
+        document.getElementById('modal-balance-after').textContent = '\u20B9 ' + formatCurrency(receipt.balance_after);
+
+        var refRow = document.getElementById('modal-reference-row');
+        var refEl = document.getElementById('modal-reference');
+        if (receipt.reference_number) {
+            refEl.textContent = receipt.reference_number;
+            refRow.style.display = '';
+        } else {
+            refRow.style.display = 'none';
+        }
+
+        var descSection = document.getElementById('modal-description-section');
+        var descEl = document.getElementById('modal-description');
+        if (receipt.description) {
+            descEl.textContent = receipt.description;
+            descSection.style.display = '';
+        } else {
+            descSection.style.display = 'none';
+        }
+
+        var remarksSection = document.getElementById('modal-remarks-section');
+        var remarksEl = document.getElementById('modal-remarks');
+        if (receipt.remarks) {
+            remarksEl.textContent = receipt.remarks;
+            remarksSection.style.display = '';
+        } else {
+            remarksSection.style.display = 'none';
+        }
+
+        document.getElementById('modal-created-by').textContent = receipt.created_by_name || '-';
+
+        var inst = receipt.instrument;
+        var instSec = document.getElementById('modal-instrument-section');
+        var instBody = document.getElementById('modal-instrument-body');
+        if (inst && instSec && instBody) {
+            var lines = [];
+            lines.push('<strong>' + escapeHTML(inst.instrument_type_display || inst.instrument_type || '') + '</strong>');
+            if (inst.amount) {
+                lines.push('Instrument amount: \u20B9 ' + formatCurrency(inst.amount));
+            }
+            if (inst.cheque_number) {
+                lines.push('Cheque / DD no.: ' + escapeHTML(inst.cheque_number));
+            }
+            if (inst.drawer_name) {
+                lines.push('Drawer: ' + escapeHTML(inst.drawer_name));
+            }
+            if (inst.drawer_bank) {
+                lines.push('Bank: ' + escapeHTML(inst.drawer_bank));
+            }
+            if (inst.drawer_ifsc) {
+                lines.push('IFSC: ' + escapeHTML(inst.drawer_ifsc));
+            }
+            if (inst.cheque_date) {
+                lines.push('Cheque date: ' + escapeHTML(inst.cheque_date));
+            }
+            if (inst.cheque_status) {
+                lines.push('Cheque status: ' + escapeHTML(inst.cheque_status));
+            }
+            if (inst.reference_number) {
+                lines.push('UTR / ref.: ' + escapeHTML(inst.reference_number));
+            }
+            if (inst.upi_vpa) {
+                lines.push('UPI VPA: ' + escapeHTML(inst.upi_vpa));
+            }
+            if (inst.is_cleared) {
+                lines.push('Cleared' + (inst.clearing_date ? ' on ' + escapeHTML(inst.clearing_date) : ''));
+            }
+            if (inst.bounce_reason) {
+                lines.push('Bounce: ' + escapeHTML(inst.bounce_reason));
+            }
+            instBody.innerHTML = lines.join('<br>');
+            instSec.style.display = '';
+        } else if (instSec) {
+            instSec.style.display = 'none';
+            if (instBody) instBody.innerHTML = '';
+        }
+    }
+
+    function syncInstrumentPanelVisibility() {
+        var form = document.getElementById('addReceiptForm');
+        if (!form) return;
+        var panel = document.getElementById('instrument-fields-panel');
+        if (!panel) return;
+        var useV = form.querySelector('input[name="use_voucher"]');
+        var pmEl = form.querySelector('select[name="payment_mode"]');
+        var pm = pmEl ? pmEl.value : 'cash';
+        if (useV && useV.checked && pm === 'cash') {
+            panel.style.display = 'none';
+            return;
+        }
+        if (pm === 'cash') {
+            panel.style.display = 'none';
+            return;
+        }
+        panel.style.display = '';
+        var ch = document.getElementById('instrument-cheque-block');
+        var upi = document.getElementById('instrument-upi-block');
+        var tr = document.getElementById('instrument-transfer-block');
+        if (ch) ch.style.display = (pm === 'cheque' || pm === 'dd') ? '' : 'none';
+        if (upi) upi.style.display = pm === 'upi' ? '' : 'none';
+        if (tr) {
+            tr.style.display = (pm === 'neft' || pm === 'rtgs' || pm === 'online' || pm === 'imps') ? '' : 'none';
+        }
+    }
+
+    function buildInstrumentPayload() {
+        var form = document.getElementById('addReceiptForm');
+        if (!form) return {};
+        var pmEl = form.querySelector('select[name="payment_mode"]');
+        var pm = pmEl ? pmEl.value : 'cash';
+        if (pm === 'cash') return {};
+        var out = {};
+        if (pm === 'cheque' || pm === 'dd') {
+            var cq = document.getElementById('inst-cheque-number');
+            if (cq && cq.value.trim()) out.cheque_number = cq.value.trim();
+            var dn = document.getElementById('inst-drawer-name');
+            if (dn && dn.value.trim()) out.drawer_name = dn.value.trim();
+            var db = document.getElementById('inst-drawer-bank');
+            if (db && db.value.trim()) out.drawer_bank = db.value.trim();
+            var dif = document.getElementById('inst-drawer-ifsc');
+            if (dif && dif.value.trim()) out.drawer_ifsc = dif.value.trim().toUpperCase();
+            var cdt = document.getElementById('inst-cheque-date');
+            if (cdt && cdt.value) out.cheque_date = cdt.value;
+            if (pm === 'dd') {
+                out.instrument_type = 'dd';
+            }
+        } else if (pm === 'upi') {
+            var vpa = document.getElementById('inst-upi-vpa');
+            if (vpa && vpa.value.trim()) out.upi_vpa = vpa.value.trim();
+            var utr = document.getElementById('inst-upi-reference');
+            if (utr && utr.value.trim()) out.reference_number = utr.value.trim();
+        } else {
+            var utr2 = document.getElementById('inst-bank-reference');
+            if (utr2 && utr2.value.trim()) out.reference_number = utr2.value.trim();
+            if (pm === 'imps') {
+                out.instrument_type = 'imps';
+            }
+        }
+        return out;
+    }
+
+    /**
      * Show receipt details modal
      */
     function showReceiptModal(receiptId) {
@@ -106,73 +287,7 @@
             .then(function (response) { return response.json(); })
             .then(function (data) {
                 if (data.success) {
-                    var receipt = data.receipt;
-
-                    // Receipt header
-                    document.getElementById('modal-receipt-number').textContent = receipt.receipt_number;
-                    document.getElementById('modal-receipt-date').textContent = receipt.created_at || receipt.created_date || '-';
-                    document.getElementById('modal-payment-mode').textContent = receipt.payment_mode_display || '-';
-
-                    // Update title based on transaction type
-                    var titleEl = document.getElementById('modal-receipt-title');
-                    if (titleEl) {
-                        var typeUpper = (receipt.transaction_type || '').toUpperCase();
-                        if (typeUpper === 'CREDIT') {
-                            titleEl.textContent = 'CREDIT RECEIPT';
-                        } else if (typeUpper === 'DEBIT') {
-                            titleEl.textContent = 'DEBIT RECEIPT';
-                        } else {
-                            titleEl.textContent = 'RECEIPT';
-                        }
-                    }
-
-                    // Member details
-                    document.getElementById('modal-member-name').textContent = receipt.member_name || '-';
-                    document.getElementById('modal-member-id').textContent = receipt.member_id || '-';
-                    document.getElementById('modal-member-mobile').textContent = receipt.member_mobile || '-';
-
-                    // Account details
-                    document.getElementById('modal-account-number').textContent = receipt.account_number || '-';
-                    document.getElementById('modal-account-type').textContent = receipt.account_type_display || '-';
-
-                    // Transaction details
-                    document.getElementById('modal-transaction-type').textContent = receipt.transaction_type_display || '-';
-                    document.getElementById('modal-amount').textContent = '\u20B9 ' + formatCurrency(receipt.amount);
-                    document.getElementById('modal-balance-after').textContent = '\u20B9 ' + formatCurrency(receipt.balance_after);
-
-                    // Reference number (show/hide)
-                    var refRow = document.getElementById('modal-reference-row');
-                    var refEl = document.getElementById('modal-reference');
-                    if (receipt.reference_number) {
-                        refEl.textContent = receipt.reference_number;
-                        refRow.style.display = '';
-                    } else {
-                        refRow.style.display = 'none';
-                    }
-
-                    // Description (show/hide)
-                    var descSection = document.getElementById('modal-description-section');
-                    var descEl = document.getElementById('modal-description');
-                    if (receipt.description) {
-                        descEl.textContent = receipt.description;
-                        descSection.style.display = '';
-                    } else {
-                        descSection.style.display = 'none';
-                    }
-
-                    // Remarks (show/hide)
-                    var remarksSection = document.getElementById('modal-remarks-section');
-                    var remarksEl = document.getElementById('modal-remarks');
-                    if (receipt.remarks) {
-                        remarksEl.textContent = receipt.remarks;
-                        remarksSection.style.display = '';
-                    } else {
-                        remarksSection.style.display = 'none';
-                    }
-
-                    // Created by
-                    document.getElementById('modal-created-by').textContent = receipt.created_by_name || '-';
-
+                    applyReceiptToModal(data.receipt);
                     receiptModal.classList.add('show');
                 } else {
                     alert('Error loading receipt: ' + (data.error || 'Unknown error'));
@@ -221,6 +336,7 @@
 
         isAddingReceipt = false;
         addReceiptModal.classList.add('show');
+        syncInstrumentPanelVisibility();
     }
 
     /**
@@ -255,6 +371,14 @@
             return;
         }
         formData.set('account_entries', JSON.stringify(lines));
+
+        var pm = formData.get('payment_mode');
+        if (pm && pm !== 'cash') {
+            var ip = buildInstrumentPayload();
+            if (ip && Object.keys(ip).length > 0) {
+                formData.set('instrument_payload', JSON.stringify(ip));
+            }
+        }
 
         errorDiv.style.display = 'none';
         isAddingReceipt = true;
@@ -488,7 +612,7 @@
                 var body = document.getElementById('voucher-table-body');
                 if (!body) return;
                 if (!data.success || !data.vouchers || !data.vouchers.length) {
-                    body.innerHTML = '<tr><td colspan="7" class="empty-state">No vouchers found</td></tr>';
+                    body.innerHTML = '<tr><td colspan="8" class="empty-state">No vouchers found</td></tr>';
                     return;
                 }
                 var html = '';
@@ -508,11 +632,16 @@
                             + '<button type="button" class="btn btn-primary btn-sm" onclick="transferVoucher(' + voucher.id + ', \'' + fundSelectId + '\')">Transfer</button>'
                             + '</div>';
                     }
+                    var payCell = escapeHTML(voucher.payment_mode_display || voucher.payment_mode || '');
+                    if (voucher.instrument_type) {
+                        payCell += '<br><span class="voucher-instrument-hint">' + escapeHTML(voucher.instrument_type) + '</span>';
+                    }
                     html += '<tr><td class="voucher-num">' + escapeHTML(voucher.voucher_number) + '</td>'
                         + '<td class="voucher-date">' + escapeHTML(voucher.created_at || '') + '</td>'
                         + '<td>' + escapeHTML(voucher.voucher_type_display || 'Voucher') + '</td>'
                         + '<td>' + escapeHTML(voucher.member_name) + '</td>'
                         + '<td class="voucher-col-amount">₹' + escapeHTML(voucher.total_amount) + '</td>'
+                        + '<td class="voucher-paymode">' + payCell + '</td>'
                         + '<td><span class="voucher-status">' + escapeHTML(voucher.status_display) + '</span></td>'
                         + '<td class="voucher-col-action">' + action + '</td></tr>';
                 });
@@ -521,7 +650,7 @@
             .catch(function () {
                 var body = document.getElementById('voucher-table-body');
                 if (body) {
-                    body.innerHTML = '<tr><td colspan="7" class="empty-state" style="color:#b91c1c;">Could not load vouchers</td></tr>';
+                    body.innerHTML = '<tr><td colspan="8" class="empty-state" style="color:#b91c1c;">Could not load vouchers</td></tr>';
                 }
             });
     }
@@ -578,63 +707,7 @@
             .then(function (response) { return response.json(); })
             .then(function (data) {
                 if (data.success) {
-                    var receipt = data.receipt;
-
-                    // Populate modal (same as showReceiptModal)
-                    document.getElementById('modal-receipt-number').textContent = receipt.receipt_number;
-                    document.getElementById('modal-receipt-date').textContent = receipt.created_at || receipt.created_date || '-';
-                    document.getElementById('modal-payment-mode').textContent = receipt.payment_mode_display || '-';
-
-                    var titleEl = document.getElementById('modal-receipt-title');
-                    if (titleEl) {
-                        var typeUpper = (receipt.transaction_type || '').toUpperCase();
-                        if (typeUpper === 'CREDIT') {
-                            titleEl.textContent = 'CREDIT RECEIPT';
-                        } else if (typeUpper === 'DEBIT') {
-                            titleEl.textContent = 'DEBIT RECEIPT';
-                        } else {
-                            titleEl.textContent = 'RECEIPT';
-                        }
-                    }
-
-                    document.getElementById('modal-member-name').textContent = receipt.member_name || '-';
-                    document.getElementById('modal-member-id').textContent = receipt.member_id || '-';
-                    document.getElementById('modal-member-mobile').textContent = receipt.member_mobile || '-';
-                    document.getElementById('modal-account-number').textContent = receipt.account_number || '-';
-                    document.getElementById('modal-account-type').textContent = receipt.account_type_display || '-';
-                    document.getElementById('modal-transaction-type').textContent = receipt.transaction_type_display || '-';
-                    document.getElementById('modal-amount').textContent = '\u20B9 ' + formatCurrency(receipt.amount);
-                    document.getElementById('modal-balance-after').textContent = '\u20B9 ' + formatCurrency(receipt.balance_after);
-
-                    var refRow = document.getElementById('modal-reference-row');
-                    var refEl = document.getElementById('modal-reference');
-                    if (receipt.reference_number) {
-                        refEl.textContent = receipt.reference_number;
-                        refRow.style.display = '';
-                    } else {
-                        refRow.style.display = 'none';
-                    }
-
-                    var descSection = document.getElementById('modal-description-section');
-                    var descEl = document.getElementById('modal-description');
-                    if (receipt.description) {
-                        descEl.textContent = receipt.description;
-                        descSection.style.display = '';
-                    } else {
-                        descSection.style.display = 'none';
-                    }
-
-                    var remarksSection = document.getElementById('modal-remarks-section');
-                    var remarksEl = document.getElementById('modal-remarks');
-                    if (receipt.remarks) {
-                        remarksEl.textContent = receipt.remarks;
-                        remarksSection.style.display = '';
-                    } else {
-                        remarksSection.style.display = 'none';
-                    }
-
-                    document.getElementById('modal-created-by').textContent = receipt.created_by_name || '-';
-
+                    applyReceiptToModal(data.receipt);
                     receiptModal.classList.add('show');
 
                     // Wait for modal to render, then print

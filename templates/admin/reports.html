@@ -553,10 +553,30 @@
     {% if period == 'year' %}
     <div class="distribute-section">
         <p style="font-size: 0.85rem; color: var(--color-gray-600); margin-bottom: 0.75rem;">
-            Distribute <strong>{{ fy_window.label }}</strong> profit (₹{{ summary.net_profit|inr }}) to funds using allocation rules.
+            Distribute <strong>{{ fy_window.label }}</strong> to statutory / configured funds using <strong>annual profit</strong> allocation rules.
+            Amount is taken from the <strong>locked P&amp;L</strong> <code>net_surplus</code> for the financial period that matches this FY (Phase A6), not from the live summary above.
         </p>
+        {% if snapshot_pl %}
+            {% if snapshot_pl.is_locked %}
+                <p style="font-size: 0.85rem; margin-bottom: 0.5rem;">
+                    Locked net surplus for this FY: <strong>₹{{ snapshot_pl.net_surplus|inr }}</strong>
+                    {% if summary.net_profit > 0 %}
+                        <span style="color: var(--color-gray-500);"> (live summary net ₹{{ summary.net_profit|inr }} shown for reference only)</span>
+                    {% endif %}
+                </p>
+            {% else %}
+                <p style="font-size: 0.85rem; color: #b45309; margin-bottom: 0.5rem;">
+                    A P&amp;L snapshot exists for this FY but it is <strong>not locked</strong>. Close the financial year under Finance → Periods before distributing.
+                </p>
+            {% endif %}
+        {% else %}
+            <p style="font-size: 0.85rem; color: #b45309; margin-bottom: 0.5rem;">
+                No P&amp;L snapshot for this FY yet. Use <strong>Save financial snapshot</strong> (or the API) first, then close the period to lock it.
+            </p>
+        {% endif %}
+        <input type="hidden" id="distribute-financial-period-id" value="{% if report_financial_period %}{{ report_financial_period.id }}{% endif %}">
         <button class="btn btn-primary btn-sm" onclick="distributeProfit()" id="distributeBtn"
-            {% if summary.net_profit <= 0 %}disabled title="No distributable profit"{% endif %}>
+            {% if not snapshot_pl %}disabled title="No P&amp;L snapshot for this FY yet."{% elif not snapshot_pl.is_locked %}disabled title="Close the financial year to lock P&amp;L before distributing."{% elif snapshot_pl.net_surplus <= 0 %}disabled title="Locked net surplus is zero or negative."{% endif %}>
             Distribute Annual Profit
         </button>
         <div id="distributeResult" style="margin-top: 0.5rem; font-size: 0.85rem;"></div>
@@ -829,13 +849,19 @@ function distributeProfit() {
     btn.disabled = true;
     btn.textContent = 'Distributing...';
 
+    var fpEl = document.getElementById('distribute-financial-period-id');
+    var body = '';
+    if (fpEl && fpEl.value) {
+        body = 'financial_period_id=' + encodeURIComponent(fpEl.value);
+    }
+
     fetch('/reports/distribute-profit/', {
         method: 'POST',
         headers: {
             'X-CSRFToken': window.CSRF_TOKEN,
             'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: ''
+        body: body
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {

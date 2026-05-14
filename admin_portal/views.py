@@ -14,7 +14,6 @@ from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
-from accounts.interest import InterestCalculatorService
 from accounts.models import (
     AccountTypeConfiguration,
     AuditLog,
@@ -25,7 +24,6 @@ from accounts.models import (
     FundAllocationRule,
     FundTransaction,
     Guarantor,
-    InterestPayout,
     InterestReceivable,
     LoanAccount,
     LoanApplication,
@@ -41,6 +39,7 @@ from accounts.models import (
     Voucher,
     VoucherEntry,
 )
+from accounts.services import interest_engine
 from accounts.services import loans as loan_service
 from accounts.services import transactions as transaction_service
 from accounts.services.exceptions import ServiceError
@@ -135,7 +134,7 @@ def _default_account_rates():
     }
 
 
-def _process_transaction_line(user, line, payment_mode, reference_number, remarks, created_by):
+def _process_transaction_line(user, line, payment_mode, reference_number, remarks, created_by, instrument=None):
     """Thin wrapper kept for any leftover callers — delegates to
     `transaction_service.post_transaction`.
     """
@@ -148,6 +147,8 @@ def _process_transaction_line(user, line, payment_mode, reference_number, remark
         reference_number=reference_number or "",
         remarks=remarks or "",
         loan_repayment_id=line.get("loan_repayment_id") or None,
+        instrument=instrument,
+        instrument_payload=None,
         actor=created_by,
         audit=False,
         audit_via="panel",
@@ -742,6 +743,16 @@ def add_account_view(request):
                         "account",
                         account.id,
                         f"Created account {account_number} ({account_type}) for {user.display_name}",
+                    )
+                    # Phase B4: auto-post membership fee (once per user per FY).
+                    from accounts.services import fees as fee_service
+
+                    fee_service.apply_membership_fee(
+                        user,
+                        member_account=account,
+                        actor=request.user,
+                        ip_address=request.META.get("REMOTE_ADDR"),
+                        audit_via="panel",
                     )
                     return JsonResponse({"success": True, "account_id": account.id})
                 except IntegrityError:
@@ -1484,12 +1495,37 @@ def transactions_view(request):
     )
 
 
+def _instrument_json_for_receipt_modal(inst):
+    """Serialize a linked Instrument for the receipt modal JSON (Phase A2)."""
+    if not inst:
+        return None
+    return {
+        "id": inst.id,
+        "instrument_type": inst.instrument_type,
+        "instrument_type_display": inst.get_instrument_type_display(),
+        "amount": str(inst.amount),
+        "cheque_number": inst.cheque_number or "",
+        "drawer_name": inst.drawer_name or "",
+        "drawer_bank": inst.drawer_bank or "",
+        "drawer_ifsc": inst.drawer_ifsc or "",
+        "cheque_date": inst.cheque_date.isoformat() if inst.cheque_date else "",
+        "cheque_status": inst.cheque_status or "",
+        "reference_number": inst.reference_number or "",
+        "upi_vpa": inst.upi_vpa or "",
+        "is_cleared": inst.is_cleared,
+        "clearing_date": inst.clearing_date.isoformat() if inst.clearing_date else "",
+        "bounce_reason": inst.bounce_reason or "",
+    }
+
+
 @login_required
 @admin_required
 def get_transaction_view(request, transaction_id):
     """Get transaction data for viewing."""
     try:
-        receipt = Transaction.objects.select_related("user", "member_account", "created_by").get(id=transaction_id)
+        receipt = Transaction.objects.select_related("user", "member_account", "created_by", "instrument").get(
+            id=transaction_id
+        )
         return JsonResponse(
             {
                 "success": True,
@@ -1507,6 +1543,7 @@ def get_transaction_view(request, transaction_id):
                     "remarks": receipt.remarks or "",
                     "created_at": receipt.created_at.strftime("%b %d, %Y %I:%M %p") if receipt.created_at else "",
                     "created_date": receipt.created_at.strftime("%b %d, %Y") if receipt.created_at else "",
+                    "instrument": _instrument_json_for_receipt_modal(receipt.instrument),
                     # Member info
                     "member_name": receipt.user.display_name,
                     "member_id": receipt.user.member_id or "",
@@ -1556,6 +1593,17 @@ def add_transaction_view(request):
     except json.JSONDecodeError:
         return JsonResponse({"success": False, "error": "Invalid account entries payload"})
 
+    instrument_payload = None
+    raw_inst = request.POST.get("instrument_payload", "").strip()
+    if raw_inst:
+        try:
+            parsed_inst = json.loads(raw_inst)
+        except json.JSONDecodeError:
+            return JsonResponse({"success": False, "error": "Invalid instrument_payload JSON"})
+        if not isinstance(parsed_inst, dict):
+            return JsonResponse({"success": False, "error": "instrument_payload must be a JSON object"})
+        instrument_payload = parsed_inst
+
     ip = _get_client_ip(request)
 
     try:
@@ -1567,6 +1615,7 @@ def add_transaction_view(request):
                 payment_mode=payment_mode,
                 reference_number=reference_number,
                 remarks=remarks,
+                instrument_payload=instrument_payload,
                 actor=request.user,
                 ip_address=ip,
                 audit_via="panel",
@@ -1580,6 +1629,7 @@ def add_transaction_view(request):
             reference_number=reference_number,
             remarks=remarks,
             fund_id=fund_id,
+            instrument_payload=instrument_payload,
             actor=request.user,
             ip_address=ip,
             audit_via="panel",
@@ -1620,9 +1670,9 @@ def add_transaction_view(request):
 @admin_required
 def vouchers_view(request):
     """List pending and transferred vouchers for receipts page."""
-    vouchers = Voucher.objects.select_related("user", "created_by", "transferred_to_fund").prefetch_related("entries")[
-        :100
-    ]
+    vouchers = Voucher.objects.select_related("user", "created_by", "transferred_to_fund", "instrument").prefetch_related(
+        "entries"
+    )[:100]
     data = []
     for voucher in vouchers:
         data.append(
@@ -1639,6 +1689,9 @@ def vouchers_view(request):
                 "line_count": voucher.entries.count(),
                 "created_at": voucher.created_at.strftime("%d %b %Y, %H:%M"),
                 "fund_name": voucher.transferred_to_fund.name if voucher.transferred_to_fund else "",
+                "payment_mode": voucher.payment_mode,
+                "payment_mode_display": voucher.get_payment_mode_display(),
+                "instrument_type": voucher.instrument.get_instrument_type_display() if voucher.instrument else "",
             }
         )
     return JsonResponse({"success": True, "vouchers": data})
@@ -1655,11 +1708,12 @@ def transfer_voucher_to_fund_view(request, voucher_id):
         return JsonResponse({"success": False, "error": "Fund is required"})
     try:
         with transaction.atomic():
-            voucher = Voucher.objects.select_for_update().get(id=voucher_id)
+            voucher = Voucher.objects.select_for_update().select_related("instrument").get(id=voucher_id)
             if voucher.status != "pending":
                 return JsonResponse({"success": False, "error": "Voucher is already processed"})
             fund = FundAccount.objects.select_for_update().get(id=fund_id, is_deleted=False, is_active=True)
             receipts = []
+            shared_inst = voucher.instrument
             for entry in voucher.entries.select_related("member_account").all():
                 line = {
                     "account_id": entry.member_account_id,
@@ -1675,6 +1729,7 @@ def transfer_voucher_to_fund_view(request, voucher_id):
                     reference_number=voucher.reference_number or "",
                     remarks=voucher.remarks or "",
                     created_by=request.user,
+                    instrument=shared_inst,
                 )
                 entry.created_transaction = receipt
                 entry.save(update_fields=["created_transaction"])
@@ -2887,64 +2942,91 @@ def database_view(request):
 @login_required
 @admin_required
 def distribute_profit_view(request):
-    """Distribute annual profit to funds based on allocation rules."""
-    if request.method == "POST":
-        try:
-            from accounts.utils import get_financial_summary
+    """Distribute annual profit to funds using allocation rules.
 
+    Uses the **locked** :class:`~accounts.models.ProfitAndLoss` ``net_surplus`` for the
+    working financial period (or ``financial_period_id`` when posted). Rejects when
+    no snapshot exists or P&L is not locked (Phase A6).
+    """
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "Invalid request method"})
+    try:
+        from accounts.utils import apply_fund_allocations
+
+        fp = None
+        fp_raw = request.POST.get("financial_period_id", "").strip()
+        if fp_raw.isdigit():
+            fp = get_object_or_404(FinancialPeriod, pk=int(fp_raw))
+        else:
             fw = effective_fy_window(request)
-            start_date, end_date = fw.start_date, fw.end_date
-            y0, y1 = start_date.year, end_date.year
+            fp = financial_period_overlapping(fw.start_date, fw.end_date)
 
-            summary = get_financial_summary(start_date, end_date)
-            net_profit = summary["net_profit"]
-
-            if net_profit <= 0:
-                return JsonResponse(
-                    {
-                        "success": False,
-                        "error": f"No distributable profit for {getattr(fw, 'label', 'FY')} ({y0}-{y1}). Net: ₹{net_profit}",
-                    }
-                )
-
-            # Apply annual_profit allocation rules
-            from accounts.utils import apply_fund_allocations
-
-            transactions = apply_fund_allocations(
-                request,
-                "annual_profit",
-                net_profit,
-                f"Annual profit distribution for {getattr(fw, 'label', 'FY')} ({y0}-{y1})",
-            )
-
-            if not transactions:
-                return JsonResponse(
-                    {
-                        "success": False,
-                        "error": "No allocation rules configured for 'Annual Profit'. Add rules in Allocation Rules page.",
-                    }
-                )
-
-            total_allocated = sum(t.amount for t in transactions)
-            log_action(
-                request,
-                "create",
-                "fund",
-                None,
-                f"Distributed annual profit ₹{net_profit} for {getattr(fw, 'label', 'FY')} ({y0}-{y1}). "
-                f"Allocated ₹{total_allocated} across {len(transactions)} funds.",
-            )
-
+        if not fp:
             return JsonResponse(
                 {
-                    "success": True,
-                    "message": f"Distributed ₹{total_allocated} across {len(transactions)} funds.",
+                    "success": False,
+                    "error": "No financial period matches the working FY. Open or select a financial year first.",
                 }
             )
-        except Exception as e:
-            return JsonResponse({"success": False, "error": str(e)})
 
-    return JsonResponse({"success": False, "error": "Invalid request method"})
+        pl = ProfitAndLoss.objects.filter(financial_period=fp).first()
+        if not pl:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": "No P&L snapshot for this financial period. Save a financial snapshot first.",
+                }
+            )
+        if not pl.is_locked:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": "P&L is not locked for this period. Close the financial year before distributing profit.",
+                }
+            )
+
+        net_surplus = pl.net_surplus
+        if net_surplus <= 0:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": f"No distributable surplus for {fp.label}. Locked net surplus: ₹{net_surplus}.",
+                }
+            )
+
+        transactions = apply_fund_allocations(
+            request,
+            "annual_profit",
+            net_surplus,
+            f"Annual profit distribution for {fp.label} (locked P&L net surplus)",
+        )
+
+        if not transactions:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": "No allocation rules configured for 'Annual Profit'. Add rules in Allocation Rules page.",
+                }
+            )
+
+        total_allocated = sum(t.amount for t in transactions)
+        log_action(
+            request,
+            "create",
+            "fund",
+            None,
+            f"Distributed locked P&L surplus ₹{net_surplus} for {fp.label}. "
+            f"Allocated ₹{total_allocated} across {len(transactions)} funds.",
+        )
+
+        return JsonResponse(
+            {
+                "success": True,
+                "message": f"Distributed ₹{total_allocated} across {len(transactions)} funds (from locked P&L).",
+            }
+        )
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)})
 
 
 @login_required
@@ -3053,106 +3135,49 @@ def distribute_dividend_view(request):
 @login_required
 @admin_required
 def post_interest_view(request):
-    """Calculate and post accrued interest to eligible deposit accounts."""
-    if request.method == "POST":
-        try:
-            period_end = date.today()
+    """Calculate and post accrued interest to eligible deposit accounts.
 
-            # Get all active deposit accounts (not share, not OD)
-            accounts = (
-                MemberAccount.objects.filter(
-                    is_deleted=False,
-                    status="active",
-                    interest_rate__gt=0,
-                )
-                .exclude(account_type__in=["share", "od"])
-                .select_related("user")
-            )
+    Phase B1: delegates to ``accounts.services.interest_engine.accrue_deposits``.
+    Behaviour: same set of accounts (CD/FD/RD/Sukanya/Suputra — `share`+`od`
+    excluded), same per-account window
+    ``[last_interest_calc_date or opening_date, today]``, same audit summary.
+    """
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "Invalid request method"})
+    try:
+        fp = resolve_portal_financial_period(request) or active_financial_period()
+        result = interest_engine.accrue_deposits(
+            as_of=date.today(),
+            financial_period=fp,
+            actor=request.user,
+            ip_address=_get_client_ip(request),
+            audit_via="panel",
+        )
 
-            total_posted = Decimal("0.00")
-            accounts_updated = 0
+        log_action(
+            request,
+            "create",
+            "account",
+            None,
+            (
+                f"Posted interest for period ending {result['period_end']}. "
+                f"\u20b9{result['total_posted']} across {result['accounts_updated']} accounts."
+            ),
+        )
 
-            with transaction.atomic():
-                for account in accounts:
-                    # Skip if interest was already calculated for this period
-                    if account.last_interest_calc_date and account.last_interest_calc_date >= period_end:
-                        continue
-
-                    # Calculate interest for the period
-                    calc_start = account.last_interest_calc_date or account.opening_date
-                    if calc_start >= period_end:
-                        continue
-
-                    days = (period_end - calc_start).days
-                    if days <= 0:
-                        continue
-
-                    interest_amount = InterestCalculatorService.daily_simple_interest(
-                        account.balance, account.interest_rate, days
-                    )
-
-                    if interest_amount <= 0:
-                        continue
-
-                    # Update accrued interest on account
-                    MemberAccount.objects.filter(id=account.id).update(
-                        accrued_interest=F("accrued_interest") + interest_amount,
-                        last_interest_calc_date=period_end,
-                    )
-
-                    new_transaction_number = _next_transaction_number()
-                    new_balance = account.balance + interest_amount
-                    txn = Transaction.objects.create(
-                        user=account.user,
-                        member_account=account,
-                        transaction_number=new_transaction_number,
-                        transaction_type="interest",
-                        amount=interest_amount,
-                        description=f"Interest credit for {calc_start.strftime('%b %d')} - {period_end.strftime('%b %d, %Y')} @ {account.interest_rate}%",
-                        payment_mode="internal",
-                        balance_after=new_balance,
-                        created_by=request.user,
-                    )
-
-                    fp = resolve_portal_financial_period(request) or active_financial_period()
-                    InterestPayout.objects.create(
-                        account=account,
-                        amount=interest_amount,
-                        period_start=calc_start,
-                        period_end=period_end,
-                        created_by=request.user,
-                        transaction=txn,
-                        financial_period=fp,
-                        status="credited",
-                    )
-
-                    # Update account balance
-                    MemberAccount.objects.filter(id=account.id).update(
-                        balance=F("balance") + interest_amount,
-                        last_transaction_date=period_end,
-                    )
-
-                    total_posted += interest_amount
-                    accounts_updated += 1
-
-            log_action(
-                request,
-                "create",
-                "account",
-                None,
-                f"Posted interest for period ending {period_end}. ₹{total_posted} across {accounts_updated} accounts.",
-            )
-
-            return JsonResponse(
-                {
-                    "success": True,
-                    "message": f"Posted ₹{total_posted} interest to {accounts_updated} accounts.",
-                }
-            )
-        except Exception as e:
-            return JsonResponse({"success": False, "error": str(e)})
-
-    return JsonResponse({"success": False, "error": "Invalid request method"})
+        return JsonResponse(
+            {
+                "success": True,
+                "message": (
+                    f"Posted \u20b9{result['total_posted']} interest to "
+                    f"{result['accounts_updated']} accounts."
+                ),
+            }
+        )
+    except ServiceError as exc:
+        return JsonResponse({"success": False, "error": str(exc)}, status=400)
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)})
 
 
 @login_required
@@ -3549,10 +3574,24 @@ def approve_loan_view(request, loan_id):
     if request.method != "POST":
         return JsonResponse({"success": False, "error": "Invalid request method"})
 
+    raw_acct = request.POST.get("disbursement_account_id") or request.POST.get("disbursement_account")
+    disbursement_account_id = None
+    if raw_acct not in (None, ""):
+        try:
+            disbursement_account_id = int(raw_acct)
+        except (TypeError, ValueError):
+            return JsonResponse({"success": False, "error": "Invalid disbursement account ID."}, status=400)
+
+    processing_fee = request.POST.get("processing_fee")
+    if processing_fee is not None and str(processing_fee).strip() == "":
+        processing_fee = None
+
     try:
         acct = loan_service.approve_loan_application(
             application_id=loan_id,
             disbursement_date=request.POST.get("disbursement_date"),
+            disbursement_account_id=disbursement_account_id,
+            processing_fee=processing_fee,
             actor=request.user,
             ip_address=_get_client_ip(request),
             audit_via="panel",

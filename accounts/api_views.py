@@ -29,7 +29,6 @@ from accounts.email_utils import (
     send_password_change_alert,
     send_phone_changed_alert,
 )
-from accounts.interest import InterestCalculatorService
 from accounts.models import (
     AuditLog,
     FeeCharge,
@@ -38,7 +37,6 @@ from accounts.models import (
     FundAccount,
     FundAllocationRule,
     FundTransaction,
-    InterestPayout,
     InterestReceivable,
     LoanAccount,
     LoanApplication,
@@ -79,6 +77,7 @@ from accounts.serializers import (
     UserListSerializer,
     loan_merged_list_dict,
 )
+from accounts.services import interest_engine
 from accounts.services import loans as loan_service
 from accounts.services import transactions as transaction_service
 from accounts.services.exceptions import (
@@ -92,6 +91,7 @@ from accounts.utils import (
     _get_client_ip,
     active_financial_period,
     apply_fund_allocations,
+    financial_period_overlapping,
     log_action,
     mask_email_for_display,
     persist_financial_snapshots,
@@ -636,6 +636,16 @@ def admin_accounts_create(request):
             balance=serializer.validated_data.get("principal_amount", Decimal("0.00")),
         )
         log_action(request, "create", "account", account.id, f"Created account via API: {account.account_number}")
+        # Phase B4: auto-post membership fee (once per user per FY).
+        from accounts.services import fees as fee_service
+
+        fee_service.apply_membership_fee(
+            account.user,
+            member_account=account,
+            actor=request.user,
+            ip_address=request.META.get("REMOTE_ADDR"),
+            audit_via="api",
+        )
         return Response(MemberAccountSerializer(account).data, status=status.HTTP_201_CREATED)
     return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -704,7 +714,7 @@ def admin_accounts_delete(request, account_id):
 @permission_classes([IsAdmin])
 def admin_transactions_list(request):
     """List all transactions."""
-    qs = Transaction.objects.select_related("user", "member_account").order_by("-created_at")
+    qs = Transaction.objects.select_related("user", "member_account", "instrument").order_by("-created_at")
 
     txn_type = request.query_params.get("type", "")
     if txn_type:
@@ -731,6 +741,7 @@ def admin_transactions_create(request):
         return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
     data = serializer.validated_data
+    inst_payload = data.get("instrument") or None
     try:
         txn = transaction_service.post_transaction(
             member_account_id=data["member_account"],
@@ -739,6 +750,7 @@ def admin_transactions_create(request):
             description=data.get("description", ""),
             payment_mode=data.get("payment_mode", "cash"),
             reference_number=data.get("reference_number", ""),
+            instrument_payload=inst_payload,
             actor=request.user,
             ip_address=_get_client_ip(request),
             audit_via="api",
@@ -764,6 +776,7 @@ def admin_transactions_create(request):
         email_template="payment_success",
     )
 
+    txn = Transaction.objects.select_related("user", "member_account", "instrument").get(pk=txn.pk)
     return Response(TransactionSerializer(txn).data, status=status.HTTP_201_CREATED)
 
 
@@ -772,7 +785,7 @@ def admin_transactions_create(request):
 def admin_transactions_detail(request, transaction_id):
     """Get transaction detail."""
     try:
-        txn = Transaction.objects.select_related("user", "member_account").get(id=transaction_id)
+        txn = Transaction.objects.select_related("user", "member_account", "instrument").get(id=transaction_id)
     except Transaction.DoesNotExist:
         return Response({"error": "Transaction not found"}, status=status.HTTP_404_NOT_FOUND)
     return Response(TransactionSerializer(txn).data)
@@ -941,10 +954,24 @@ def admin_loans_detail(request, loan_id):
 @permission_classes([IsAdmin])
 def admin_loans_approve(request, loan_id):
     """Approve a pending LoanApplication (delegates to `services.loans.approve_loan_application`)."""
+    raw_acct = request.data.get("disbursement_account")
+    disbursement_account_id = None
+    if raw_acct not in (None, ""):
+        try:
+            disbursement_account_id = int(raw_acct)
+        except (TypeError, ValueError):
+            return Response({"error": "Invalid disbursement account ID."}, status=status.HTTP_400_BAD_REQUEST)
+
+    processing_fee = request.data.get("processing_fee")
+    if processing_fee is not None and str(processing_fee).strip() == "":
+        processing_fee = None
+
     try:
         acct = loan_service.approve_loan_application(
             application_id=loan_id,
             disbursement_date=request.data.get("disbursement_date"),
+            disbursement_account_id=disbursement_account_id,
+            processing_fee=processing_fee,
             actor=request.user,
             ip_address=_get_client_ip(request),
             audit_via="api",
@@ -1244,26 +1271,48 @@ def admin_reports_summary(request):
 @api_view(["POST"])
 @permission_classes([IsAdmin])
 def admin_reports_distribute_profit(request):
-    """Distribute annual profit to funds."""
-    from accounts.utils import get_financial_summary
+    """Distribute annual profit to funds from locked P&L ``net_surplus`` (Phase A6).
 
-    year = int(request.data.get("year", date.today().year))
-    start_date = date(year, 4, 1)
-    end_date = date(year + 1, 3, 31)
+    Body: optional ``financial_period_id`` (preferred), or ``year`` (April–March FY start year)
+    to resolve the period via overlap.
+    """
+    fp = None
+    fp_raw = request.data.get("financial_period_id")
+    if fp_raw is not None and str(fp_raw).strip().isdigit():
+        fp = get_object_or_404(FinancialPeriod, pk=int(str(fp_raw).strip()))
+    else:
+        year = int(request.data.get("year", date.today().year))
+        start_date = date(year, 4, 1)
+        end_date = date(year + 1, 3, 31)
+        fp = financial_period_overlapping(start_date, end_date)
 
-    summary = get_financial_summary(start_date, end_date)
-    net_profit = summary["net_profit"]
+    if not fp:
+        return Response({"error": "No financial period for the given year or id."}, status=status.HTTP_400_BAD_REQUEST)
 
-    if net_profit <= 0:
+    pl = ProfitAndLoss.objects.filter(financial_period=fp).first()
+    if not pl:
         return Response(
-            {"error": f"No distributable profit for FY {year}-{year + 1}"}, status=status.HTTP_400_BAD_REQUEST
+            {"error": "No P&L snapshot for this financial period. Save a snapshot first."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if not pl.is_locked:
+        return Response(
+            {"error": "P&L is not locked for this period. Close the financial year before distributing."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    net_surplus = pl.net_surplus
+    if net_surplus <= 0:
+        return Response(
+            {"error": f"No distributable surplus for {fp.label}. Locked net surplus: ₹{net_surplus}."},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
     transactions = apply_fund_allocations(
         request,
         "annual_profit",
-        net_profit,
-        f"Annual profit distribution for FY {year}-{year + 1}",
+        net_surplus,
+        f"Annual profit distribution for {fp.label} (locked P&L net surplus)",
     )
 
     if not transactions:
@@ -1278,12 +1327,13 @@ def admin_reports_distribute_profit(request):
         "create",
         "fund",
         None,
-        f"Distributed profit ₹{net_profit} for FY {year}-{year + 1} via API. Allocated ₹{total_allocated}.",
+        f"Distributed locked P&L surplus ₹{net_surplus} for {fp.label} via API. Allocated ₹{total_allocated}.",
     )
 
     return Response(
         {
-            "net_profit": str(net_profit),
+            "financial_period_id": fp.id,
+            "net_surplus": str(net_surplus),
             "total_allocated": str(total_allocated),
             "allocations": FundTransactionSerializer(transactions, many=True).data,
         }
@@ -1838,108 +1888,48 @@ def unregister_device_token_view(request):
 @api_view(["POST"])
 @permission_classes([IsAdmin])
 def admin_post_interest(request):
-    """Calculate and post accrued interest to all eligible deposit accounts."""
-    today = date.today()
+    """Calculate and post accrued interest to all eligible deposit accounts.
 
-    accounts = (
-        MemberAccount.objects.filter(is_deleted=False, status="active", interest_rate__gt=0)
-        .exclude(account_type__in=["share", "od"])
-        .select_related("user")
+    Phase B1: delegates to ``accounts.services.interest_engine.accrue_deposits``.
+    Same set of accounts (CD/FD/RD/Sukanya/Suputra — `share`+`od` excluded)
+    and same per-account window as before. Push / email notifications are
+    fired for each posted ``InterestPayout`` after the engine returns.
+    """
+    fp = active_financial_period()
+    result = interest_engine.accrue_deposits(
+        as_of=date.today(),
+        financial_period=fp,
+        actor=request.user,
+        ip_address=_get_client_ip(request),
+        audit_via="api",
     )
 
-    total_posted = Decimal("0.00")
-    accounts_updated = 0
-
-    with transaction.atomic():
-        for account in accounts:
-            if account.last_interest_calc_date and account.last_interest_calc_date >= today:
-                continue
-
-            calc_start = account.last_interest_calc_date or account.opening_date
-            if calc_start >= today:
-                continue
-
-            days = (today - calc_start).days
-            if days <= 0:
-                continue
-
-            interest_amount = InterestCalculatorService.daily_simple_interest(
-                account.balance, account.interest_rate, days
-            )
-
-            if interest_amount <= 0:
-                continue
-
-            MemberAccount.objects.filter(id=account.id).update(
-                accrued_interest=F("accrued_interest") + interest_amount,
-                balance=F("balance") + interest_amount,
-                last_interest_calc_date=today,
-                last_transaction_date=today,
-            )
-
-            year = today.year
-            last_txn = (
-                Transaction.objects.filter(transaction_number__startswith=f"TXN-{year}-")
-                .order_by("-transaction_number")
-                .first()
-            )
-            if last_txn:
-                try:
-                    last_seq = int(last_txn.transaction_number.split("-")[-1])
-                    next_seq = last_seq + 1
-                except (ValueError, IndexError):
-                    next_seq = 1
-            else:
-                next_seq = 1
-            new_transaction_number = f"TXN-{year}-{next_seq:05d}"
-            new_balance = account.balance + interest_amount
-
-            txn = Transaction.objects.create(
-                user=account.user,
-                member_account=account,
-                transaction_number=new_transaction_number,
-                transaction_type="interest",
-                amount=interest_amount,
-                description=f"Interest credit {calc_start.strftime('%b %d')} - {today.strftime('%b %d, %Y')} @ {account.interest_rate}%",
-                payment_mode="internal",
-                balance_after=new_balance,
-                created_by=request.user,
-            )
-
-            fp = active_financial_period()
-            InterestPayout.objects.create(
-                account=account,
-                amount=interest_amount,
-                period_start=calc_start,
-                period_end=today,
-                created_by=request.user,
-                transaction=txn,
-                financial_period=fp,
-                status="credited",
-            )
-
-            dispatch_user_notification(
-                user=account.user,
-                title="Interest Credited",
-                message=f"₹{interest_amount} interest credited to account {account.account_number}.",
-                notification_type="transaction",
-                metadata={
-                    "account_id": account.id,
-                    "account_number": account.account_number,
-                    "interest_amount": str(interest_amount),
-                },
-                email_template="interest_credit",
-            )
-
-            total_posted += interest_amount
-            accounts_updated += 1
+    for payout in result["payouts"]:
+        dispatch_user_notification(
+            user=payout.account.user,
+            title="Interest Credited",
+            message=(
+                f"\u20b9{payout.amount} interest credited to account "
+                f"{payout.account.account_number}."
+            ),
+            notification_type="transaction",
+            metadata={
+                "account_id": payout.account.id,
+                "account_number": payout.account.account_number,
+                "interest_amount": str(payout.amount),
+            },
+            email_template="interest_credit",
+        )
 
     return Response(
         {
             "success": True,
-            "message": f"Posted ₹{total_posted} interest to {accounts_updated} accounts.",
-            "total_posted": str(total_posted),
-            "accounts_updated": accounts_updated,
+            "message": (
+                f"Posted \u20b9{result['total_posted']} interest to "
+                f"{result['accounts_updated']} accounts."
+            ),
+            "total_posted": str(result["total_posted"]),
+            "accounts_updated": result["accounts_updated"],
         }
     )
 

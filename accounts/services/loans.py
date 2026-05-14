@@ -545,6 +545,16 @@ def approve_loan_application(
                 audit_via=audit_via,
             )
 
+        # Phase B4: auto-post processing fee via the fee service.
+        from accounts.services import fees as fee_service
+
+        fee_service.apply_processing_fee(
+            acct,
+            actor=actor,
+            ip_address=ip_address,
+            audit_via=audit_via,
+        )
+
     acct.refresh_from_db()
 
     via = "via API: " if audit_via == "api" else ""
@@ -583,7 +593,7 @@ def record_emi_payment(
         NotFoundError   — loan or installment missing.
         ValidationError — loan not active / installment paid / non-positive amount.
     """
-    from accounts.utils import mark_interest_receivable_collected_for_repayment
+    from accounts.services import interest_engine
 
     if not installment_number:
         raise ValidationError("Installment number is required.")
@@ -660,7 +670,7 @@ def record_emi_payment(
                 repayment.save()
 
                 if repayment.payment_status == "paid":
-                    mark_interest_receivable_collected_for_repayment(repayment)
+                    interest_engine.reconcile_emi_to_receivable(repayment, transaction=txn)
 
                 loan_ac.total_paid = loan_ac.total_paid + amount
                 loan_ac.outstanding_balance = loan_ac.outstanding_balance - repayment.principal_component

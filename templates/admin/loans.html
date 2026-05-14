@@ -477,6 +477,17 @@
                     <label class="form-label">Disbursement Date *</label>
                     <input type="date" id="approve-disbursement-date" name="disbursement_date" class="form-input" required>
                 </div>
+                <div class="form-group">
+                    <label class="form-label">Disbursement account (member account ID)</label>
+                    <input type="number" id="approve-disbursement-account-id" name="disbursement_account_id" class="form-input" min="1" step="1" placeholder="Optional — credits principal here">
+                    <small class="form-help" style="display:block; margin-top:0.25rem; color: var(--color-gray-500);">
+                        Leave blank to book the loan without posting a disbursement transaction. Use the borrower’s active CD/FD/etc. account primary key.
+                    </small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Processing fee (₹)</label>
+                    <input type="number" id="approve-processing-fee" name="processing_fee" class="form-input" step="0.01" min="0" placeholder="0">
+                </div>
                 <div id="approve-error" class="error-message"></div>
             </form>
         </div>

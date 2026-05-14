@@ -13,6 +13,7 @@ from accounts.models import (
     FundAccount,
     FundAllocationRule,
     FundTransaction,
+    Instrument,
     InterestReceivable,
     LoanAccount,
     LoanApplication,
@@ -618,12 +619,59 @@ class MemberAccountCreateSerializer(serializers.ModelSerializer):
 # ========================================
 
 
+class InstrumentSerializer(serializers.ModelSerializer):
+    """Read-only payment instrument attached to a transaction."""
+
+    instrument_type_display = serializers.CharField(source="get_instrument_type_display", read_only=True)
+
+    class Meta:
+        model = Instrument
+        fields = [
+            "id",
+            "instrument_type",
+            "instrument_type_display",
+            "amount",
+            "cheque_number",
+            "drawer_name",
+            "drawer_bank",
+            "drawer_ifsc",
+            "cheque_date",
+            "cheque_status",
+            "reference_number",
+            "upi_vpa",
+            "is_cleared",
+            "clearing_date",
+            "bounce_reason",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class InstrumentPayloadSerializer(serializers.Serializer):
+    """Optional nested write payload for ``TransactionCreateSerializer`` (Phase A2)."""
+
+    instrument_type = serializers.ChoiceField(
+        choices=[c[0] for c in Instrument.INSTRUMENT_TYPE_CHOICES if c[0] != "cash"],
+        required=False,
+    )
+    cheque_number = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    drawer_name = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    drawer_bank = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    drawer_ifsc = serializers.CharField(max_length=11, required=False, allow_blank=True)
+    cheque_date = serializers.DateField(required=False, allow_null=True)
+    reference_number = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    upi_vpa = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    cheque_status = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    is_cleared = serializers.BooleanField(required=False, default=False)
+
+
 class TransactionSerializer(serializers.ModelSerializer):
     """Full transaction serializer."""
 
     user_display = serializers.CharField(source="user.display_name", read_only=True)
     account_number = serializers.CharField(source="member_account.account_number", read_only=True)
     transaction_type_display = serializers.CharField(source="get_transaction_type_display", read_only=True)
+    instrument = InstrumentSerializer(read_only=True)
 
     class Meta:
         model = Transaction
@@ -659,6 +707,7 @@ class TransactionCreateSerializer(serializers.Serializer):
     payment_mode = serializers.ChoiceField(choices=Transaction.PAYMENT_MODE_CHOICES, default="cash")
     description = serializers.CharField(required=False, allow_blank=True)
     reference_number = serializers.CharField(required=False, allow_blank=True)
+    instrument = InstrumentPayloadSerializer(required=False, allow_null=True)
 
 
 # ========================================

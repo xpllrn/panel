@@ -1,20 +1,49 @@
 # Panel ERP — Roadmap
 
-**Single source of truth** for where Panel ERP stands today and the phased plan to bring it in line with the cooperative-society ERP architecture (the "diagram"), then expose the whole system as an **MCP server** for AI agents and third-party apps.
-
-> File: `ROADMAP.md`. Supersedes the earlier `PROJECT_STATE.md` (now removed).
-
-This document is the working plan. Edit it as work lands. Companion docs:
-- `CLAUDE.md` — coding conventions
-- `DATABASE.md` — current schema reference (needs refresh after Phase 2 of the DB refactor)
-- `DATABASE_REFACTOR_PLAN.md` — the original DB refactor (Phases 1–4 are **complete**)
-- `API_DOCUMENTATION.md` — REST surface documentation
+> Single source of truth for what's done, what's next, and what blocks what.
+> Edit this file as work lands.
 
 ---
 
-## 1. Target architecture (the diagram)
+## ⚡ TL;DR
 
-The cooperative society banking flow has five layers. Every box below must be backed by a model, a service function, a UI/API surface, and an audit trail.
+| Phase | What it ships | Status |
+|---|---|---|
+| 0 | Services layer (`accounts/services/`) shared by panel + API | ✅ Done |
+| A | Stabilize the diagram — instruments, FY lifecycle, locked-P&L distribute | ✅ Done |
+| **B** | **Running engine — interest, fees, society live totals, surplus posting** | **🟡 In progress — B1, B2, B3, B4, B6, B7, B8 done** |
+| C | MCP server (Panel ERP as tools for AI agents) | ⚪ Not started |
+| D | Polish — docs, smoke script, perf | 🟡 D1 done |
+
+**👉 Next up: Phase B5 — Society Main Account becomes derived.** `/api/v1/admin/society/main-account` computes live totals + compares snapshot.
+
+---
+
+## Status legend
+
+| Symbol | Meaning |
+|---|---|
+| ✅ | Done — shipped, tested |
+| 🟡 | In progress / partial |
+| ⚪ | Not started |
+| ❌ | Blocked / awaiting decision |
+
+Last updated: 2026-05-14.
+
+---
+
+## 🗺️ What's left, in plain language
+
+1. **B5, B9, B10** — society live aggregates, surplus voucher posting, cross-product tests.
+2. **B7/B8 follow-ups** — REST endpoints + UI panels for the already-shipped exposure & eligibility services.
+3. **Phase C — MCP server** — only after B1–B5 are real (MCP tools shouldn't lie about half-wired services).
+4. **Phase D — Polish** — refresh `DATABASE.md` / `README.md`, smoke script, pagination + caching.
+
+---
+
+## 📐 1. Target architecture
+
+Five layers from the cooperative-society banking diagram. Every box must be backed by a model, a service function, a UI/API surface, and an audit trail.
 
 ```
 L1 — Period & people
@@ -22,7 +51,7 @@ L1 — Period & people
    Share Capital · Member (KYC + nominees) · Guarantor
 
 L2 — Member products
-   CD · FD · OD · RD/Savings
+   CD · FD · OD · RD / Savings
                  │
                  ▼
    Interest Calculation Engine ──────────────────┐
@@ -42,9 +71,9 @@ L4 — Posting plumbing
 L5 — Society books
    SOCIETY MAIN ACCOUNT  ←  every Transaction rolls up here
         │
-        ├── Interest Payable (to depositors)        — subtract
-        ├── Interest Receivable (from loans)        — add
-        ├── Fees & Charges                          — add
+        ├── Interest Payable (to depositors)   — subtract
+        ├── Interest Receivable (from loans)   — add
+        ├── Fees & Charges                     — add
         ▼
    Net Surplus
         │
@@ -57,57 +86,49 @@ L5 — Society books
 
 ---
 
-## 2. Deployment architecture (already in place)
+## 🏗️ 2. Deployment architecture (already in place)
 
-The frontend and the API are deployed as **two independent processes** sharing one PostgreSQL database. This is a security and reuse boundary — an HTML bug or auto-login shortcut on the panel cannot reach the API surface, and the API can be consumed by the Android app, future client apps, and the upcoming MCP server.
+Two independent processes share one PostgreSQL database. Security and reuse boundary: an HTML bug on the panel cannot reach the API, and the API serves Android, future clients, and the upcoming MCP server.
 
 | Service | Container | Port | Settings | URLconf | Notes |
 |---|---|---|---|---|---|
-| **panel** | `panel` | 8000 | `config.settings` | `config.urls_panel` | Staff HTML portal, Django admin, setup wizard. Owns migrations. |
-| **api** | `api` | 8001 | `config.settings_api` | `config.urls_api` | Pure REST (`/api/v1/`). `AutoStaffLoginMiddleware` stripped. No HTML. Used by Android, MCP, third-party apps. |
+| **panel** | `panel` | 8000 | `config.settings` | `config.urls_panel` | Staff HTML, Django admin, setup wizard. Owns migrations. |
+| **api** | `api` | 8001 | `config.settings_api` | `config.urls_api` | Pure REST `/api/v1/`. No HTML, no auto-login. |
 | **db** | `db` | 5433→5432 | — | — | PostgreSQL 15. Shared. |
 
-What is still **wrong** today: business logic lives inside `admin_portal/views.py` (4,677 lines of HTML view functions) and is partially duplicated inside `accounts/api_views.py` (2,582 lines). The two surfaces drift. **Phase 0 fixes this** by introducing a services layer that both surfaces call into.
-
 ---
 
-## 3. Current state — diagram coverage
+## 🧱 3. Where we are vs the diagram (scorecard)
 
-The DB refactor (Phases 1–4 in `DATABASE_REFACTOR_PLAN.md`) is **complete**. All 28 models exist, the old monolithic `Loan` is gone, `Receipt` is now `Transaction`, and `FinancialPeriod` / `Instrument` / `InterestReceivable` / `ProfitAndLoss` / `SocietyAccount` / `FeeSchedule` / `FeeCharge` are in place.
+DB refactor (Phases 1–4 of `DATABASE_REFACTOR_PLAN.md`) is ✅ complete. All 28 models exist. The remaining gap is **wiring** — services + UI + API + audit — for the engine and MCP.
 
-The remaining gap is **wiring**: many models exist with no UI, no API, or with services that ignore them. Scorecard:
-
-| Diagram element | Model | UI | API | Service / Logic |
-|---|---|---|---|---|
-| Financial Period | ✅ | ⚠️ Settings tab only — no open/close lifecycle | ❌ No REST | ⚠️ `portal_fy.py` resolves "working FY" but no transitions |
-| Member / KYC / Nominee / Address / Share Capital | ✅ | ✅ | ✅ | ✅ |
-| Guarantor | ✅ | ⚠️ Single row, captured at approval | ⚠️ Partial fields | ❌ No multi-guarantor support |
-| CD/FD/OD/RD accounts | ✅ | ✅ | ✅ | ✅ |
-| Interest Engine — deposits | ✅ math (`accounts/interest.py`) | ✅ `post_interest_view` button | ✅ `admin_post_interest` | ⚠️ **OD excluded**; no scheduled job; ignores `transaction_date` |
-| Interest Engine — loans | ✅ `InterestReceivable` | ⚠️ Manual "sync receivables" button | ⚠️ Manual sync endpoint | ❌ No daily accrual; no unified engine |
-| Loan Application | ✅ | ✅ | ✅ | ✅ |
-| Loan Account | ✅ | ✅ | ✅ | ⚠️ **Approval doesn't disburse** — no `Transaction` posted, `disbursement_account` stays null, `processing_fee` silently dropped by API |
-| Repayment Schedule | ✅ | ✅ | ✅ | ⚠️ `calculate_emi()` always uses reducing formula, even for flat loans |
-| Transaction | ✅ | ✅ | ✅ | ✅ |
-| Voucher (4 types) | ✅ | ✅ | ✅ | ⚠️ Cash payments **forced** through voucher staging |
-| Instrument (cheque/DD/NEFT/UPI/IMPS) | ✅ | ❌ **Never created from any flow** | ❌ Not on serializer | ❌ Model lives unused |
-| Society Main Account | ✅ snapshot | ✅ | ✅ | ⚠️ Aggregates only; no running ledger |
-| Interest Payable / Receivable / Fees | ✅ | ⚠️ Payable yes; receivable manual; fees almost untouched | ⚠️ | ❌ `FeeSchedule` defined; **`FeeCharge` never created automatically** |
-| Net Surplus | ✅ `ProfitAndLoss` | ✅ saved snapshot | ✅ | ❌ **`distribute_profit` reads live summary, NOT the saved P&L row** — locking is meaningless |
-| 5-bucket distribution (25% / 1–2% / build / bad-debt / dividend) | ✅ `FundAllocationRule.annual_profit` | ⚠️ Manual rule creation | ⚠️ | ❌ Setup wizard **doesn't seed statutory funds or default rules** |
-| MCP server | ❌ Nothing exists | ❌ | ❌ | ❌ |
+| Diagram element | Model | UI | API | Service | Status |
+|---|---|---|---|---|---|
+| Financial Period (open/close/continue) | ✅ | ✅ `/finance/periods/` | ✅ | ✅ | ✅ A5 |
+| Member · KYC · Nominee · Address · Share Capital | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Guarantor | ✅ | 🟡 single row | 🟡 partial | ❌ multi-guarantor | 🟡 |
+| Deposits (CD/FD/RD/OD/share) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Interest Engine — deposits | ✅ math | ✅ button | ✅ POST endpoint | ✅ B1 `interest_engine.accrue_deposits` (shared by panel + API) | ✅ |
+| Interest Engine — loans | ✅ `InterestReceivable` | ✅ sync button → engine | ✅ sync endpoint → engine | ✅ B1 `interest_engine.accrue_loans` (`sync_loan_interest_receivables` shim) | ✅ |
+| Loan Application → Account → Schedule | ✅ | ✅ | ✅ | ✅ A1 disbursement posts | ✅ |
+| Transaction | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Voucher (4 types) | ✅ | ✅ | ✅ | ✅ A4 cash optional | ✅ |
+| Instrument (cheque/DD/NEFT/UPI/IMPS) | ✅ | ✅ panel + voucher + modal | ✅ nested serializer | ✅ A2 shared across bulk + voucher transfer | ✅ |
+| Society Main Account | ✅ snapshot | ✅ | ✅ | 🟡 aggregates only, no live ledger | **B5** |
+| Interest Payable / Receivable / Fees | ✅ | 🟡 receivable manual, fees register | 🟡 | ✅ `FeeCharge` auto via `services/fees.py` | **B5** (society totals) |
+| Net Surplus (P&L) | ✅ | ✅ saved snapshot | ✅ | ✅ A6 distribute reads locked snapshot | ✅ |
+| 5-bucket distribution | ✅ rules | 🟡 manual rule creation | 🟡 | ❌ wizard doesn't seed funds | **B6** |
+| Member exposure / loan eligibility | ✅ | ❌ no panels | ❌ no REST | ✅ B7 / B8 services + tests | 🟡 needs surfaces |
+| MCP server | ❌ | ❌ | ❌ | ❌ | **Phase C** |
 
 ### Other lingering issues
-- `templates/admin/receipts.html` still rendered by `transactions_view` (cosmetic rename incomplete).
-- `templates/admin/financial_periods.html` is an **orphan** — never linked, never routed.
-- Setup wizard does not create the **first FinancialPeriod** or seed any **statutory FundAccounts**.
-- API `LoanCreateSerializer` accepts `processing_fee` and `disbursement_account`, but `admin_loans_create` drops them.
-- Only one finance test class (`PersistFinancialSnapshotsTests`); no coverage for interest, fund allocation, loan approval, FY lifecycle.
-- `android-app/DATABASE_REFACTOR_ANDROID_PENDING.md` flags the Android app hasn't been updated for the rename/split.
+- Setup wizard does not create the **first FinancialPeriod** or seed **statutory FundAccounts** (Phase B6).
+- `DATABASE.md` / `API_DOCUMENTATION.md` lag the schema and routes (Phase D4).
+- Member portal, Android app, OTP + member REST routes archived under `legacy/` — see `legacy/README.md`.
 
 ---
 
-## 4. Architectural principle going forward
+## 🧭 4. Architectural principle
 
 **Single source of truth for every business action is a service function.** The panel HTML views, the REST API, and the future MCP server are all thin adapters.
 
@@ -119,15 +140,14 @@ The remaining gap is **wiring**: many models exist with no UI, no API, or with s
                           ┌────────────┴───────────┐
                           │  accounts/services/    │  ← single source of truth
                           │   • financial_period   │
-                          │   • interest_engine    │
+                          │   • interest           │  pure math
+                          │   • interest_engine    │  ← Phase B1
                           │   • loans              │
-                          │   • transactions       │
-                          │   • vouchers           │
-                          │   • instruments        │
-                          │   • fees               │
-                          │   • surplus            │
+                          │   • transactions       │  (handles vouchers + instruments)
                           │   • exposure           │
                           │   • eligibility        │
+                          │   • fees               │  ← Phase B4
+                          │   • surplus            │  ← Phase B9
                           └─┬────────┬───────────┬─┘
                             │        │           │
             ┌───────────────┘        │           └────────────────┐
@@ -144,133 +164,47 @@ Every change from Phase A onwards lands the new logic in `accounts/services/` an
 
 ---
 
-## 5. The phased plan
+## 🚦 5. Phases at a glance
 
-### Phase 0 — Foundation (services layer) · complete
+### Phase B (current) — Build the missing engine
 
-**Goal:** introduce `accounts/services/` and migrate the existing logic out of `admin_portal/views.py` and `accounts/api_views.py` into pure functions that both adapters call. No behaviour change.
+| ID | Title | Status | Why it matters |
+|---|---|---|---|
+| **B1** | Unified Interest Engine | ✅ | `accounts/services/interest_engine.py` (`accrue_deposits` / `accrue_loans` / `run_full_engine`). Panel + REST adapters delegate. 15 new tests, all green. New `internal` payment mode + migration 0037. |
+| **B2** | Management command + cron hook | ✅ | `python manage.py run_interest_engine [--period <fy>] [--as-of <date>] [--deposits-only \| --loans-only]`. 9 new tests. Cron line documented. |
+| **B3** | EMI ↔ Receivable reconciliation | ✅ | `interest_engine.reconcile_emi_to_receivable(repayment, transaction=...)`. Both `record_emi_payment` and `_settle_loan_repayment` (the `post_transaction(loan_repayment_id=...)` path) reconcile now. Handles "paid before accrual" by creating the receivable already-collected. New `InterestReceivable.transaction` FK + migration 0038. 15 new tests. |
+| **B4** | Fees become automatic | ✅ | Approval / overdue / opening / rollover post `FeeCharge` via `FeeSchedule`. |
+| B5 | Society Main Account becomes derived | ⚪ | `/api/v1/admin/society/main-account` computes live totals + compares snapshot. |
+| B6 | Setup-wizard seeding | ✅ | `_finalize_setup` idempotently seeds the current Indian FY's `FinancialPeriod`, 5 statutory `FundAccount` rows, and 5 `annual_profit` `FundAllocationRule` rows (totalling 100%). Operator edits to pre-existing rows are preserved. 5 new tests. |
+| B7 | Member-exposure service | ✅ | `services/exposure.py` + 7 tests. **REST + UI panel still pending.** |
+| B8 | Loan-eligibility pre-check service | ✅ | `services/eligibility.py` + 11 tests. **REST + UI panel still pending.** |
+| B9 | Surplus distribution service | ⚪ | `services/surplus.py` posts journal voucher debiting Surplus / crediting funds. |
+| B10 | Cross-product engine + fee + surplus tests | ⚪ | Idempotency, CD+FD+OD+RD+Loan in one run, locked-P&L distribute, auto-fees. |
 
-- [ ] **0.1** Create `accounts/services/__init__.py` package skeleton.
-- [ ] **0.2** Move `accounts/interest.py` → `accounts/services/interest.py` (preserve a deprecation shim).
-- [x] **0.3** Extract loan flows into `accounts/services/loans.py`:
-  - `create_loan_application(...)`
-  - `approve_loan_application(...)` (creates `LoanAccount` + schedule)
-  - `record_emi_payment(...)`
-  - `has_unpaid_emi(...)` (moved from `admin_portal/views.py`; `_has_unpaid_emi` kept as alias).
-- [x] **0.4** Extract transaction posting into `accounts/services/transactions.py`:
-  - `post_transaction(...)` (single line, supports `loan_repayment_id` + `instrument`)
-  - `post_transactions_bulk(...)` (multi-line direct posting + optional fund credit)
-  - `post_voucher(...)` (multi-line via voucher staging)
-- [x] **0.5** Extract financial-period helpers into `accounts/services/financial_period.py`:
-  - `active()`, `overlapping(start, end)` (moved from `accounts/utils.py`; old names kept as backward-compat shims).
-  - `default_indian_fy_bounds()`, `month_options_in_window()`, `quarter_ranges_in_window()`, `parse_month_key_in_window()` (moved from `admin_portal/portal_fy.py`; re-exported there for legacy importers).
-  - Request-scoped FY helpers (session override, `report_dates_from_request`) stay in `admin_portal/portal_fy.py`.
-- [x] **0.6** Refactor `admin_portal/views.py` to call the new services.
-- [x] **0.7** Refactor `accounts/api_views.py` to call the same services.
-- [x] **0.8** Service-level test coverage: `accounts/tests_services_loans.py` (14 tests) + `accounts/tests_services_transactions.py` (18 tests) — happy + sad paths for every public service function. Both files ruff-clean, all 32 pass.
+**Exit:** `python manage.py run_interest_engine` produces deterministic, audit-logged Transactions across all account types; FY close → P&L lock → distribute → fund credit happens via service calls (not view-internal logic).
 
-**Exit criteria:** zero business logic lives in `views.py` files; both adapters compile to ~200-line dispatch layers.
+### Phase C — MCP server
 
----
+After Phase B lands. Skeleton steps (see §6 for details):
+C1 stack/skeleton · C2 resources (`panelerp://…`) · C3 tools · C4 prompts · C5 auth + audit · C6 docs + tests.
 
-### Phase A — Stabilize the diagram (after Phase 0)
+**Exit:** an agent can answer *"What's member MEM-2026-0027's total exposure?"* and execute *"Distribute FY 2025-26 surplus"* with full audit trail.
 
-**Goal:** every diagram element with a model gets a working end-to-end path. Fix the half-wires.
+### Phase D — Polish
 
-- [x] **A1. Loan disbursement is a real accounting event** (with A1.5 follow-up)
-  - `approve_loan_application` now accepts `disbursement_account_id` + `processing_fee`, validates the account belongs to the borrower and is active, persists both fields on the new `LoanAccount`, and posts a `Transaction(transaction_type="credit", amount=principal)` to the disbursement account via `transaction_service.post_transaction` — all inside one `transaction.atomic()` block.
-  - Cross-member or inactive disbursement account → `ValidationError("Disbursement account does not belong to the borrower.")`.
-  - `LoanApplication` has **no** `processing_fee` / `disbursement_account` columns (only `LoanAccount` does). `create_loan_application` captures them in the audit description; **the caller must re-supply them at approval time**. The current `admin_loans_create` / `add_loan_view` forward at creation but the parallel `admin_loans_approve` / `approve_loan_view` adapters do NOT yet read them on the approve request — the disbursement Transaction therefore only posts when the panel/API approval payload carries them. Tracked as the **A1.5** follow-up below.
-  - `InterestCalculatorService.calculate_flat_emi(principal, rate, months)` added (paise-quantised); both `LoanApplication.calculate_emi()` and `LoanAccount.calculate_emi()` now branch on `interest_type` and use the new helper for `"flat"`.
-  - Optional `FeeCharge` for the processing fee deferred to Phase B4 (will route through the fee schedule there).
-  - 6 new tests in `accounts/tests_services_loans.py` (20 total, all OK).
-- [ ] **A1.5. Wire the approve adapters to forward `disbursement_account_id` + `processing_fee`**
-  - Either (a) add the two columns to `LoanApplication` via a migration so they survive create→approve, or (b) make `admin_loans_approve` (REST) and `approve_loan_view` (panel) read them from the approval request and forward to `approve_loan_application(...)`. Pick (b) first — no schema churn.
-- [ ] **A2. Instrument wired into every Transaction**
-  - Add cheque / DD / NEFT / UPI / IMPS sub-fields to the transaction form, shown conditionally on `payment_mode`.
-  - `services.transactions.post_transaction` creates an `Instrument` row when `payment_mode != "cash"`, links it to the Transaction.
-  - Add `instrument` to `TransactionCreateSerializer` (nested write) and `TransactionSerializer` (read).
-  - Surface instrument info on `get_transaction_view` JSON and the detail panel.
-- [ ] **A3. Finish the Receipt → Transaction rename**
-  - Rename `templates/admin/receipts.html` → `transactions.html`; rename `static/js/receipts.js` → `transactions.js`; update includes.
-  - Drop the `_credit_transaction("receipt")` shim in `admin_portal/views.py`.
-- [x] **A4. Loosen the voucher requirement**
-  - Removed the "cash → forced voucher" branch in `admin_portal/views.py::add_transaction_view`. Vouchers are now opt-in (operator chooses via the `use_voucher` checkbox).
-  - REST `admin_transactions_create` had no analogous branch — unchanged.
-  - 2 new service-layer tests (cash without voucher; cash with explicit voucher); 20 tests in `tests_services_transactions` all OK.
-  - Cheque/DD staging via `Instrument.is_cleared` still pending — picked up in A2.
-- [x] **A5. FinancialPeriod lifecycle UI + REST**
-  - `services.financial_period.open_period / continue_period / close_period` shipped — `close_period` `get_or_create`s a `ProfitAndLoss` for the period, sets `is_locked=True / locked_by=actor / locked_date=now()`, creates a `SocietyAccount` snapshot row (zero-default — Phase B engine will populate aggregates), flips the period to `status="closed", is_active=False`, and writes an `AuditLog`.
-  - Status choices on `FinancialPeriod` are `open / closed / continuing` (no `archived`). `AuditLog` lacks `financial_period` entity / `close` action choices — using `entity_type="system" + action="approve"` as a documented fallback (small migration would unlock richer audit later).
-  - REST: `GET / POST /api/v1/admin/financial-periods/`, `GET /…/current/`, `POST /…/<pk>/continue/`, `POST /…/<pk>/close/`. List + create share one URL via a thin `admin_financial_periods_dispatch` view.
-  - Panel: `/finance/periods/` (orphan template promoted to a real page with open/continue/close action buttons).
-  - 11 service tests in `accounts/tests_services_financial_period.py` (all OK); 51/51 service tests across loans + transactions + FY all green.
-  - Auto-activate-next-FY-on-close still pending — operator currently picks the next FY explicitly via Continue.
-- [ ] **A6. Distribute-profit uses the saved P&L**
-  - `distribute_profit_view` + `admin_reports_distribute_profit` read `ProfitAndLoss.net_surplus` for the selected FY.
-  - Allowed only when `is_locked=True`.
-  - Reject on unlocked / missing snapshot.
-- [ ] **A7. Tests for Phase A**
-  - Disbursement creates a Transaction; Instrument captured; FY close locks P&L; distribute rejects unlocked.
-
-**Exit criteria:** every diagram box has an end-to-end CRUD path; `python manage.py test` green; manual QA checklist refreshed.
+| ID | Title | Status |
+|---|---|---|
+| D1 | Archive Android app + member portal + OTP/device endpoints | ✅ Done — see `legacy/README.md` |
+| D2 | Pagination + caching on `panelerp://society/main-account` | ⚪ |
+| D3 | Replace `accounts/utils.get_financial_summary`'s computed deposit liability with real `InterestPayout` sums | ⚪ |
+| D4 | Refresh `DATABASE.md`, `API_DOCUMENTATION.md`, `README.md` | ⚪ |
+| D5 | End-to-end smoke script: open FY → onboard → accounts → disburse → engine → close → distribute | ⚪ |
 
 ---
 
-### Phase B — Build the missing engine
+## 🧪 6. Phase C (MCP) — detailed plan
 
-**Goal:** turn the static models into a **running** system. Every accrual produces deterministic Transaction rows so the MCP layer in Phase C will be honest.
-
-- [ ] **B1. Unified Interest Engine** — new `accounts/services/interest_engine.py`.
-  - `accrue_deposits(period_start, period_end, financial_period)` — iterate active deposit accounts (CD, FD, **OD**, RD, share); call `InterestCalculatorService.daily_simple_interest`; create `Transaction(type="interest", transaction_date=period_end)` and `InterestPayout(status="credited", transaction=...)`.
-  - `accrue_loans(period_start, period_end, financial_period)` — for each active `LoanAccount`, for each `LoanRepayment` due in the period, ensure an `InterestReceivable(status="accrued")` exists with `amount_accrued = repayment.interest_component`.
-  - `run_full_engine(financial_period, as_of=today)` — one call, both sides, idempotent.
-- [ ] **B2. Management command + cron hook**
-  - `python manage.py run_interest_engine --period <fy_id> --as-of YYYY-MM-DD`.
-  - Document a cron line for daily accrual.
-- [ ] **B3. EMI ↔ Receivable reconciliation**
-  - `record_emi_payment` flips matching `InterestReceivable.status="collected"`, sets `collected_date`, links the Transaction.
-  - Replace ad-hoc `mark_interest_receivable_collected_for_repayment` with the engine-aware version.
-- [ ] **B4. Fees become automatic**
-  - Approval applies active `FeeSchedule(fee_type="processing")` → `FeeCharge` → Transaction.
-  - Overdue EMI past N days applies `late_payment` schedule.
-  - Account opening / annual rollover applies `membership` / `annual_maintenance`.
-- [ ] **B5. Society Main Account becomes derived**
-  - `GET /api/v1/admin/society/main-account` computes live totals from Transactions + InterestPayable + InterestReceivable + FeeCharge, plus the latest `SocietyAccount` snapshot for comparison.
-- [ ] **B6. Setup-wizard seeding**
-  - Two new steps: **Open first FinancialPeriod**, **Seed statutory funds + allocation rules** (Statutory Reserve 25%, Education 1.5%, Build/Service, Bad-debt Provision, Dividend).
-  - On finalize: create 1 `FinancialPeriod`, 5 `FundAccount`s, 5 `FundAllocationRule(trigger_event="annual_profit")` rows.
-- [x] **B7. Member-exposure service**
-  - `accounts/services/exposure.py::get_member_exposure(user)` and `get_member_exposure_by_id(user_id)` ship the snapshot dict: `share_capital`, `deposits`, `od_drawn`, `loan_outstanding`, `guarantee_contingent`, `fees_outstanding`, `net_exposure` — all 2-dp `Decimal`.
-  - 7 tests in `accounts/tests_services_exposure.py` (all OK); existing 40 service tests green.
-  - Field-name corrections vs roadmap brief: `MemberAccount.status="active"` (not `is_active`); `Guarantor.user` FK (not `member_user`); `LoanAccount.outstanding_balance` exists; `FeeCharge.status` has `charged/waived/refunded` only — filter defensively includes `pending` for Phase B4.
-  - REST endpoint `GET /api/v1/admin/members/{id}/exposure` and member-detail UI panel still pending — picked up after A5's API-routing work lands.
-- [x] **B8. Loan-eligibility pre-check service**
-  - `accounts/services/eligibility.py::check_loan_eligibility(user=, loan_type=, principal_amount=)` and `check_loan_eligibility_by_id(...)` return `{approvable, reasons, exposure}`.
-  - Checks: member role + not soft-deleted; `eligible_for_loans`; KYC verified (via `MemberKYC.kyc_status`, fallback to legacy `User.kyc_status`); no overdue EMI (`loan_service.has_unpaid_emi`); `LoanTypeConfiguration` active; `principal_amount > 0`; active FinancialPeriod exists; projected exposure ≤ ceiling (deposits + share_capital, or 50L fallback) — pulls `exposure.get_member_exposure` via `try/except ImportError`.
-  - All 7 checks accumulate (no short-circuit), so the operator sees the full list of failed conditions.
-  - 11 tests in `accounts/tests_services_eligibility.py`, all OK; existing 40 service tests still green (51 total).
-  - Note: `LoanTypeConfiguration` has no `min_amount/max_amount` columns today; bounds check is a forward-compat hook.
-  - REST endpoint + live "Eligibility check" panel still pending — picked up after A5's API-routing patterns are settled.
-- [ ] **B9. Surplus distribution service**
-  - `accounts/services/surplus.py::distribute_surplus(fy, surplus_amount, dry_run=False)` → per-fund breakdown from `FundAllocationRule(trigger_event="annual_profit")` with priority & caps.
-  - When committed: posts a journal Voucher debiting Surplus and crediting each fund.
-- [ ] **B10. Tests**
-  - Engine idempotency; cross-product coverage (CD + FD + OD + RD + Loan in one run); surplus distribution against locked P&L; fee auto-charging.
-
-**Exit criteria:** `python manage.py run_interest_engine` produces deterministic, audit-logged Transactions across all account types; FY close → P&L lock → distribute → fund credit happens via service calls (not view-internal logic).
-
----
-
-### Phase C — Expose Panel ERP as an MCP server
-
-Now that every business action sits behind a service, MCP becomes a thin protocol layer. Lives in a **new top-level package** so it can be containerised independently from the panel and the API.
-
-- [ ] **C1. Stack + skeleton**
-  - New top-level Django app `mcp_server/` using the official Python `mcp` SDK (FastMCP-style).
-  - Runs as a **separate process** importing the Django app via `DJANGO_SETTINGS_MODULE=config.settings_api`.
-  - `docker-compose.yml` adds `mcp` service sharing the same Postgres.
-
+- [ ] **C1. Stack + skeleton.** New top-level Django app `mcp_server/` using the official Python `mcp` SDK (FastMCP-style). Runs as a separate process importing the Django app via `DJANGO_SETTINGS_MODULE=config.settings_api`. `docker-compose.yml` adds `mcp` service sharing the same Postgres.
 - [ ] **C2. Resources — `panelerp://`**
 
   | URI | Backed by |
@@ -313,64 +247,142 @@ Now that every business action sits behind a service, MCP becomes a thin protoco
   ```
   Compose Resources + Tools — no new business logic.
 
-- [ ] **C5. Auth + audit**
-  - API key (env `PANELERP_MCP_API_KEY`).
-  - Per-key Django user binding.
-  - Every tool call → `AuditLog(description="via MCP …")`.
+- [ ] **C5. Auth + audit.** API key (env `PANELERP_MCP_API_KEY`). Per-key Django user binding. Every tool call → `AuditLog(description="via MCP …")`.
 
-- [ ] **C6. Docs + tests**
-  - `mcp_server/tests/` runs each tool against the Django test DB.
-  - `MCP.md` documents how to point Cursor / Claude Desktop at the server (stdio + URL).
-
-**Exit criteria:** an agent can answer *"What's member MEM-2026-0027's total exposure?"* and execute *"Distribute FY 2025-26 surplus"* with full audit trail.
+- [ ] **C6. Docs + tests.** `mcp_server/tests/` runs each tool against the Django test DB. `MCP.md` documents how to point Cursor / Claude Desktop at the server (stdio + URL).
 
 ---
 
-### Phase D — Polish
-
-- [x] **D1.** ~~Update `android-app/`~~ → Android app archived to `legacy/android-app/` (with `member_portal`, OTP/device endpoints, and OTP email templates). Revival instructions in `legacy/README.md`.
-- [ ] **D2.** Pagination + caching on `panelerp://society/main-account` (it scans everything).
-- [ ] **D3.** Replace `accounts/utils.get_financial_summary`'s computed deposit liability with real sums from `InterestPayout` once the engine is the source of truth.
-- [ ] **D4.** Refresh `DATABASE.md` (still describes 15 pre-refactor models), `API_DOCUMENTATION.md`, `README.md`.
-- [ ] **D5.** End-to-end smoke script: open FY → onboard member → open accounts → disburse loan → run engine → close FY → distribute surplus.
-
----
-
-## 6. Execution order
+## 🔁 7. Execution order
 
 ```
-Phase 0  →  Phase A  →  Phase B  →  Phase C  →  Phase D
-foundation  stabilize    engine     MCP        polish
+Phase 0  ─►  Phase A  ─►  Phase B  ─►  Phase C  ─►  Phase D
+   ✅          ✅       (in progress)   (queued)   (queued)
 
-0.1-0.8     A1, A2, A3   B1 → B2 → B3 → B4 → B5
-            A4, A5, A6                    │
-            A7                            ▼
-                                B6, B7, B8, B9, B10  (parallel)
-                                          │
-                                          ▼
-                                 C1 → C2 → C3 → C4 → C5 → C6
-                                          │
-                                          ▼
-                                          D
+Phase B sequencing:
+  B1 ─► B2 ─► B3 ─► B4 ─► B5 ─► (B6, B9) ─► B10
+  ✅    ✅    ✅    ✅    ▲    ✅ ▲
+                          │        │
+                          └── you are here  B9 still open
+                                            B7, B8 services landed early; REST + UI later
 ```
 
 Why this order:
-- **Phase 0 first** — otherwise A1 puts loan disbursement logic inside `admin_portal/views.py` again and we'd refactor it twice.
-- **A1 before B1** — engine creates Transactions; Transactions need real Instruments and disbursement plumbing first.
-- **A6 before B9** — surplus distribution must read the saved P&L, not live aggregates.
-- **B6–B9 parallel** — independent once B1–B5 are stable.
-- **C waits for B** — MCP tools should not lie about half-wired services.
+- **B1 first** — every later track (B3, B5, B9, MCP) needs the engine to be the source of truth.
+- **B4 before B5** — society totals should include auto-posted fees, not be patched after.
+- **B6 before B9** — surplus distribution needs the 5 funds + rules to exist out of the box.
+- **C waits for B** — MCP tools must not lie about half-wired services.
 
 ---
 
-## 7. Status
+## 📜 8. Phase history (completed work)
 
-Last updated: 2026-05-13. Update this line and tick boxes above as work lands.
+<details>
+<summary><strong>Phase 0 — Foundation (services layer) · ✅ complete</strong></summary>
 
-- Database refactor (Phases 1–4 of `DATABASE_REFACTOR_PLAN.md`) — ✅ done
-- Deployment split (panel + api containers) — ✅ done
-- Phase 0 (services layer) — 🟡 in progress
-- Phase A (stabilize) — ⚪ not started
-- Phase B (engine) — ⚪ not started
-- Phase C (MCP) — ⚪ not started
-- Phase D (polish) — ⚪ not started
+Goal: introduce `accounts/services/` and migrate existing logic into pure functions both adapters call. No behaviour change.
+
+- [x] 0.1 Create `accounts/services/__init__.py` package skeleton.
+- [x] 0.2 Move `accounts/interest.py` → `accounts/services/interest.py` (deprecation shim kept).
+- [x] 0.3 Extract loan flows → `accounts/services/loans.py` (`create_loan_application`, `approve_loan_application`, `record_emi_payment`, `has_unpaid_emi`).
+- [x] 0.4 Extract transaction posting → `accounts/services/transactions.py` (`post_transaction` single line + `loan_repayment_id` + `instrument`, `post_transactions_bulk`, `post_voucher`).
+- [x] 0.5 Extract financial-period helpers → `accounts/services/financial_period.py` (`active`, `overlapping`, FY bounds + month/quarter window helpers; request-scoped helpers stay in `admin_portal/portal_fy.py`).
+- [x] 0.6 Refactor `admin_portal/views.py` to call the new services.
+- [x] 0.7 Refactor `accounts/api_views.py` to call the same services.
+- [x] 0.8 Service-level test coverage: `tests_services_loans.py` (14) + `tests_services_transactions.py` (18) — happy + sad paths.
+
+**Stretch (not a gate, ongoing):** migrate *all* remaining business logic out of `admin_portal/views.py` / `accounts/api_views.py` so both shrink to thin dispatch layers (~200 lines each). Reports, setup wizard, exports still live in views.
+</details>
+
+<details>
+<summary><strong>Phase A — Stabilize the diagram · ✅ complete</strong></summary>
+
+Every diagram element with a model gained a working end-to-end path. Half-wires fixed.
+
+- [x] **A1. Loan disbursement is a real accounting event.** `approve_loan_application` accepts `disbursement_account_id` + `processing_fee`, validates ownership + active status, persists on `LoanAccount`, and posts a `Transaction(transaction_type="credit", amount=principal)` to the disbursement account via `transaction_service.post_transaction` — all inside one `transaction.atomic()`. Cross-member / inactive → `ValidationError`. `InterestCalculatorService.calculate_flat_emi(...)` added; flat-vs-reducing branch wired on both `LoanApplication.calculate_emi()` and `LoanAccount.calculate_emi()`. Optional `FeeCharge` for processing fee deferred to B4. 6 new tests (20 total).
+- [x] **A1.5. Approve adapters forward `disbursement_account_id` + `processing_fee`.** `admin_loans_approve` reads JSON body; `approve_loan_view` reads POST. Invalid id → 400. Approve dialog includes optional fields. Values are re-entered (no LoanApplication columns).
+- [x] **A2. Instrument wired into every Transaction.** `post_transaction` / `post_transactions_bulk` / `post_voucher` create an `Instrument` when `payment_mode != "cash"`. Bulk + voucher share **one** instrument (`amount` = sum of lines). `transfer_voucher_to_fund_view` reuses voucher instrument on each posted row. Panel: cheque / DD / UPI / NEFT-RTGS-online / IMPS fields; `get_transaction_view` includes `instrument`. REST: nested `instrument` on `TransactionCreateSerializer` (write) and `TransactionSerializer` (read); admin list/detail `select_related("instrument")`. `Transaction.PAYMENT_MODE_CHOICES` includes `dd` and `imps`.
+- [x] **A3. Receipt → Transaction rename.** `templates/admin/transactions.html`, `static/js/transactions.js`, `static/css/pages/transactions.css`; `transactions_view` renders the new template. Optional cosmetic follow-ups: `total_receipts` label / modal copy / JS `receiptModal` ID renames.
+- [x] **A4. Voucher requirement loosened.** Removed "cash → forced voucher" branch in `add_transaction_view`. Vouchers opt-in via the `use_voucher` checkbox. REST `admin_transactions_create` had no analogous branch — unchanged. 2 new tests. Cheque/DD staging via `Instrument.is_cleared` still pending (clearing UI).
+- [x] **A5. FinancialPeriod lifecycle UI + REST.** `services.financial_period.open_period / continue_period / close_period`; `close_period` `get_or_create`s a `ProfitAndLoss`, sets `is_locked=True / locked_by / locked_date`, creates a zero-default `SocietyAccount` snapshot (B engine populates aggregates), flips period to `status="closed", is_active=False`, writes `AuditLog`. REST: `GET / POST /api/v1/admin/financial-periods/`, `GET /…/current/`, `POST /…/<pk>/continue/`, `POST /…/<pk>/close/`. Panel: `/finance/periods/`. 11 service tests; 51/51 green. Auto-activate-next-FY-on-close still pending.
+- [x] **A6. Distribute-profit uses the saved P&L.** `distribute_profit_view` and `admin_reports_distribute_profit` require a `ProfitAndLoss` row for the resolved `FinancialPeriod`, reject when missing or `is_locked=False`, and pass `net_surplus` into `apply_fund_allocations(..., "annual_profit", ...)`. Panel posts `financial_period_id`; button enabled only when snapshot exists, is locked, and `net_surplus > 0`. API body prefers `financial_period_id`; else `year` resolves overlap.
+- [x] **A7. Tests for Phase A.** `tests_phase_a_integration.py` — locked vs unlocked distribute. `admin_portal.tests.VoucherFlowTests` — NEFT voucher creates `Voucher.instrument`; transfer attaches same instrument to posted rows. `tests_services_transactions.py` — voucher instrument coverage.
+
+</details>
+
+<details>
+<summary><strong>Phase B partial — B1 / B2 / B3 / B4 / B6 / B7 / B8 · ✅ complete</strong></summary>
+
+- [x] **B1. Unified Interest Engine.** New `accounts/services/interest_engine.py` with three public entry points:
+  - `accrue_deposits(*, as_of=, financial_period=, actor=, ip_address=, audit_via=)` — iterates active deposit accounts (CD/FD/RD/Sukanya/Suputra; `share` + `od` excluded), calls `InterestCalculatorService.daily_simple_interest`, posts via `transaction_service.post_transaction(transaction_type="interest", payment_mode="internal", transaction_date=as_of)` (one TXN number, balance bump, no `Instrument`), bumps `accrued_interest` + `last_interest_calc_date`, creates `InterestPayout(status="credited")`, writes one aggregated `AuditLog`.
+  - `accrue_loans(*, as_of=, financial_period=, actor=, audit_via=)` — `get_or_create`s `InterestReceivable` rows for unpaid `LoanRepayment.due_date <= as_of`. Refreshes `amount_accrued` if the EMI's `interest_component` changes. Returns `{installments_considered, rows_created, rows_updated, as_of}`.
+  - `run_full_engine(...)` — both sides in one `transaction.atomic()`. Idempotent for a given `as_of`.
+
+  **Engine plumbing:** `_instrument_type_for_payment_mode` now treats `internal` as no-instrument (alongside `cash`). New `("internal", "Internal Transfer")` added to `Transaction.PAYMENT_MODE_CHOICES`. Migration **0037** re-syncs the choice list for `Transaction.payment_mode`, `Voucher.payment_mode`, and `LoanRepayment.payment_mode` (the last two were still on the pre-0036 snapshot).
+
+  **Adapters refactored to delegate:**
+  - `admin_portal.views.post_interest_view` → `interest_engine.accrue_deposits(...)` (panel).
+  - `accounts.api_views.admin_post_interest` → same service; per-payout push/email notifications fired by the adapter after the engine returns.
+  - `accounts.utils.sync_loan_interest_receivables` → thin shim around `interest_engine.accrue_loans` (panel "Sync receivables" button + REST endpoint unchanged externally).
+
+  **Tests:** 15 new tests in `accounts/tests_services_interest_engine.py` — deposit happy path / audit summary / exclusions (share, OD, zero rate, frozen, soft-deleted, zero balance) / window from `last_interest_calc_date` / idempotency; loan create / idempotency / skip-paid / skip-future / refresh-on-change; full-engine runs both sides and is idempotent.
+
+- [x] **B2. Management command + cron hook.** `accounts/management/commands/run_interest_engine.py` — thin wrapper around `interest_engine.run_full_engine` with `--as-of YYYY-MM-DD`, `--period <fy_id>`, `--deposits-only`, `--loans-only` (mutually exclusive). Validates date format and FY id; raises `CommandError` for both bad inputs. Stdout prints one summary line per side (`[deposits]` / `[loans]`) so the cron log is grep-friendly. Documented cron line in the module docstring. 9 new tests in `accounts/tests_management_run_interest_engine.py` — default invocation, each flag combo, as-of in past, bad as-of, explicit period, missing period, idempotency.
+
+- [x] **B3. EMI ↔ Receivable reconciliation.** New engine helper `interest_engine.reconcile_emi_to_receivable(repayment, *, transaction=None, financial_period=None)`. Both EMI-settlement paths now reconcile:
+  - `accounts/services/loans.py::record_emi_payment` (explicit "Record EMI payment" admin flow).
+  - `accounts/services/transactions.py::_settle_loan_repayment` (the `post_transaction(loan_repayment_id=...)` path; previously did NOT reconcile — fixed).
+
+  Behaviour matrix:
+
+  | Pre-existing receivable | After full EMI payment |
+  |---|---|
+  | none | New row, `status="collected"`, `amount_accrued = amount_collected = interest_component`, transaction linked. |
+  | `status="accrued"` | Flipped to `collected`, `amount_collected = amount_accrued`, transaction linked. |
+  | `status="collected"` (no txn) | Idempotent; back-fills `transaction` if it was missing. |
+  | `status="collected"` (with txn) | No-op. |
+  | `status="written_off"` | Left untouched. |
+
+  Partial payments and `interest_component <= 0` repayments are no-ops. New `InterestReceivable.transaction` FK (migration 0038, `on_delete=SET_NULL`, `related_name="interest_receivables_settled"`) lets reports / future MCP tools trace which `Transaction` collected which accrual. `accounts/utils.mark_interest_receivable_collected_for_repayment` kept as a thin shim that delegates to the engine. 15 new tests in `accounts/tests_phase_b3_emi_receivable.py` covering the full behaviour matrix on both EMI paths and the legacy shim.
+
+- [x] **B4. Fees become automatic.** New `accounts/services/fees.py` with six public entry points:
+  - `resolve_active_fee_schedule(fee_type, applies_to, as_of)` — picks the most recent active `FeeSchedule` whose `effective_date <= as_of`.
+  - `compute_fee_amount(schedule, base=None)` — resolves flat `amount` or `percentage * base / 100`.
+  - `apply_processing_fee(loan_account, *, actor, ip_address, audit_via)` — posts `FeeCharge` + debit `Transaction` on loan approval. Uses the operator-typed `processing_fee` if set, else falls back to the schedule. Idempotent per `LoanAccount`.
+  - `apply_membership_fee(user, *, member_account, actor, ...)` — posts a membership fee once per user per FY. Idempotent per `(user, fee_type, financial_period)`.
+  - `apply_late_payment_fees(*, as_of, grace_days, financial_period, ...)` — daily sweep: one `late_payment` `FeeCharge` per overdue EMI past grace. Idempotent via `FeeCharge.loan_repayment` FK.
+  - `apply_annual_maintenance_fees(*, financial_period, ...)` — yearly sweep: one `annual_maintenance` `FeeCharge` per active member per FY. Idempotent per `(user, fee_type, financial_period)`.
+
+  **Schema (migration 0039):** `FeeCharge.loan_repayment` FK (late-fee idempotency key), `FeeCharge.financial_period` FK (annual-fee idempotency key), `FeeCharge.STATUS_CHOICES += ("pending",)` (for charges without a debit account), `SocietyConfiguration.late_fee_grace_days` (operator-tunable grace period), `AuditLog.ENTITY_CHOICES += ("fee",)`.
+
+  **Wiring:**
+  - `approve_loan_application` calls `fee_service.apply_processing_fee(acct, ...)` inside the existing atomic block after the disbursement Transaction.
+  - `admin_portal.views.add_account_view` and `accounts.api_views.admin_accounts_create` call `fee_service.apply_membership_fee(user, ...)` after account creation.
+  - New management command `python manage.py apply_fees --late [--annual] [--as-of YYYY-MM-DD] [--grace-days N] [--period ID]` for cron scheduling.
+
+  **Tests:** 28 new tests in `accounts/tests_services_fees.py` (schedule resolution, processing fee, membership fee, late-payment sweep, annual maintenance sweep — happy paths + idempotency + edge cases) + 9 tests in `accounts/tests_management_apply_fees.py` (command flags, error handling, idempotency).
+
+- [x] **B6. Setup-wizard seeding** (parallel subagent). Extended `accounts/views.py::_finalize_setup` inside the existing `transaction.atomic()` block to seed, idempotently:
+  - **1 `FinancialPeriod`** — current Indian FY (April–March), label `"FY YYYY-YY"`, `status="open"`, `is_active=True`. Resolves `fy_start_year` from `timezone.localdate()` (current year if month ≥ 4, else previous year). Uses `get_or_create` on `(start_date, end_date)` so it honours the existing `unique_together` and never flips a pre-existing period.
+  - **5 statutory `FundAccount` rows** — Statutory Reserve (`fund_type="statutory"`), Education (`education`), Build/Service (`welfare`), Bad-debt Provision (`reserve`), Dividend (`dividend`). Account numbers are deterministic and year-stamped (`FND-<fy_start_year>-{SR,ED,BS,BD,DV}001`). `get_or_create(account_number=..., defaults=...)` so operator-edited rows are preserved.
+  - **5 `FundAllocationRule(trigger_event="annual_profit")`** — Statutory Reserve 25%, Education 1.5%, Build/Service 10%, Bad-debt Provision 2%, Dividend 61.5% (total 100%); all `allocation_type="percentage"`, ascending `priority_order`. `get_or_create(trigger_event=..., fund=...)` so operator-tuned rules survive re-finalize.
+
+  Two module-level constants (`STATUTORY_FUNDS`, `STATUTORY_ALLOCATIONS`) keep the defaults editable in one spot. **No wizard UX change** — the 7-step screen flow is untouched; seeding is silent on finalize. 5 new tests in `accounts/tests_setup_wizard_seeding.py` — FY shape / fund details / rule totals / idempotency / operator-edit preservation. **186/186 total tests green.**
+
+- [x] **B7. Member-exposure service.** `accounts/services/exposure.py::get_member_exposure(user)` and `get_member_exposure_by_id(user_id)` ship the snapshot dict: `share_capital`, `deposits`, `od_drawn`, `loan_outstanding`, `guarantee_contingent`, `fees_outstanding`, `net_exposure` — all 2-dp `Decimal`. 7 tests. Field corrections vs the original brief: `MemberAccount.status="active"` (not `is_active`); `Guarantor.user` FK (not `member_user`); `LoanAccount.outstanding_balance` is the column; `FeeCharge.status` lacks a `pending` choice (filter defensively includes it for B4). REST `GET /api/v1/admin/members/{id}/exposure` + member-detail UI panel still pending.
+- [x] **B8. Loan-eligibility pre-check service.** `accounts/services/eligibility.py::check_loan_eligibility(user=, loan_type=, principal_amount=)` and `check_loan_eligibility_by_id(...)` return `{approvable, reasons, exposure}`. Checks: member role + not soft-deleted; `eligible_for_loans`; KYC verified; no overdue EMI; active `LoanTypeConfiguration`; `principal_amount > 0`; active FinancialPeriod; projected exposure ≤ ceiling (deposits + share_capital, or 50L fallback). All 7 checks accumulate (operator sees full list of failed conditions). 11 tests. `LoanTypeConfiguration` has no `min_amount/max_amount` columns; bounds check is a forward-compat hook. REST + UI surfaces still pending.
+
+</details>
+
+---
+
+## 🧾 9. Companion docs
+
+| File | What's in it |
+|---|---|
+| `CLAUDE.md` / `AGENTS.md` | Coding conventions (no type hints, FBVs only, ruff, validators, JSON shape) |
+| `DATABASE.md` | Current schema reference — **needs refresh** (Phase D4) |
+| `DATABASE_REFACTOR_PLAN.md` | The original DB refactor (Phases 1–4 ✅ complete) |
+| `API_DOCUMENTATION.md` | REST surface — keep in lock-step with new endpoints |
+
+---
