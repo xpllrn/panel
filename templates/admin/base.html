@@ -103,27 +103,6 @@
 
         <!-- Main Content -->
         <main class="main-content" role="main">
-            {% if portal_fy_window and request.resolver_match.url_name != 'settings' %}
-            <div class="admin-context-bar" aria-label="Reporting context">
-                <div class="admin-context-bar-inner">
-                    <span class="admin-context-bar-meta">
-                        <span class="admin-context-bar-label">FY:</span><span class="admin-context-bar-value">{{ portal_fy_window.label }}</span>
-                    </span>
-                    <form method="post" action="{% url 'settings' %}" class="admin-fy-form">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="select_working_fy">
-                        <input type="hidden" name="next" value="{{ request.path }}">
-                        <label class="visually-hidden" for="topbar-working-fy">Switch financial year</label>
-                        <select name="working_period_id" id="topbar-working-fy" class="admin-fy-select" title="Switch financial year" onchange="this.form.submit()">
-                            <option value="">Calendar FY (Apr–Mar)</option>
-                            {% for p in portal_fy_periods %}
-                            <option value="{{ p.id }}" {% if portal_working_fy and portal_working_fy.id == p.id %}selected{% endif %}>{{ p.label }}</option>
-                            {% endfor %}
-                        </select>
-                    </form>
-                </div>
-            </div>
-            {% endif %}
             {% if messages %}
             <div class="messages">
                 {% for message in messages %}
