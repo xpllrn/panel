@@ -11,11 +11,11 @@
 |---|---|---|
 | 0 | Services layer (`accounts/services/`) shared by panel + API | ✅ Done |
 | A | Stabilize the diagram — instruments, FY lifecycle, locked-P&L distribute | ✅ Done |
-| **B** | **Running engine — interest, fees, society live totals, surplus posting** | **🟡 In progress — B1, B2, B3, B4, B5, B6, B7, B8 done** |
+| **B** | **Running engine — interest, fees, society live totals, surplus posting** | **🟡 In progress — B1–B9 done, B10 remaining** |
 | C | MCP server (Panel ERP as tools for AI agents) | ⚪ Not started |
 | D | Polish — docs, smoke script, perf | 🟡 D1 done |
 
-**👉 Next up: Phase B9 — Surplus distribution service.** `services/surplus.py` posts journal voucher debiting Surplus / crediting funds.
+**👉 Next up: Phase B10 — Cross-product engine + fee + surplus tests.** Idempotency, CD+FD+OD+RD+Loan in one run, locked-P&L distribute, auto-fees.
 
 ---
 
@@ -34,9 +34,9 @@ Last updated: 2026-05-14.
 
 ## 🗺️ What's left, in plain language
 
-1. **B9, B10** — surplus voucher posting, cross-product tests.
+1. **B10** — cross-product engine + fee + surplus integration tests.
 2. **B7/B8 follow-ups** — REST endpoints + UI panels for the already-shipped exposure & eligibility services.
-3. **Phase C — MCP server** — only after B1–B5 are real (MCP tools shouldn't lie about half-wired services). ✅ B5 done — MCP unblocked.
+3. **Phase C — MCP server** — B1–B5 gate passed. ✅ Unblocked.
 4. **Phase D — Polish** — refresh `DATABASE.md` / `README.md`, smoke script, pagination + caching.
 
 ---
@@ -178,7 +178,7 @@ Every change from Phase A onwards lands the new logic in `accounts/services/` an
 | B6 | Setup-wizard seeding | ✅ | `_finalize_setup` idempotently seeds the current Indian FY's `FinancialPeriod`, 5 statutory `FundAccount` rows, and 5 `annual_profit` `FundAllocationRule` rows (totalling 100%). Operator edits to pre-existing rows are preserved. 5 new tests. |
 | B7 | Member-exposure service | ✅ | `services/exposure.py` + 7 tests. **REST + UI panel still pending.** |
 | B8 | Loan-eligibility pre-check service | ✅ | `services/eligibility.py` + 11 tests. **REST + UI panel still pending.** |
-| B9 | Surplus distribution service | ⚪ | `services/surplus.py` posts journal voucher debiting Surplus / crediting funds. |
+| B9 | Surplus distribution service | ✅ | `services/surplus.py` posts fund credits debiting Surplus / crediting funds. Idempotent. |
 | B10 | Cross-product engine + fee + surplus tests | ⚪ | Idempotency, CD+FD+OD+RD+Loan in one run, locked-P&L distribute, auto-fees. |
 
 **Exit:** `python manage.py run_interest_engine` produces deterministic, audit-logged Transactions across all account types; FY close → P&L lock → distribute → fund credit happens via service calls (not view-internal logic).
@@ -257,14 +257,14 @@ C1 stack/skeleton · C2 resources (`panelerp://…`) · C3 tools · C4 prompts �
 
 ```
 Phase 0  ─►  Phase A  ─►  Phase B  ─►  Phase C  ─►  Phase D
-   ✅          ✅       (in progress)   (unblocked) (queued)
+   ✅          ✅       (nearly done)   (unblocked) (queued)
 
 Phase B sequencing:
   B1 ─► B2 ─► B3 ─► B4 ─► B5 ─► (B6, B9) ─► B10
-  ✅    ✅    ✅    ✅    ✅    ✅ ▲
-                                     │
-                                     └── you are here  B9 still open
-                                                       B7, B8 services landed early; REST + UI later
+  ✅    ✅    ✅    ✅    ✅    ✅   ✅     ▲
+                                              │
+                                              └── you are here
+                                                  B7, B8 services landed early; REST + UI later
 ```
 
 Why this order:
@@ -311,7 +311,7 @@ Every diagram element with a model gained a working end-to-end path. Half-wires 
 </details>
 
 <details>
-<summary><strong>Phase B partial — B1 / B2 / B3 / B4 / B5 / B6 / B7 / B8 · ✅ complete</strong></summary>
+<summary><strong>Phase B partial — B1 / B2 / B3 / B4 / B5 / B6 / B7 / B8 / B9 · ✅ complete</strong></summary>
 
 - [x] **B1. Unified Interest Engine.** New `accounts/services/interest_engine.py` with three public entry points:
   - `accrue_deposits(*, as_of=, financial_period=, actor=, ip_address=, audit_via=)` — iterates active deposit accounts (CD/FD/RD/Sukanya/Suputra; `share` + `od` excluded), calls `InterestCalculatorService.daily_simple_interest`, posts via `transaction_service.post_transaction(transaction_type="interest", payment_mode="internal", transaction_date=as_of)` (one TXN number, balance bump, no `Instrument`), bumps `accrued_interest` + `last_interest_calc_date`, creates `InterestPayout(status="credited")`, writes one aggregated `AuditLog`.
@@ -379,6 +379,16 @@ Every diagram element with a model gained a working end-to-end path. Half-wires 
 
 - [x] **B7. Member-exposure service.** `accounts/services/exposure.py::get_member_exposure(user)` and `get_member_exposure_by_id(user_id)` ship the snapshot dict: `share_capital`, `deposits`, `od_drawn`, `loan_outstanding`, `guarantee_contingent`, `fees_outstanding`, `net_exposure` — all 2-dp `Decimal`. 7 tests. Field corrections vs the original brief: `MemberAccount.status="active"` (not `is_active`); `Guarantor.user` FK (not `member_user`); `LoanAccount.outstanding_balance` is the column; `FeeCharge.status` lacks a `pending` choice (filter defensively includes it for B4). REST `GET /api/v1/admin/members/{id}/exposure` + member-detail UI panel still pending.
 - [x] **B8. Loan-eligibility pre-check service.** `accounts/services/eligibility.py::check_loan_eligibility(user=, loan_type=, principal_amount=)` and `check_loan_eligibility_by_id(...)` return `{approvable, reasons, exposure}`. Checks: member role + not soft-deleted; `eligible_for_loans`; KYC verified; no overdue EMI; active `LoanTypeConfiguration`; `principal_amount > 0`; active FinancialPeriod; projected exposure ≤ ceiling (deposits + share_capital, or 50L fallback). All 7 checks accumulate (operator sees full list of failed conditions). 11 tests. `LoanTypeConfiguration` has no `min_amount/max_amount` columns; bounds check is a forward-compat hook. REST + UI surfaces still pending.
+
+- [x] **B9. Surplus distribution service.** New `accounts/services/surplus.py` with two public entry points:
+  - `compute_allocations(net_surplus, trigger_event="annual_profit")` — pure computation: returns list of `{rule, fund, amount}` dicts without side effects. Respects `priority_order`, `min_threshold`, `max_cap`, `is_active`.
+  - `distribute_surplus(financial_period, *, actor, ip_address, audit_via)` — validates locked P&L, computes allocations, atomically credits fund accounts via `F()` + `select_for_update()`, creates `FundTransaction` rows, updates `ProfitAndLoss.fund_allocations_total`, writes audit log.
+
+  **Idempotent:** checks for existing `FundTransaction(trigger_event="annual_profit", financial_period=fp)` rows. If found, returns them without re-posting.
+
+  **Validation chain:** no P&L → `NotFoundError`; P&L not locked → `ValidationError`; `net_surplus <= 0` → `ValidationError`; no active rules → `ValidationError`.
+
+  **Tests:** 17 new tests in `accounts/tests_services_surplus.py` — allocation computation (percentage, fixed, max_cap, min_threshold, inactive rules), distribution (credits funds, idempotent, rejects missing/unlocked/zero P&L, rejects no rules, updates P&L total, creates FundTransactions, audit log, API marker).
 
 </details>
 
