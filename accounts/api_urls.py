@@ -101,6 +101,11 @@ urlpatterns = [
         name="admin_society_snapshots_list",
     ),
     path(
+        "admin/society/main-account/",
+        api_views.admin_society_main_account,
+        name="admin_society_main_account",
+    ),
+    path(
         "admin/finance/sync-receivables/",
         api_views.admin_finance_sync_receivables,
         name="admin_finance_sync_receivables",

@@ -11,11 +11,11 @@
 |---|---|---|
 | 0 | Services layer (`accounts/services/`) shared by panel + API | ✅ Done |
 | A | Stabilize the diagram — instruments, FY lifecycle, locked-P&L distribute | ✅ Done |
-| **B** | **Running engine — interest, fees, society live totals, surplus posting** | **🟡 In progress — B1, B2, B3, B4, B6, B7, B8 done** |
+| **B** | **Running engine — interest, fees, society live totals, surplus posting** | **🟡 In progress — B1, B2, B3, B4, B5, B6, B7, B8 done** |
 | C | MCP server (Panel ERP as tools for AI agents) | ⚪ Not started |
 | D | Polish — docs, smoke script, perf | 🟡 D1 done |
 
-**👉 Next up: Phase B5 — Society Main Account becomes derived.** `/api/v1/admin/society/main-account` computes live totals + compares snapshot.
+**👉 Next up: Phase B9 — Surplus distribution service.** `services/surplus.py` posts journal voucher debiting Surplus / crediting funds.
 
 ---
 
@@ -34,9 +34,9 @@ Last updated: 2026-05-14.
 
 ## 🗺️ What's left, in plain language
 
-1. **B5, B9, B10** — society live aggregates, surplus voucher posting, cross-product tests.
+1. **B9, B10** — surplus voucher posting, cross-product tests.
 2. **B7/B8 follow-ups** — REST endpoints + UI panels for the already-shipped exposure & eligibility services.
-3. **Phase C — MCP server** — only after B1–B5 are real (MCP tools shouldn't lie about half-wired services).
+3. **Phase C — MCP server** — only after B1–B5 are real (MCP tools shouldn't lie about half-wired services). ✅ B5 done — MCP unblocked.
 4. **Phase D — Polish** — refresh `DATABASE.md` / `README.md`, smoke script, pagination + caching.
 
 ---
@@ -114,7 +114,7 @@ DB refactor (Phases 1–4 of `DATABASE_REFACTOR_PLAN.md`) is ✅ complete. All 2
 | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Voucher (4 types) | ✅ | ✅ | ✅ | ✅ A4 cash optional | ✅ |
 | Instrument (cheque/DD/NEFT/UPI/IMPS) | ✅ | ✅ panel + voucher + modal | ✅ nested serializer | ✅ A2 shared across bulk + voucher transfer | ✅ |
-| Society Main Account | ✅ snapshot | ✅ | ✅ | 🟡 aggregates only, no live ledger | **B5** |
+| Society Main Account | ✅ snapshot + live | ✅ | ✅ `GET /…/society/main-account` | ✅ `services/society.py` | ✅ B5 |
 | Interest Payable / Receivable / Fees | ✅ | 🟡 receivable manual, fees register | 🟡 | ✅ `FeeCharge` auto via `services/fees.py` | **B5** (society totals) |
 | Net Surplus (P&L) | ✅ | ✅ saved snapshot | ✅ | ✅ A6 distribute reads locked snapshot | ✅ |
 | 5-bucket distribution | ✅ rules | 🟡 manual rule creation | 🟡 | ❌ wizard doesn't seed funds | **B6** |
@@ -174,7 +174,7 @@ Every change from Phase A onwards lands the new logic in `accounts/services/` an
 | **B2** | Management command + cron hook | ✅ | `python manage.py run_interest_engine [--period <fy>] [--as-of <date>] [--deposits-only \| --loans-only]`. 9 new tests. Cron line documented. |
 | **B3** | EMI ↔ Receivable reconciliation | ✅ | `interest_engine.reconcile_emi_to_receivable(repayment, transaction=...)`. Both `record_emi_payment` and `_settle_loan_repayment` (the `post_transaction(loan_repayment_id=...)` path) reconcile now. Handles "paid before accrual" by creating the receivable already-collected. New `InterestReceivable.transaction` FK + migration 0038. 15 new tests. |
 | **B4** | Fees become automatic | ✅ | Approval / overdue / opening / rollover post `FeeCharge` via `FeeSchedule`. |
-| B5 | Society Main Account becomes derived | ⚪ | `/api/v1/admin/society/main-account` computes live totals + compares snapshot. |
+| B5 | Society Main Account becomes derived | ✅ | `GET /api/v1/admin/society/main-account` computes live totals + compares snapshot. |
 | B6 | Setup-wizard seeding | ✅ | `_finalize_setup` idempotently seeds the current Indian FY's `FinancialPeriod`, 5 statutory `FundAccount` rows, and 5 `annual_profit` `FundAllocationRule` rows (totalling 100%). Operator edits to pre-existing rows are preserved. 5 new tests. |
 | B7 | Member-exposure service | ✅ | `services/exposure.py` + 7 tests. **REST + UI panel still pending.** |
 | B8 | Loan-eligibility pre-check service | ✅ | `services/eligibility.py` + 11 tests. **REST + UI panel still pending.** |
@@ -257,14 +257,14 @@ C1 stack/skeleton · C2 resources (`panelerp://…`) · C3 tools · C4 prompts �
 
 ```
 Phase 0  ─►  Phase A  ─►  Phase B  ─►  Phase C  ─►  Phase D
-   ✅          ✅       (in progress)   (queued)   (queued)
+   ✅          ✅       (in progress)   (unblocked) (queued)
 
 Phase B sequencing:
   B1 ─► B2 ─► B3 ─► B4 ─► B5 ─► (B6, B9) ─► B10
-  ✅    ✅    ✅    ✅    ▲    ✅ ▲
-                          │        │
-                          └── you are here  B9 still open
-                                            B7, B8 services landed early; REST + UI later
+  ✅    ✅    ✅    ✅    ✅    ✅ ▲
+                                     │
+                                     └── you are here  B9 still open
+                                                       B7, B8 services landed early; REST + UI later
 ```
 
 Why this order:
@@ -311,7 +311,7 @@ Every diagram element with a model gained a working end-to-end path. Half-wires 
 </details>
 
 <details>
-<summary><strong>Phase B partial — B1 / B2 / B3 / B4 / B6 / B7 / B8 · ✅ complete</strong></summary>
+<summary><strong>Phase B partial — B1 / B2 / B3 / B4 / B5 / B6 / B7 / B8 · ✅ complete</strong></summary>
 
 - [x] **B1. Unified Interest Engine.** New `accounts/services/interest_engine.py` with three public entry points:
   - `accrue_deposits(*, as_of=, financial_period=, actor=, ip_address=, audit_via=)` — iterates active deposit accounts (CD/FD/RD/Sukanya/Suputra; `share` + `od` excluded), calls `InterestCalculatorService.daily_simple_interest`, posts via `transaction_service.post_transaction(transaction_type="interest", payment_mode="internal", transaction_date=as_of)` (one TXN number, balance bump, no `Instrument`), bumps `accrued_interest` + `last_interest_calc_date`, creates `InterestPayout(status="credited")`, writes one aggregated `AuditLog`.
@@ -361,6 +361,14 @@ Every diagram element with a model gained a working end-to-end path. Half-wires 
   - New management command `python manage.py apply_fees --late [--annual] [--as-of YYYY-MM-DD] [--grace-days N] [--period ID]` for cron scheduling.
 
   **Tests:** 28 new tests in `accounts/tests_services_fees.py` (schedule resolution, processing fee, membership fee, late-payment sweep, annual maintenance sweep — happy paths + idempotency + edge cases) + 9 tests in `accounts/tests_management_apply_fees.py` (command flags, error handling, idempotency).
+
+- [x] **B5. Society Main Account becomes derived.** New `accounts/services/society.py` with two public entry points:
+  - `compute_live_position(financial_period=None)` — aggregates live totals from the database: `total_member_deposits` (active non-share/OD accounts), `total_loan_outstanding` (active loans), `total_interest_payable` (accrued_interest on deposits), `total_interest_receivable` (accrued IR rows: accrued - collected), `total_fees_collected` (charged FeeCharge in FY), `total_fund_balance` (all FundAccount balances), `net_surplus` (receivable + fees - payable).
+  - `get_main_account(financial_period=None)` — returns `{live, snapshot, drift, financial_period, snapshot_stale}`. Drift is field-by-field `live - snapshot`. `snapshot_stale=True` when any drift is non-zero.
+
+  **REST endpoint:** `GET /api/v1/admin/society/main-account[?financial_period_id=N]` — returns the live position, stored `SocietyAccount` snapshot, and drift comparison. Serializes Decimal values to strings for JSON safety.
+
+  **Tests:** 10 new tests in `accounts/tests_services_society.py` — empty DB zeros, deposit aggregation, loan outstanding, interest receivable, fees collected, fund balances, no-snapshot stale, snapshot-matches-live, drift detection, financial period metadata.
 
 - [x] **B6. Setup-wizard seeding** (parallel subagent). Extended `accounts/views.py::_finalize_setup` inside the existing `transaction.atomic()` block to seed, idempotently:
   - **1 `FinancialPeriod`** — current Indian FY (April–March), label `"FY YYYY-YY"`, `status="open"`, `is_active=True`. Resolves `fy_start_year` from `timezone.localdate()` (current year if month ≥ 4, else previous year). Uses `get_or_create` on `(start_date, end_date)` so it honours the existing `unique_together` and never flips a pre-existing period.

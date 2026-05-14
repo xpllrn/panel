@@ -1463,6 +1463,47 @@ def admin_society_snapshots_list(request):
     return paginator.get_paginated_response(SocietyAccountSerializer(page, many=True).data)
 
 
+@api_view(["GET"])
+@permission_classes([IsAdmin])
+def admin_society_main_account(request):
+    """Phase B5: Society Main Account — live derived totals + snapshot comparison.
+
+    Returns the society's live financial position computed from the database,
+    the stored SocietyAccount snapshot for the active (or requested) FY, and
+    a field-by-field drift comparison.
+
+    Query params:
+        financial_period_id (optional): target a specific FY instead of the active one.
+    """
+    from accounts.services import society as society_service
+
+    fp = None
+    fp_id = request.query_params.get("financial_period_id", "")
+    if fp_id.isdigit():
+        fp = FinancialPeriod.objects.filter(id=int(fp_id)).first()
+        if not fp:
+            return Response(
+                {"error": f"FinancialPeriod with id={fp_id} not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+    result = society_service.get_main_account(financial_period=fp)
+
+    # Serialize Decimal values to strings for JSON safety.
+    def _serialize_position(pos):
+        if pos is None:
+            return None
+        return {k: str(v) if isinstance(v, Decimal) else v for k, v in pos.items()}
+
+    return Response({
+        "financial_period": result["financial_period"],
+        "live": _serialize_position(result["live"]),
+        "snapshot": _serialize_position(result["snapshot"]),
+        "drift": _serialize_position(result["drift"]),
+        "snapshot_stale": result["snapshot_stale"],
+    })
+
+
 @api_view(["POST"])
 @permission_classes([IsAdmin])
 def admin_finance_save_snapshot(request):
