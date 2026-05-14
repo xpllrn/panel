@@ -66,56 +66,62 @@
     </div>
 </div>
 
-<div class="data-table">
-    <table>
-        <thead>
-            <tr>
-                <th>Fund Name</th>
-                <th>Account Number</th>
-                <th>Type</th>
-                <th>Balance</th>
-                <th>Status</th>
-                <th style="width: 50px;"></th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for fund in funds %}
-            <tr onclick="showFundModal({{ fund.id }})">
-                <td>
-                    <strong>{{ fund.name }}</strong>
-                </td>
-                <td>{{ fund.account_number }}</td>
-                <td>{{ fund.get_fund_type_display }}</td>
-                <td class="amount">₹{{ fund.balance|inr }}</td>
-                <td>
-                    <span class="status-badge {% if fund.is_active %}status-active{% else %}status-inactive{% endif %}">
-                        {% if fund.is_active %}Active{% else %}Inactive{% endif %}
-                    </span>
-                </td>
-                <td class="actions-cell" onclick="event.stopPropagation();">
-                    <button class="kebab-menu" onclick="toggleDropdown(event, {{ fund.id }})" aria-label="Actions">&#8942;</button>
-                    <div class="dropdown-menu" id="dropdown-{{ fund.id }}">
-                        <button class="dropdown-item" onclick="showFundModal({{ fund.id }})">View</button>
-                        <button class="dropdown-item" onclick="editFund(event, {{ fund.id }})">Edit</button>
-                        <button class="dropdown-item" onclick="showAddTransactionModal(event, {{ fund.id }})">Add Transaction</button>
-                        <button class="dropdown-item dropdown-item-danger" onclick="confirmDeleteFund(event, {{ fund.id }}, '{{ fund.name }}')">Delete</button>
-                    </div>
-                </td>
-            </tr>
-            {% empty %}
-            <tr>
-                <td colspan="6" class="empty-state">No funds found</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<div class="section-card">
+    <div class="section-card-header">
+        <h3>Funds</h3>
+    </div>
+    <div class="data-table">
+        <table>
+            <thead>
+                <tr>
+                    <th>Fund Name</th>
+                    <th>Account Number</th>
+                    <th>Type</th>
+                    <th>Balance</th>
+                    <th>Status</th>
+                    <th style="width: 50px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for fund in funds %}
+                <tr onclick="showFundModal({{ fund.id }})">
+                    <td>
+                        <strong>{{ fund.name }}</strong>
+                    </td>
+                    <td>{{ fund.account_number }}</td>
+                    <td>{{ fund.get_fund_type_display }}</td>
+                    <td class="amount">₹{{ fund.balance|inr }}</td>
+                    <td>
+                        <span class="status-badge {% if fund.is_active %}status-active{% else %}status-inactive{% endif %}">
+                            {% if fund.is_active %}Active{% else %}Inactive{% endif %}
+                        </span>
+                    </td>
+                    <td class="actions-cell" onclick="event.stopPropagation();">
+                        <button class="kebab-menu" onclick="toggleDropdown(event, {{ fund.id }})" aria-label="Actions">&#8942;</button>
+                        <div class="dropdown-menu" id="dropdown-{{ fund.id }}">
+                            <button class="dropdown-item" onclick="showFundModal({{ fund.id }})">View</button>
+                            <button class="dropdown-item" onclick="editFund(event, {{ fund.id }})">Edit</button>
+                            <button class="dropdown-item" onclick="showAddTransactionModal(event, {{ fund.id }})">Add Transaction</button>
+                            <button class="dropdown-item dropdown-item-danger" onclick="confirmDeleteFund(event, {{ fund.id }}, '{{ fund.name }}')">Delete</button>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="empty-state">No funds found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 
-<div class="data-table" style="margin-top: 2rem;">
-    <div style="padding: 1rem 1.25rem; border-bottom: 1px solid var(--color-gray-200);">
-        <h3 style="margin: 0; font-size: var(--font-size-lg); font-weight: 600; color: var(--color-gray-800);">Pending Vouchers (Cash-in-Hand)</h3>
+<div class="section-card">
+    <div class="section-card-header">
+        <h3>Pending Vouchers (Cash-in-Hand)</h3>
     </div>
-    <table>
+    <div class="data-table">
+        <table>
         <thead>
             <tr>
                 <th>Voucher #</th>
@@ -153,6 +159,7 @@
             {% endfor %}
         </tbody>
     </table>
+    </div>
 </div>
 
 <!-- Pagination -->

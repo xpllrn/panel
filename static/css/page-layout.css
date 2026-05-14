@@ -142,6 +142,47 @@
 }
 
 /* ========================================
+   Section Card — reusable container for any
+   data table / list with an optional heading.
+   Use .section-card > .section-card-header + .data-table
+   ======================================== */
+.section-card {
+    background: var(--color-white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: var(--spacing-xl);
+}
+
+.section-card-header {
+    padding: var(--spacing-lg) var(--spacing-xl);
+    border-bottom: 1px solid var(--color-gray-200);
+}
+
+.section-card-header h3 {
+    margin: 0;
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--color-gray-800);
+}
+
+.section-card-header p {
+    margin: var(--spacing-xs) 0 0;
+    font-size: var(--font-size-sm);
+    color: var(--color-gray-500);
+}
+
+/* When .data-table is inside a .section-card, remove its own shadow/radius
+   since the parent card provides them. */
+.section-card > .data-table {
+    box-shadow: none;
+    border-radius: 0;
+}
+
+.section-card > .data-table:last-child {
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+/* ========================================
    Data Table
    ======================================== */
 .data-table {

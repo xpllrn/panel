@@ -88,20 +88,24 @@
     </div>
 </div>
 
-<div class="data-table">
-    <table>
-        <thead>
-            <tr>
-                <th>Transaction #</th>
-                <th>Member</th>
-                <th>Account</th>
-                <th>Type</th>
-                <th>Amount</th>
-                <th>Mode</th>
-                <th>Date</th>
-                <th style="width: 50px;"></th>
-            </tr>
-        </thead>
+<div class="section-card">
+    <div class="section-card-header">
+        <h3>Transactions</h3>
+    </div>
+    <div class="data-table">
+        <table>
+            <thead>
+                <tr>
+                    <th>Transaction #</th>
+                    <th>Member</th>
+                    <th>Account</th>
+                    <th>Type</th>
+                    <th>Amount</th>
+                    <th>Mode</th>
+                    <th>Date</th>
+                    <th style="width: 50px;"></th>
+                </tr>
+            </thead>
         <tbody>
             {% for receipt in receipts %}
             <tr onclick="showReceiptModal({{ receipt.id }})">
@@ -143,6 +147,7 @@
             {% endfor %}
         </tbody>
     </table>
+    </div>
 </div>
 
 <!-- Pagination -->
@@ -418,23 +423,23 @@
     </div>
 </div>
 
-<section class="voucher-panel" aria-labelledby="voucher-panel-title">
-    <div class="voucher-panel-header">
-        <h3 id="voucher-panel-title">Recent vouchers</h3>
-        <p class="voucher-panel-hint">Pending items can be transferred to a fund. Cleared vouchers stay listed for audit.</p>
+<div class="section-card">
+    <div class="section-card-header">
+        <h3>Recent Vouchers</h3>
+        <p>Pending items can be transferred to a fund. Cleared vouchers stay listed for audit.</p>
     </div>
-    <div class="voucher-table-wrap">
-        <table class="voucher-table">
+    <div class="data-table">
+        <table>
             <thead>
                 <tr>
                     <th>Voucher #</th>
                     <th>Date</th>
                     <th>Type</th>
                     <th>Member</th>
-                    <th class="voucher-col-amount">Amount</th>
+                    <th>Amount</th>
                     <th>Pay mode</th>
                     <th>Status</th>
-                    <th class="voucher-col-action">Action</th>
+                    <th style="width: 80px;">Action</th>
                 </tr>
             </thead>
             <tbody id="voucher-table-body">
@@ -442,7 +447,7 @@
             </tbody>
         </table>
     </div>
-</section>
+</div>
 {% endblock %}
 
 {% block extra_js %}
