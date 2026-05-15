@@ -436,18 +436,22 @@ def post_transactions_bulk(
     `Transaction` row via `post_transaction`. Optionally credits a fund
     account with the grand total.
 
-    For non-cash ``payment_mode``, one :class:`~accounts.models.Instrument` is
-    created for the **sum** of all line amounts and linked to every line's
-    ``Transaction`` (single physical instrument paying multiple ledger lines).
+    Each line may carry its own ``payment_mode`` and ``instrument_payload``
+    (per-line payment method). When a line does NOT specify its own mode, the
+    top-level ``payment_mode`` / ``instrument_payload`` / ``reference_number``
+    are used as defaults.
 
     `lines` is a list of dicts shaped like::
 
         {
-            "account_id":         42,
-            "transaction_type":   "credit"|"debit"|"interest"|...,
-            "amount":             "1250.00",
-            "description":        "Monthly RD deposit",   # optional
-            "loan_repayment_id":  17,                     # optional
+            "account_id":           42,
+            "transaction_type":     "credit"|"debit"|"interest"|...,
+            "amount":               "1250.00",
+            "description":          "Monthly RD deposit",       # optional
+            "loan_repayment_id":    17,                         # optional
+            "payment_mode":         "upi",                      # optional per-line override
+            "reference_number":     "UTR123456",                # optional per-line override
+            "instrument_payload":   {"upi_vpa": "x@upi"},      # optional per-line override
         }
 
     Returns: ``{"transactions": [Transaction, ...], "fund_transaction": FundTransaction or None}``.
@@ -463,6 +467,8 @@ def post_transactions_bulk(
 
     if not isinstance(lines, list) or not lines:
         raise ValidationError("At least one account entry is required.")
+
+    valid_payment_modes = {c[0] for c in Transaction.PAYMENT_MODE_CHOICES}
 
     work_items = []
     for line in lines:
@@ -488,34 +494,31 @@ def post_transactions_bulk(
         if line_amount <= 0:
             raise ValidationError("Each line amount must be greater than zero.")
 
-        work_items.append((line, account_id, line_type, line_amount))
+        # Per-line payment mode (falls back to top-level)
+        line_payment_mode = (line.get("payment_mode") or "").strip() or payment_mode
+        if line_payment_mode not in valid_payment_modes:
+            raise ValidationError(f"Invalid payment mode: {line_payment_mode!r}.")
 
-    total_for_instrument = sum(w[3] for w in work_items)
+        line_reference = (line.get("reference_number") or "").strip() or reference_number
+        line_instrument_payload = line.get("instrument_payload") or instrument_payload
+
+        work_items.append((line, account_id, line_type, line_amount, line_payment_mode, line_reference, line_instrument_payload))
 
     created = []
     fund_txn = None
     with transaction.atomic():
-        shared_instrument = None
-        if payment_mode != "cash":
-            shared_instrument = _create_instrument_row(
-                payment_mode=payment_mode,
-                amount_decimal=total_for_instrument,
-                transaction_reference=(reference_number or "").strip(),
-                payload=instrument_payload or {},
-            )
-
-        for line, account_id, line_type, _line_amount in work_items:
+        for line, account_id, line_type, _line_amount, line_pm, line_ref, line_ip in work_items:
             txn = post_transaction(
                 member_account_id=account_id,
                 transaction_type=line_type,
                 amount=line.get("amount", 0),
                 description=line.get("description", ""),
-                payment_mode=payment_mode,
-                reference_number=reference_number,
+                payment_mode=line_pm,
+                reference_number=line_ref,
                 remarks=remarks,
                 loan_repayment_id=line.get("loan_repayment_id") or None,
-                instrument=shared_instrument,
-                instrument_payload=None,
+                instrument=None,
+                instrument_payload=line_ip,
                 actor=actor,
                 ip_address=ip_address,
                 audit=False,  # rolled up below

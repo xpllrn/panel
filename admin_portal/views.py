@@ -1219,23 +1219,18 @@ def accounts_view(request):
         members_page = paginator.page(paginator.num_pages)
 
     # Build account book data structure
-    # Only show account types that are configured as active OR have existing accounts.
+    # Only show account types that are configured as active in Settings.
     from accounts.models import AccountTypeConfiguration
 
     configured_types = set(
         v.lower()
         for v in AccountTypeConfiguration.objects.filter(is_active=True).values_list("account_type", flat=True)
     )
-    types_with_accounts = set(
-        v.lower()
-        for v in MemberAccount.objects.filter(is_deleted=False).values_list("account_type", flat=True).distinct()
-    )
-    visible_types = configured_types | types_with_accounts
 
     # Filter and preserve order from ACCOUNT_TYPE_CHOICES.
     all_account_types = MemberAccount.ACCOUNT_TYPE_CHOICES
-    account_types = [(code, label) for code, label in all_account_types if code.lower() in visible_types]
-    # Fallback: if nothing is configured yet, show all types.
+    account_types = [(code, label) for code, label in all_account_types if code.lower() in configured_types]
+    # Fallback: if nothing is configured yet (fresh install), show all types.
     if not account_types:
         account_types = all_account_types
 
@@ -1251,8 +1246,10 @@ def accounts_view(request):
             "total_balance": 0,
         }
 
-        # Get all accounts for this member
+        # Get all accounts for this member (only configured types)
         accounts = MemberAccount.objects.filter(user=member, is_deleted=False)
+        if configured_types:
+            accounts = accounts.filter(account_type__in=[c.upper() for c in configured_types] + list(configured_types))
         if account_type_filter:
             accounts = accounts.filter(account_type=account_type_filter)
         if account_status_filter:
@@ -1290,6 +1287,8 @@ def accounts_view(request):
     account_totals = []
     grand_total = 0
     totals_qs = MemberAccount.objects.filter(is_deleted=False)
+    if configured_types:
+        totals_qs = totals_qs.filter(account_type__in=[c.upper() for c in configured_types] + list(configured_types))
     if account_status_filter:
         totals_qs = totals_qs.filter(status=account_status_filter)
     if member_status_filter:
