@@ -1223,16 +1223,18 @@ def accounts_view(request):
     from accounts.models import AccountTypeConfiguration
 
     configured_types = set(
-        AccountTypeConfiguration.objects.filter(is_active=True).values_list("account_type", flat=True)
+        v.lower()
+        for v in AccountTypeConfiguration.objects.filter(is_active=True).values_list("account_type", flat=True)
     )
     types_with_accounts = set(
-        MemberAccount.objects.filter(is_deleted=False).values_list("account_type", flat=True).distinct()
+        v.lower()
+        for v in MemberAccount.objects.filter(is_deleted=False).values_list("account_type", flat=True).distinct()
     )
     visible_types = configured_types | types_with_accounts
 
     # Filter and preserve order from ACCOUNT_TYPE_CHOICES.
     all_account_types = MemberAccount.ACCOUNT_TYPE_CHOICES
-    account_types = [(code, label) for code, label in all_account_types if code in visible_types]
+    account_types = [(code, label) for code, label in all_account_types if code.lower() in visible_types]
     # Fallback: if nothing is configured yet, show all types.
     if not account_types:
         account_types = all_account_types
