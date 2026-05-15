@@ -1,0 +1,231 @@
+{% extends 'admin/base.html' %}
+{% load static currency_filters %}
+
+{% block title %}Vouchers - Admin Portal{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/pages/transactions.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="page-header-top">
+        <h2 class="page-title">Vouchers</h2>
+        <div class="header-stats">
+            <span class="stat-item">Total: <strong>{{ total_vouchers }}</strong></span>
+            <span class="stat-item">Pending: <strong>{{ pending_vouchers }}</strong></span>
+        </div>
+    </div>
+    <div class="page-toolbar">
+        <form id="vouchersSearchForm" class="search-form" method="get" action="">
+            <input type="text" name="q" placeholder="Search by voucher no, member..."
+                value="{{ search_query|default:'' }}" class="search-input" aria-label="Search vouchers">
+            <input type="hidden" id="voucher-filter-type" name="voucher_type" value="{{ selected_voucher_type|default:'' }}">
+            <input type="hidden" id="voucher-filter-status" name="status" value="{{ selected_status|default:'' }}">
+            <input type="hidden" id="voucher-filter-date-from" name="date_from" value="{{ date_from|default:'' }}">
+            <input type="hidden" id="voucher-filter-date-to" name="date_to" value="{{ date_to|default:'' }}">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="openVoucherFilterModal()">Filters</button>
+            <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+            {% if search_query or selected_voucher_type or selected_status or date_from or date_to %}
+            <a href="{% url 'vouchers_page' %}" class="clear-search">Clear</a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+{% if search_query or selected_voucher_type or selected_status or date_from or date_to %}
+<div class="search-info">
+    Showing {{ page_obj.paginator.count }} voucher(s)
+    {% if search_query %} matching "<strong>{{ search_query }}</strong>"{% endif %}
+    {% if selected_voucher_type %} of type <strong>{{ selected_voucher_type|title }}</strong>{% endif %}
+    {% if selected_status %} with status <strong>{{ selected_status|title }}</strong>{% endif %}
+    {% if date_from or date_to %} in date range <strong>{{ date_from|default:"..." }}</strong> to <strong>{{ date_to|default:"..." }}</strong>{% endif %}
+</div>
+{% endif %}
+
+<div id="voucherFilterModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Voucher Filters</h3>
+            <button class="modal-close" onclick="closeVoucherFilterModal()" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label class="form-label">Voucher Type</label>
+                <select id="voucher-filter-type-input" class="form-input">
+                    <option value="">All Types</option>
+                    <option value="receipt" {% if selected_voucher_type == 'receipt' %}selected{% endif %}>Receipt Voucher</option>
+                    <option value="payment" {% if selected_voucher_type == 'payment' %}selected{% endif %}>Payment Voucher</option>
+                    <option value="contra" {% if selected_voucher_type == 'contra' %}selected{% endif %}>Contra Voucher</option>
+                    <option value="journal" {% if selected_voucher_type == 'journal' %}selected{% endif %}>Journal Voucher</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Status</label>
+                <select id="voucher-filter-status-input" class="form-input">
+                    <option value="">All Statuses</option>
+                    <option value="pending" {% if selected_status == 'pending' %}selected{% endif %}>Pending</option>
+                    <option value="transferred" {% if selected_status == 'transferred' %}selected{% endif %}>Transferred</option>
+                    <option value="cancelled" {% if selected_status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">From</label>
+                <input type="date" id="voucher-filter-date-from-input" class="form-input" value="{{ date_from|default:'' }}">
+            </div>
+            <div class="form-group">
+                <label class="form-label">To</label>
+                <input type="date" id="voucher-filter-date-to-input" class="form-input" value="{{ date_to|default:'' }}">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="clearVoucherFilters()">Clear</button>
+            <button class="btn btn-primary" onclick="applyVoucherFilters()">Apply</button>
+        </div>
+    </div>
+</div>
+
+<div class="section-card">
+    <div class="section-card-header">
+        <h3>Vouchers</h3>
+        <p>Receipt, Payment, Contra, and Journal vouchers. Pending items can be transferred to a fund.</p>
+    </div>
+    <div class="data-table">
+        <table>
+            <thead>
+                <tr>
+                    <th>Voucher #</th>
+                    <th>Type</th>
+                    <th>Member</th>
+                    <th>Amount</th>
+                    <th>Pay Mode</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                    <th style="width: 180px;">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for voucher in vouchers %}
+                <tr>
+                    <td><span class="voucher-num">{{ voucher.voucher_number }}</span></td>
+                    <td><span class="voucher-type-badge type-{{ voucher.voucher_type }}">{{ voucher.get_voucher_type_display }}</span></td>
+                    <td>
+                        <div class="user-info">
+                            <div class="avatar avatar-sm">{{ voucher.user.display_name|first|upper }}</div>
+                            <div class="user-details">
+                                <span class="user-name">{{ voucher.user.display_name }}</span>
+                                {% if voucher.user.member_id %}
+                                <span class="user-member-id">{{ voucher.user.member_id }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                    <td class="amount">{{ voucher.total_amount|inr }}</td>
+                    <td>{{ voucher.get_payment_mode_display }}</td>
+                    <td><span class="voucher-status status-{{ voucher.status }}">{{ voucher.get_status_display }}</span></td>
+                    <td>{{ voucher.created_at|date:"M d, Y" }}</td>
+                    <td class="actions-cell">
+                        {% if voucher.status == 'pending' %}
+                        <div class="voucher-action-cell">
+                            <select id="voucher-fund-{{ voucher.id }}" class="form-input form-input-sm voucher-fund-select">
+                                <option value="">Select fund...</option>
+                                {% for fund in funds %}
+                                <option value="{{ fund.id }}">{{ fund.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="button" class="btn btn-primary btn-sm" onclick="transferVoucher({{ voucher.id }}, 'voucher-fund-{{ voucher.id }}')">Transfer</button>
+                        </div>
+                        {% elif voucher.status == 'transferred' %}
+                        <span class="text-muted">→ {{ voucher.transferred_to_fund.name }}</span>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="empty-state">No vouchers found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Pagination -->
+{% if page_obj.has_other_pages %}
+<div class="pagination" role="navigation" aria-label="Pagination">
+    <div class="pagination-info">
+        Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} vouchers
+    </div>
+    <div class="pagination-nav">
+        {% if page_obj.has_previous %}
+        <a href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_voucher_type %}&voucher_type={{ selected_voucher_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="First page">&laquo; First</a>
+        <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_voucher_type %}&voucher_type={{ selected_voucher_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="Previous page">Previous</a>
+        {% endif %}
+
+        <span class="page-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_voucher_type %}&voucher_type={{ selected_voucher_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="Next page">Next</a>
+        <a href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_voucher_type %}&voucher_type={{ selected_voucher_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}" class="page-link" aria-label="Last page">Last &raquo;</a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    window.CSRF_TOKEN = '{{ csrf_token }}';
+
+    function openVoucherFilterModal() {
+        document.getElementById('voucherFilterModal').classList.add('show');
+    }
+    function closeVoucherFilterModal() {
+        document.getElementById('voucherFilterModal').classList.remove('show');
+    }
+    function applyVoucherFilters() {
+        document.getElementById('voucher-filter-type').value = document.getElementById('voucher-filter-type-input').value;
+        document.getElementById('voucher-filter-status').value = document.getElementById('voucher-filter-status-input').value;
+        document.getElementById('voucher-filter-date-from').value = document.getElementById('voucher-filter-date-from-input').value;
+        document.getElementById('voucher-filter-date-to').value = document.getElementById('voucher-filter-date-to-input').value;
+        closeVoucherFilterModal();
+        document.getElementById('vouchersSearchForm').submit();
+    }
+    function clearVoucherFilters() {
+        document.getElementById('voucher-filter-type-input').value = '';
+        document.getElementById('voucher-filter-status-input').value = '';
+        document.getElementById('voucher-filter-date-from-input').value = '';
+        document.getElementById('voucher-filter-date-to-input').value = '';
+        applyVoucherFilters();
+    }
+
+    function transferVoucher(voucherId, fundSelectId) {
+        var selectEl = document.getElementById(fundSelectId);
+        var fundId = selectEl ? selectEl.value : '';
+        if (!fundId) { alert('Please select a fund'); return; }
+        var form = new FormData();
+        form.append('fund_id', fundId);
+        form.append('csrfmiddlewaretoken', window.CSRF_TOKEN);
+        fetch('/transactions/vouchers/' + voucherId + '/transfer/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': window.CSRF_TOKEN },
+            body: form
+        }).then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.success) { alert(data.error || 'Transfer failed'); return; }
+                window.location.reload();
+            });
+    }
+
+    // Close modal on outside click or Escape
+    window.addEventListener('click', function (event) {
+        var modal = document.getElementById('voucherFilterModal');
+        if (event.target === modal) closeVoucherFilterModal();
+    });
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') closeVoucherFilterModal();
+    });
+</script>
+{% endblock %}

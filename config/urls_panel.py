@@ -88,6 +88,7 @@ urlpatterns = [
         name="transfer_voucher_to_fund",
     ),
     path("transactions/<int:transaction_id>/get/", admin_views.get_transaction_view, name="get_transaction"),
+    path("vouchers/", admin_views.vouchers_page_view, name="vouchers_page"),
     path("loans/", admin_views.loans_view, name="loans"),
     path("loans/add/", admin_views.add_loan_view, name="add_loan"),
     path("loans/<int:loan_id>/get/", admin_views.get_loan_view, name="get_loan"),

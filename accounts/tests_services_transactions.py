@@ -319,7 +319,7 @@ class TransactionServiceTests(TestCase):
             )
 
     def test_post_transactions_bulk_non_cash_shares_one_instrument(self):
-        """Bulk NEFT lines attach the same Instrument whose amount is the line sum."""
+        """Bulk NEFT lines each get their own Instrument (per-line payment mode)."""
         lines = [
             {"account_id": self.account.id, "transaction_type": "credit", "amount": "100"},
             {"account_id": self.account.id, "transaction_type": "credit", "amount": "50"},
@@ -337,10 +337,15 @@ class TransactionServiceTests(TestCase):
         i0 = txns[0].instrument_id
         i1 = txns[1].instrument_id
         self.assertIsNotNone(i0)
-        self.assertEqual(i0, i1)
-        inst = Instrument.objects.get(id=i0)
-        self.assertEqual(inst.amount, Decimal("150"))
-        self.assertEqual(inst.reference_number, "UTRBULK1")
+        self.assertIsNotNone(i1)
+        # Each line now gets its own instrument
+        self.assertNotEqual(i0, i1)
+        inst0 = Instrument.objects.get(id=i0)
+        inst1 = Instrument.objects.get(id=i1)
+        self.assertEqual(inst0.amount, Decimal("100"))
+        self.assertEqual(inst1.amount, Decimal("50"))
+        self.assertEqual(inst0.reference_number, "UTRBULK1")
+        self.assertEqual(inst1.reference_number, "UTRBULK1")
 
     # ------------------------------------------------------------------
     # post_transactions_bulk

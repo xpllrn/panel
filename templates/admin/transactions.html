@@ -23,7 +23,7 @@
     <div class="page-toolbar">
         <form id="receiptsSearchForm" class="search-form" method="get" action="">
             <input type="text" name="q" placeholder="Search by transaction no, member..."
-                value="{{ search_query|default:'' }}" class="search-input" aria-label="Search receipts">
+                value="{{ search_query|default:'' }}" class="search-input" aria-label="Search transactions">
             <input type="hidden" id="receipts-filter-type" name="type" value="{{ selected_type|default:'' }}">
             <input type="hidden" id="receipts-filter-mode" name="mode" value="{{ selected_mode|default:'' }}">
             <input type="hidden" id="receipts-filter-date-from" name="date_from" value="{{ date_from|default:'' }}">
@@ -102,7 +102,7 @@
                     <th>Account</th>
                     <th>Type</th>
                     <th>Amount</th>
-                    <th>Mode</th>
+                    <th>Cr No / Reference</th>
                     <th>Date</th>
                     <th style="width: 50px;"></th>
                 </tr>
@@ -131,7 +131,7 @@
                     <span class="transaction-type-badge type-{{ receipt.transaction_type }}">{{ receipt.get_transaction_type_display }}</span>
                 </td>
                 <td class="amount">{{ receipt.amount|inr }}</td>
-                <td>{{ receipt.get_payment_mode_display }}</td>
+                <td>{{ receipt.reference_number|default:"-" }}</td>
                 <td>{{ receipt.created_at|date:"M d, Y" }}</td>
                 <td class="actions-cell" onclick="event.stopPropagation();">
                     <button class="kebab-menu" onclick="toggleDropdown(event, {{ receipt.id }})" aria-label="Actions">&#8942;</button>
@@ -308,7 +308,7 @@
 <div id="addReceiptModal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
-            <h3>New Receipt</h3>
+            <h3>New Transaction</h3>
             <button class="modal-close" onclick="closeAddReceiptModal()" aria-label="Close">&times;</button>
         </div>
         <div class="modal-body">
@@ -323,7 +323,7 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Receipt Entries *</label>
+                    <label class="form-label">Transaction Entries *</label>
                     <div id="receipt-lines-container">
                         <div class="receipt-line-item" data-line-index="0" style="display:grid; grid-template-columns: 1.3fr 1fr 1fr 1.3fr auto; gap:0.5rem; margin-bottom:0.5rem;">
                             <select class="form-input line-account-id" required></select>
@@ -353,12 +353,11 @@
                         <option value="{{ value }}">{{ label }}</option>
                         {% endfor %}
                     </select>
-                    <small class="form-hint">Cash transactions post directly unless you check 'Use voucher'.</small>
                 </div>
                 <div id="instrument-fields-panel" class="form-group" style="display:none;">
                     <div class="form-label">Payment instrument details</div>
                     <div id="instrument-cheque-block" style="display:none;">
-                        <label class="form-label">Cheque number (optional if set in Reference above)</label>
+                        <label class="form-label">Cheque number</label>
                         <input type="text" id="inst-cheque-number" class="form-input" maxlength="30" autocomplete="off">
                         <label class="form-label">Drawer name</label>
                         <input type="text" id="inst-drawer-name" class="form-input" maxlength="200" autocomplete="off">
@@ -398,8 +397,10 @@
                 <div class="form-group">
                     <label class="form-label">Voucher Type</label>
                     <select name="voucher_type" class="form-input">
-                        <option value="voucher">Voucher</option>
-                        <option value="contra_voucher">Contra Voucher</option>
+                        <option value="receipt">Receipt Voucher</option>
+                        <option value="payment">Payment Voucher</option>
+                        <option value="contra">Contra Voucher</option>
+                        <option value="journal">Journal Voucher</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -419,34 +420,8 @@
         </div>
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeAddReceiptModal()">Cancel</button>
-            <button class="btn btn-primary" id="addReceiptBtn" onclick="addReceipt()">Create Receipt</button>
+            <button class="btn btn-primary" id="addReceiptBtn" onclick="addReceipt()">Create Transaction</button>
         </div>
-    </div>
-</div>
-
-<div class="section-card">
-    <div class="section-card-header">
-        <h3>Recent Vouchers</h3>
-        <p>Pending items can be transferred to a fund. Cleared vouchers stay listed for audit.</p>
-    </div>
-    <div class="data-table">
-        <table>
-            <thead>
-                <tr>
-                    <th>Voucher #</th>
-                    <th>Date</th>
-                    <th>Type</th>
-                    <th>Member</th>
-                    <th>Amount</th>
-                    <th>Pay mode</th>
-                    <th>Status</th>
-                    <th style="width: 80px;">Action</th>
-                </tr>
-            </thead>
-            <tbody id="voucher-table-body">
-                <tr><td colspan="8" class="empty-state">Loading vouchers…</td></tr>
-            </tbody>
-        </table>
     </div>
 </div>
 {% endblock %}

@@ -502,7 +502,9 @@ def post_transactions_bulk(
         line_reference = (line.get("reference_number") or "").strip() or reference_number
         line_instrument_payload = line.get("instrument_payload") or instrument_payload
 
-        work_items.append((line, account_id, line_type, line_amount, line_payment_mode, line_reference, line_instrument_payload))
+        work_items.append(
+            (line, account_id, line_type, line_amount, line_payment_mode, line_reference, line_instrument_payload)
+        )
 
     created = []
     fund_txn = None

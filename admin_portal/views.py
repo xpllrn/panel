@@ -1219,20 +1219,26 @@ def accounts_view(request):
         members_page = paginator.page(paginator.num_pages)
 
     # Build account book data structure
-    # Only show account types that are configured as active in Settings.
+    # Only show account types that are configured as active in Settings > Products.
+    # Use the custom product name from the database as the column header.
     from accounts.models import AccountTypeConfiguration
 
-    configured_types = set(
-        v.lower()
-        for v in AccountTypeConfiguration.objects.filter(is_active=True).values_list("account_type", flat=True)
-    )
+    active_configs = AccountTypeConfiguration.objects.filter(is_active=True).order_by("display_order", "account_type")
+    configured_types = set(c.account_type.lower() for c in active_configs)
 
-    # Filter and preserve order from ACCOUNT_TYPE_CHOICES.
-    all_account_types = MemberAccount.ACCOUNT_TYPE_CHOICES
-    account_types = [(code, label) for code, label in all_account_types if code.lower() in configured_types]
+    # Build account_types using the operator's custom names from the DB.
+    # Map each configured product to the matching ACCOUNT_TYPE_CHOICES code.
+    all_choices = MemberAccount.ACCOUNT_TYPE_CHOICES
+    choices_code_map = {code.lower(): code for code, _ in all_choices}
+    account_types = []
+    for cfg in active_configs:
+        code = choices_code_map.get(cfg.account_type.lower())
+        if code:
+            account_types.append((code, cfg.account_type))  # Use the DB name as label
+
     # Fallback: if nothing is configured yet (fresh install), show all types.
     if not account_types:
-        account_types = all_account_types
+        account_types = list(all_choices)
 
     account_book = []
 
@@ -1715,6 +1721,72 @@ def vouchers_view(request):
             }
         )
     return JsonResponse({"success": True, "vouchers": data})
+
+
+@login_required
+@admin_required
+def vouchers_page_view(request):
+    """Dedicated vouchers listing page with search, filters, and pagination."""
+    page = request.GET.get("page", 1)
+    query = request.GET.get("q", "").strip()
+    voucher_type = request.GET.get("voucher_type", "").strip()
+    status = request.GET.get("status", "").strip()
+    date_from = request.GET.get("date_from", "").strip()
+    date_to = request.GET.get("date_to", "").strip()
+    per_page = 25
+
+    vouchers_qs = Voucher.objects.select_related(
+        "user", "created_by", "transferred_to_fund", "instrument"
+    ).prefetch_related("entries").order_by("-created_at")
+
+    if query:
+        vouchers_qs = vouchers_qs.filter(
+            Q(voucher_number__icontains=query)
+            | Q(user__first_name__icontains=query)
+            | Q(user__last_name__icontains=query)
+            | Q(user__member_id__icontains=query)
+        )
+
+    if voucher_type:
+        vouchers_qs = vouchers_qs.filter(voucher_type=voucher_type)
+
+    if status:
+        vouchers_qs = vouchers_qs.filter(status=status)
+
+    if date_from:
+        vouchers_qs = vouchers_qs.filter(created_at__date__gte=date_from)
+
+    if date_to:
+        vouchers_qs = vouchers_qs.filter(created_at__date__lte=date_to)
+
+    paginator = Paginator(vouchers_qs, per_page)
+    try:
+        vouchers_page = paginator.page(page)
+    except PageNotAnInteger:
+        vouchers_page = paginator.page(1)
+    except EmptyPage:
+        vouchers_page = paginator.page(paginator.num_pages)
+
+    total_vouchers = Voucher.objects.count()
+    pending_vouchers = Voucher.objects.filter(status="pending").count()
+
+    return render(
+        request,
+        "admin/vouchers.html",
+        {
+            "vouchers": vouchers_page,
+            "search_query": query,
+            "selected_voucher_type": voucher_type,
+            "selected_status": status,
+            "date_from": date_from,
+            "date_to": date_to,
+            "page_obj": vouchers_page,
+            "total_vouchers": total_vouchers,
+            "pending_vouchers": pending_vouchers,
+            "funds": FundAccount.objects.filter(is_deleted=False, is_active=True).order_by("name"),
+            "active": "vouchers",
+        },
+    )
 
 
 @login_required
